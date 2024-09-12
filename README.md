@@ -1,35 +1,34 @@
 # APP LAYER
 
-
-
 ## Getting started
 
 //
 
 ## App Layer Process
 
-### Create 
+### Create
 
 Create new WASM contract code
 
 ### Compile
 
-Run the following script to deploy. It should produce the WASM bytecode and checksum. 
+Run the following script to deploy. It should produce the WASM bytecode and checksum.
 
 ```
 //deployment script
 ```
 
 ### Audit
+
 // process
 
 ### STAGENET
 
 Apply to have it deployed on stagenet. Provide:
 
-1) The checksum
-2) The link to the audit and code
-3) The deployer address
+1. The checksum
+2. The link to the audit and code
+3. The deployer address
 
 ### Deploy
 
