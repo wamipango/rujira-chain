@@ -312,5 +312,37 @@ mod tests {
             ACCOUNTS.load(storage, Addr::unchecked("account2")).unwrap(),
             Uint128::from(229_591u128)
         );
+
+        // Execute a merge after the decay window ends. All RUJI should be allocated and
+        // zero shares issued for this depositor
+        let shares = execute_deposit(
+            storage,
+            &config,
+            Timestamp::from_seconds(1_001_001),
+            &Addr::unchecked("account3"),
+            Uint128::from(2_500_000u128),
+        )
+        .unwrap();
+        // // 10% of the way through at a 1:2 initial ratio.
+        assert_eq!(shares, Uint128::zero());
+        assert_eq!(
+            TOTAL_MERGED.load(storage).unwrap(),
+            Uint128::from(10_000_000u128)
+        );
+        // Initial allocation of 2.5m
+        // 10% of remaining 97.5m = 9.75m
+        // Deposit ownership of 2.5m * 0.5 * 0.9 = 1.125m
+        assert_eq!(
+            POOL_SIZE.load(storage).unwrap(),
+            Uint128::from(100_000_000u128)
+        );
+        assert_eq!(
+            POOL_SHARES.load(storage).unwrap(),
+            Uint128::from(2_729_591u128)
+        );
+        assert_eq!(
+            ACCOUNTS.load(storage, Addr::unchecked("account3")).unwrap(),
+            Uint128::zero()
+        );
     }
 }
