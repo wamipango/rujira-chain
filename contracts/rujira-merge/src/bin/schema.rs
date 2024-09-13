@@ -1,6 +1,6 @@
 use cosmwasm_schema::write_api;
 
-use ruji::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use rujira_merge::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 fn main() {
     write_api! {

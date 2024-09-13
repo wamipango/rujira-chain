@@ -21,6 +21,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c6cb57a04249c6480766f7f7cef5467412af1490f8d1e243141daddada3264f"
 
 [[package]]
+name = "anybuf"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb5f1dee23caf80904249463cc4493b6789c2250f88c8f8d9160de5c6099bfe7"
+
+[[package]]
 name = "anyhow"
 version = "1.0.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -862,7 +868,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ruji"
+name = "rujira-merge"
 version = "0.1.0"
 dependencies = [
  "cosmwasm-schema",
@@ -874,6 +880,14 @@ dependencies = [
  "schemars",
  "serde",
  "thiserror",
+]
+
+[[package]]
+name = "rujira-rs"
+version = "0.1.0"
+dependencies = [
+ "anybuf",
+ "cosmwasm-std",
 ]
 
 [[package]]
