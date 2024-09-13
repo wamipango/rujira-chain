@@ -98,11 +98,13 @@ pub fn execute_withdraw(
 /// Share holders (mergers), and increases TOTAL_ALLOCATED accordingly
 fn allocate(storage: &mut dyn Storage, config: &Config, factor: Decimal) -> StdResult<Uint128> {
     let merged = TOTAL_MERGED.load(storage).unwrap_or_default();
+    let allocated = POOL_SIZE.load(storage).unwrap_or_default();
     let remaining = config.merge_supply.checked_sub(merged)?;
     let liability = merge_ratio(config, &factor)
         .mul(Decimal::from_ratio(remaining, Uint128::one()))
         .to_uint_ceil();
-    let surplus = config.ruji_allocation.sub(merged).sub(liability);
+
+    let surplus = config.ruji_allocation.sub(allocated).sub(liability);
     POOL_SIZE.update(storage, |x| Ok(x.add(surplus)))
 }
 
@@ -125,4 +127,85 @@ fn decay_factor(config: &Config, now: &Timestamp) -> Decimal {
 
 fn merge_ratio(config: &Config, factor: &Decimal) -> Decimal {
     Decimal::from_ratio(config.ruji_allocation, config.merge_supply).mul(factor)
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::testing::mock_dependencies;
+
+    use super::*;
+
+    #[test]
+    fn test_deposit_pre_decay() {
+        let config = Config {
+            merge_denom: "ukuji".to_string(),
+            merge_supply: Uint128::from(200_000_000u128),
+            ruji_denom: "uruji".to_string(),
+            ruji_allocation: Uint128::from(100_000_000u128),
+            decay_starts_at: Timestamp::from_seconds(1_000),
+            decay_ends_at: Timestamp::from_seconds(1_000_000),
+        };
+        let now = Timestamp::from_seconds(0);
+        let mut deps = mock_dependencies();
+        let account = Addr::unchecked("account");
+
+        let storage = deps.as_mut().storage;
+        init(storage).unwrap();
+
+        let shares = execute_deposit(
+            storage,
+            &config,
+            now,
+            &account,
+            Uint128::from(5_000_000u128),
+        )
+        .unwrap();
+
+        assert_eq!(shares, Uint128::from(2_500_000u128));
+        assert_eq!(
+            TOTAL_MERGED.load(storage).unwrap(),
+            Uint128::from(5_000_000u128)
+        );
+        assert_eq!(
+            POOL_SIZE.load(storage).unwrap(),
+            Uint128::from(2_500_000u128)
+        );
+        assert_eq!(
+            POOL_SHARES.load(storage).unwrap(),
+            Uint128::from(2_500_000u128)
+        );
+        assert_eq!(
+            ACCOUNTS.load(storage, account).unwrap(),
+            Uint128::from(2_500_000u128)
+        );
+
+        let account = Addr::unchecked("account2");
+
+        let shares = execute_deposit(
+            storage,
+            &config,
+            now,
+            &account,
+            Uint128::from(10_000_000u128),
+        )
+        .unwrap();
+
+        assert_eq!(shares, Uint128::from(5_000_000u128));
+        assert_eq!(
+            TOTAL_MERGED.load(storage).unwrap(),
+            Uint128::from(15_000_000u128)
+        );
+        assert_eq!(
+            POOL_SIZE.load(storage).unwrap(),
+            Uint128::from(7_500_000u128)
+        );
+        assert_eq!(
+            POOL_SHARES.load(storage).unwrap(),
+            Uint128::from(7_500_000u128)
+        );
+        assert_eq!(
+            ACCOUNTS.load(storage, account).unwrap(),
+            Uint128::from(5_000_000u128)
+        );
+    }
 }
