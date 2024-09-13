@@ -90,6 +90,7 @@ pub fn execute_withdraw(
         &account_shares.sub(checked_amount),
     )?;
     POOL_SHARES.save(storage, &shares_total.sub(checked_amount))?;
+    POOL_SIZE.save(storage, &pool_size.sub(allocation))?;
     Ok(allocation)
 }
 
@@ -204,8 +205,35 @@ mod tests {
             Uint128::from(7_500_000u128)
         );
         assert_eq!(
-            ACCOUNTS.load(storage, account).unwrap(),
+            ACCOUNTS.load(storage, account.clone()).unwrap(),
             Uint128::from(5_000_000u128)
+        );
+
+        let withdrawal = execute_withdraw(
+            storage,
+            &config,
+            now,
+            &account,
+            Uint128::from(2_000_000u128),
+        )
+        .unwrap();
+
+        assert_eq!(withdrawal, Uint128::from(2_000_000u128));
+        assert_eq!(
+            TOTAL_MERGED.load(storage).unwrap(),
+            Uint128::from(15_000_000u128)
+        );
+        assert_eq!(
+            POOL_SIZE.load(storage).unwrap(),
+            Uint128::from(5_500_000u128)
+        );
+        assert_eq!(
+            POOL_SHARES.load(storage).unwrap(),
+            Uint128::from(5_500_000u128)
+        );
+        assert_eq!(
+            ACCOUNTS.load(storage, account).unwrap(),
+            Uint128::from(3_000_000u128)
         );
     }
 }
