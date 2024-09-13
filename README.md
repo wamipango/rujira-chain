@@ -12,11 +12,13 @@ Create new WASM contract code
 
 ### Compile
 
-Run the following script to deploy. It should produce the WASM bytecode and checksum.
+<!-- TODO -->
 
-```
-//deployment script
-```
+Run `./scripts/lock.sh`, this will:
+
+1. Compile all contracts with scripts/optimizer.sh, forcing x86_64 architecture
+1. Append the workspace.version to RELEASES.md, along with checksums for all contracts
+1. Commit and create a tag with the current workspace.version
 
 ### Audit
 
