@@ -1,6 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{Binary, Deps, DepsMut, Env, Event, MessageInfo, Response, StdResult};
+use cosmwasm_std::{
+    ensure_eq, Binary, Deps, DepsMut, Env, Event, MessageInfo, Response, StdResult,
+};
 use cw2::set_contract_version;
 use cw_utils::must_pay;
 use rujira_rs::merge::{ExecuteMsg, InstantiateMsg, QueryMsg};
@@ -19,13 +21,18 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     let config = Config::from(msg);
     config.validate()?;
     config.save(deps.storage)?;
+    ensure_eq!(
+        must_pay(&info, config.ruji_denom.as_str())?,
+        config.ruji_allocation,
+        ContractError::InsufficientFunds {}
+    );
     init(deps.storage)?;
     Ok(Response::default())
 }
@@ -69,8 +76,11 @@ pub fn execute(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> StdResult<Binary> {
-    unimplemented!()
+pub fn query(_deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::Status {} => todo!(),
+        QueryMsg::Account { addr } => todo!(),
+    }
 }
 
 #[cfg(test)]
