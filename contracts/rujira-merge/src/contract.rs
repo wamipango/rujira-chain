@@ -3,11 +3,12 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, Event, MessageInfo, Response, StdResult};
 use cw2::set_contract_version;
 use cw_utils::must_pay;
+use rujira_rs::merge::{ExecuteMsg, InstantiateMsg, QueryMsg};
+
 // use cw2::set_contract_version;
 
 use crate::config::Config;
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{execute_deposit, execute_withdraw, init};
 
 // version info for migration info

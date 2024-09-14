@@ -26,6 +26,7 @@ library = []
 
 
 [dependencies]
+rujira-rs = { workspace = true }
 cosmwasm-schema = { workspace = true }
 cosmwasm-std = { workspace = true }
 cw-utils = { workspace = true }

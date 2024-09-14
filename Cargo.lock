@@ -877,6 +877,7 @@ dependencies = [
  "cw-storage-plus",
  "cw-utils",
  "cw2",
+ "rujira-rs",
  "schemars",
  "serde",
  "thiserror",
@@ -887,6 +888,7 @@ name = "rujira-rs"
 version = "0.1.0"
 dependencies = [
  "anybuf",
+ "cosmwasm-schema",
  "cosmwasm-std",
 ]
 

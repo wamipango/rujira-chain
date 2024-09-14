@@ -1,8 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Item;
-
-use crate::msg::InstantiateMsg;
+use rujira_rs::merge::InstantiateMsg;
 
 static CONFIG: Item<Config> = Item::new("config");
 
