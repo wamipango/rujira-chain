@@ -1,12 +1,12 @@
 # RUJI Merge
 
-Merge contract for $RUJI, the fee-switch token of The Rujira Alliance. Merge tokens are exchanged for $RUJI, with a linear decay, and $RUJI re-distributrion mechansism.
+Merge contract for $RUJI, the fee-switch token of The Rujira Alliance. Merge tokens are exchanged for $RUJI, with a linear decay, and $RUJI re-allocation mechansism.
 
 A user can either `Deposit` merge tokens, or `Withdraw` $RUJI tokens from the contract.
 
 ## Deposit
 
-When deposting, Merge tokens are exchanged for Shares in the contract.
+When depositing, Merge tokens are exchanged for Shares in the contract.
 
 The deposit value is calculated as `deposit * ratio * decay`, this value is transferred into the `POOL_SIZE` (ie $RUJI allocated) bucket, and a quantity of shares are issued, such that `POOL_SIZE / POOL_SHARES == (POOL_SIZE + value) / (POOL_SHARES + new_shares)`. `TOTAL_MERGED` is also increased by `deposit` amount.
 
