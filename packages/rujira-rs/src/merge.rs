@@ -56,13 +56,23 @@ pub enum QueryMsg {
 
 #[cw_serde]
 pub struct StatusResponse {
-    amount: Uint128,
-    shares: Uint128,
+    /// Total `[InstantiateMsg::merge_denom]` merged
+    pub merged: Uint128,
+
+    /// Total shares issued
+    pub shares: Uint128,
+
+    /// Total `[InstantiateMsg::ruji_denom]` allocated to shareholders
+    pub size: Uint128,
 }
 
 #[cw_serde]
 pub struct AccountResponse {
-    addr: Addr,
-    shares: Uint128,
-    allocation: Uint128,
+    pub addr: Addr,
+
+    /// Total shares issued
+    pub shares: Uint128,
+
+    /// Total `[InstantiateMsg::ruji_denom]` allocation that `shares` represents
+    pub size: Uint128,
 }

@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    ensure_eq, Binary, Deps, DepsMut, Env, Event, MessageInfo, Response, StdResult,
+    ensure_eq, to_json_binary, Binary, Deps, DepsMut, Env, Event, MessageInfo, Response,
 };
 use cw2::set_contract_version;
 use cw_utils::must_pay;
@@ -11,7 +11,7 @@ use rujira_rs::merge::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::config::Config;
 use crate::error::ContractError;
-use crate::state::{execute_deposit, execute_withdraw, init};
+use crate::state::{account, execute_deposit, execute_withdraw, init, status};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:ruji";
@@ -76,10 +76,10 @@ pub fn execute(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(_deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     match msg {
-        QueryMsg::Status {} => todo!(),
-        QueryMsg::Account { addr } => todo!(),
+        QueryMsg::Status {} => Ok(to_json_binary(&status(deps.storage)?)?),
+        QueryMsg::Account { addr } => Ok(to_json_binary(&account(deps.storage, &addr)?)?),
     }
 }
 

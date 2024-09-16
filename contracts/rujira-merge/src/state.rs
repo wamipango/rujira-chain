@@ -5,6 +5,7 @@ use std::{
 
 use cosmwasm_std::{Addr, Decimal, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::{Item, Map};
+use rujira_rs::merge::{AccountResponse, StatusResponse};
 
 use crate::{config::Config, ContractError};
 
@@ -18,6 +19,29 @@ pub fn init(storage: &mut dyn Storage) -> StdResult<()> {
     POOL_SIZE.save(storage, &Uint128::zero())?;
     POOL_SHARES.save(storage, &Uint128::zero())?;
     Ok(())
+}
+
+pub fn status(storage: &dyn Storage) -> StdResult<StatusResponse> {
+    Ok(StatusResponse {
+        merged: TOTAL_MERGED.load(storage)?,
+        shares: POOL_SHARES.load(storage)?,
+        size: POOL_SIZE.load(storage)?,
+    })
+}
+
+pub fn account(storage: &dyn Storage, addr: &Addr) -> Result<AccountResponse, ContractError> {
+    let pool_size = POOL_SIZE.load(storage).unwrap_or_default();
+    let shares_total = POOL_SHARES.load(storage).unwrap_or_default();
+    let share_ratio = Decimal::checked_from_ratio(pool_size, shares_total)?;
+    let shares = ACCOUNTS.load(storage, addr.clone()).unwrap_or_default();
+    let size = Decimal::from_ratio(shares, Uint128::one())
+        .mul(share_ratio)
+        .to_uint_floor();
+    Ok(AccountResponse {
+        addr: addr.clone(),
+        shares,
+        size,
+    })
 }
 
 /// Deposit an `amount` of merge tokens to an account.
