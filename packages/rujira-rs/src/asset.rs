@@ -36,7 +36,7 @@ impl NativeAsset {
 
 impl Display for NativeAsset {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{}.{}", "RUNE", self.symbol)
+        write!(f, "RUNE.{}", self.symbol)
     }
 }
 
