@@ -84,4 +84,65 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+
+    use cosmwasm_std::{coins, BlockInfo, Timestamp, Uint128};
+    use cw_multi_test::{BasicApp, ContractWrapper, Executor};
+
+    use super::*;
+
+    #[test]
+    fn instantiation() {
+        let mut app = BasicApp::default();
+        let owner = app.api().addr_make("owner");
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &owner, coins(100_000_000, "uruji"))
+        })
+        .unwrap();
+
+        app.set_block(BlockInfo {
+            height: 0,
+            time: Timestamp::default(),
+            chain_id: app.block_info().chain_id,
+        });
+
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+        let code_id = app.store_code(code);
+        app.instantiate_contract(
+            code_id,
+            owner.clone(),
+            &InstantiateMsg {
+                merge_denom: "ukuji".to_string(),
+                merge_supply: Uint128::from(250_000_000u128),
+                ruji_denom: "uruji".to_string(),
+                ruji_allocation: Uint128::from(100_000_000u128),
+                decay_starts_at: Timestamp::from_seconds(1_000),
+                decay_ends_at: Timestamp::from_seconds(1_001_000),
+            },
+            &coins(100_000_000, "uruji"),
+            "merge",
+            None,
+        )
+        .unwrap();
+
+        // Single failure to assert Config verification is executing
+        app.instantiate_contract(
+            code_id,
+            owner,
+            &InstantiateMsg {
+                merge_denom: "ukuji".to_string(),
+                merge_supply: Uint128::from(250_000_000u128),
+                ruji_denom: "uruji".to_string(),
+                ruji_allocation: Uint128::from(10_000_000u128),
+                decay_starts_at: Timestamp::from_seconds(1_000),
+                decay_ends_at: Timestamp::from_seconds(1_001_000),
+            },
+            &coins(100_000_000, "uruji"),
+            "merge",
+            None,
+        )
+        .unwrap_err();
+    }
+}
