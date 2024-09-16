@@ -4,7 +4,7 @@ use cosmwasm_std::{
     ensure_eq, to_json_binary, Binary, Deps, DepsMut, Env, Event, MessageInfo, Response,
 };
 use cw2::set_contract_version;
-use cw_utils::must_pay;
+use cw_utils::{must_pay, nonpayable};
 use rujira_rs::merge::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 // use cw2::set_contract_version;
@@ -58,6 +58,7 @@ pub fn execute(
             ))
         }
         ExecuteMsg::Withdraw { share_amount } => {
+            nonpayable(&info)?;
             let amount = execute_withdraw(
                 deps.storage,
                 &config,
@@ -86,8 +87,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 #[cfg(test)]
 mod tests {
 
-    use cosmwasm_std::{coins, BlockInfo, Timestamp, Uint128};
+    use cosmwasm_std::{coin, coins, BlockInfo, Timestamp, Uint128};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
+    use rujira_rs::merge::{AccountResponse, StatusResponse};
 
     use super::*;
 
@@ -98,7 +100,7 @@ mod tests {
         app.init_modules(|router, _, storage| {
             router
                 .bank
-                .init_balance(storage, &owner, coins(100_000_000, "uruji"))
+                .init_balance(storage, &owner, coins(500_000_000, "uruji"))
         })
         .unwrap();
 
@@ -127,10 +129,10 @@ mod tests {
         )
         .unwrap();
 
-        // Single failure to assert Config verification is executing
+        // Single failure to assert funds validation is correct
         app.instantiate_contract(
             code_id,
-            owner,
+            owner.clone(),
             &InstantiateMsg {
                 merge_denom: "ukuji".to_string(),
                 merge_supply: Uint128::from(250_000_000u128),
@@ -144,5 +146,169 @@ mod tests {
             None,
         )
         .unwrap_err();
+
+        // Single failure to assert Config verification is executing
+        app.instantiate_contract(
+            code_id,
+            owner,
+            &InstantiateMsg {
+                merge_denom: "".to_string(),
+                merge_supply: Uint128::from(250_000_000u128),
+                ruji_denom: "uruji".to_string(),
+                ruji_allocation: Uint128::from(100_000_000u128),
+                decay_starts_at: Timestamp::from_seconds(1_000),
+                decay_ends_at: Timestamp::from_seconds(1_001_000),
+            },
+            &coins(100_000_000, "uruji"),
+            "merge",
+            None,
+        )
+        .unwrap_err();
+    }
+
+    #[test]
+    fn executions() {
+        let mut app = BasicApp::default();
+        let owner = app.api().addr_make("owner");
+        app.init_modules(|router, _, storage| {
+            router.bank.init_balance(
+                storage,
+                &owner,
+                vec![
+                    coin(500_000_000, "uruji"),
+                    coin(500_000_000, "ukuji"),
+                    coin(500_000_000, "ufoo"),
+                ],
+            )
+        })
+        .unwrap();
+
+        app.set_block(BlockInfo {
+            height: 0,
+            time: Timestamp::default(),
+            chain_id: app.block_info().chain_id,
+        });
+
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+        let code_id = app.store_code(code);
+        let contract = app
+            .instantiate_contract(
+                code_id,
+                owner.clone(),
+                &InstantiateMsg {
+                    merge_denom: "ukuji".to_string(),
+                    merge_supply: Uint128::from(250_000_000u128),
+                    ruji_denom: "uruji".to_string(),
+                    ruji_allocation: Uint128::from(100_000_000u128),
+                    decay_starts_at: Timestamp::from_seconds(1_000),
+                    decay_ends_at: Timestamp::from_seconds(1_001_000),
+                },
+                &coins(100_000_000, "uruji"),
+                "merge",
+                None,
+            )
+            .unwrap();
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Deposit {},
+            &coins(1_000_000, "ufoo"),
+        )
+        .unwrap_err();
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Deposit {},
+            &coins(1_000_000, "ukuji"),
+        )
+        .unwrap();
+
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
+
+        assert_eq!(
+            status,
+            StatusResponse {
+                merged: Uint128::from(1_000_000u128),
+                shares: Uint128::from(400_000u128),
+                size: Uint128::from(400_000u128)
+            }
+        );
+
+        let account: AccountResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Account {
+                    addr: owner.clone(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            account,
+            AccountResponse {
+                addr: owner.clone(),
+                shares: Uint128::from(400_000u128),
+                size: Uint128::from(400_000u128),
+            }
+        );
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Withdraw {
+                share_amount: Uint128::from(200_000u128),
+            },
+            &coins(1_000_000, "ukuji"),
+        )
+        .unwrap_err();
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Withdraw {
+                share_amount: Uint128::from(200_000u128),
+            },
+            &vec![],
+        )
+        .unwrap();
+
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
+
+        assert_eq!(
+            status,
+            StatusResponse {
+                merged: Uint128::from(1_000_000u128),
+                shares: Uint128::from(200_000u128),
+                size: Uint128::from(200_000u128)
+            }
+        );
+
+        let account: AccountResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Account {
+                    addr: owner.clone(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            account,
+            AccountResponse {
+                addr: owner.clone(),
+                shares: Uint128::from(200_000u128),
+                size: Uint128::from(200_000u128),
+            }
+        );
     }
 }

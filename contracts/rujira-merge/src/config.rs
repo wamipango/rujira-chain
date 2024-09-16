@@ -62,3 +62,77 @@ impl Config {
         CONFIG.save(storage, self)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validation() {
+        Config {
+            merge_denom: "".to_string(),
+            merge_supply: Uint128::from(100u128),
+            ruji_denom: "uruji".to_string(),
+            ruji_allocation: Uint128::from(100u128),
+            decay_starts_at: Timestamp::from_seconds(0),
+            decay_ends_at: Timestamp::from_seconds(100),
+        }
+        .validate(&Timestamp::default())
+        .unwrap_err();
+
+        Config {
+            merge_denom: "ukuji".to_string(),
+            merge_supply: Uint128::zero(),
+            ruji_denom: "uruji".to_string(),
+            ruji_allocation: Uint128::from(100u128),
+            decay_starts_at: Timestamp::from_seconds(0),
+            decay_ends_at: Timestamp::from_seconds(100),
+        }
+        .validate(&Timestamp::default())
+        .unwrap_err();
+
+        Config {
+            merge_denom: "ukuji".to_string(),
+            merge_supply: Uint128::from(100u128),
+            ruji_denom: "".to_string(),
+            ruji_allocation: Uint128::from(100u128),
+            decay_starts_at: Timestamp::from_seconds(0),
+            decay_ends_at: Timestamp::from_seconds(100),
+        }
+        .validate(&Timestamp::default())
+        .unwrap_err();
+
+        Config {
+            merge_denom: "ukuji".to_string(),
+            merge_supply: Uint128::from(100u128),
+            ruji_denom: "uruji".to_string(),
+            ruji_allocation: Uint128::zero(),
+            decay_starts_at: Timestamp::from_seconds(0),
+            decay_ends_at: Timestamp::from_seconds(100),
+        }
+        .validate(&Timestamp::default())
+        .unwrap_err();
+
+        Config {
+            merge_denom: "ukuji".to_string(),
+            merge_supply: Uint128::from(100u128),
+            ruji_denom: "uruji".to_string(),
+            ruji_allocation: Uint128::from(100u128),
+            decay_starts_at: Timestamp::default(),
+            decay_ends_at: Timestamp::from_seconds(100),
+        }
+        .validate(&Timestamp::from_seconds(100))
+        .unwrap_err();
+
+        Config {
+            merge_denom: "ukuji".to_string(),
+            merge_supply: Uint128::from(100u128),
+            ruji_denom: "uruji".to_string(),
+            ruji_allocation: Uint128::from(100u128),
+            decay_starts_at: Timestamp::from_seconds(200),
+            decay_ends_at: Timestamp::from_seconds(150),
+        }
+        .validate(&Timestamp::from_seconds(100))
+        .unwrap_err();
+    }
+}
