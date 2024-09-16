@@ -45,11 +45,11 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
+    let time = env.block.time;
     match msg {
         ExecuteMsg::Deposit {} => {
             let amount = must_pay(&info, &config.merge_denom)?;
-            let shares =
-                execute_deposit(deps.storage, &config, env.block.time, &info.sender, amount)?;
+            let shares = execute_deposit(deps.storage, &config, time, &info.sender, amount)?;
             Ok(Response::default().add_event(
                 Event::new("merge/deposit")
                     .add_attribute("account", info.sender)
@@ -59,13 +59,7 @@ pub fn execute(
         }
         ExecuteMsg::Withdraw { share_amount } => {
             nonpayable(&info)?;
-            let amount = execute_withdraw(
-                deps.storage,
-                &config,
-                env.block.time,
-                &info.sender,
-                share_amount,
-            )?;
+            let amount = execute_withdraw(deps.storage, &config, time, &info.sender, share_amount)?;
             Ok(Response::default().add_event(
                 Event::new("merge/withdraw")
                     .add_attribute("account", info.sender)
