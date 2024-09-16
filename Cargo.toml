@@ -4,8 +4,10 @@ members = ["packages/*", "contracts/*"]
 # Resolver has to be set explicitely in workspaces, see https://github.com/rust-lang/cargo/issues/9956
 resolver = "2"
 
+
 [workspace.package]
 version = "0.1.0"
+edition = "2021"
 
 [workspace.dependencies]
 anybuf = "0.5"

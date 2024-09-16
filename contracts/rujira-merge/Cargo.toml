@@ -2,7 +2,7 @@
 name = "rujira-merge"
 version = { workspace = true }
 authors = ["codehans <94654388+codehans@users.noreply.github.com>"]
-edition = "2021"
+edition = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
