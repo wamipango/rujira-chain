@@ -20,13 +20,13 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     let config = Config::from(msg);
-    config.validate()?;
+    config.validate(&env.block.time)?;
     config.save(deps.storage)?;
     ensure_eq!(
         must_pay(&info, config.ruji_denom.as_str())?,

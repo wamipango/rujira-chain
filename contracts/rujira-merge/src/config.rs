@@ -3,6 +3,8 @@ use cosmwasm_std::{StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Item;
 use rujira_rs::merge::InstantiateMsg;
 
+use crate::ContractError;
+
 static CONFIG: Item<Config> = Item::new("config");
 
 #[cw_serde]
@@ -33,7 +35,26 @@ impl Config {
         CONFIG.load(storage)
     }
 
-    pub fn validate(&self) -> StdResult<()> {
+    pub fn validate(&self, now: &Timestamp) -> Result<(), ContractError> {
+        if self.decay_starts_at.lt(now) {
+            return Err(ContractError::Invalid("decay_starts_at".to_string()));
+        }
+        if self.decay_ends_at.lt(&self.decay_starts_at) {
+            return Err(ContractError::Invalid("decay_ends_at".to_string()));
+        }
+        if self.merge_denom == "" {
+            return Err(ContractError::Invalid("merge_denom".to_string()));
+        }
+        if self.merge_supply.eq(&Uint128::zero()) {
+            return Err(ContractError::Invalid("merge_supply".to_string()));
+        }
+        if self.ruji_denom == "" {
+            return Err(ContractError::Invalid("ruji_denom".to_string()));
+        }
+        if self.ruji_allocation.eq(&Uint128::zero()) {
+            return Err(ContractError::Invalid("ruji_allocation".to_string()));
+        }
+
         Ok(())
     }
 
