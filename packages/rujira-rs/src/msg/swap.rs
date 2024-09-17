@@ -118,9 +118,27 @@ impl Memoed for Slip {
     }
 }
 
+impl Memoed for Option<Slip> {
+    fn to_memo(&self) -> String {
+        match self {
+            Some(x) => x.to_memo(),
+            None => "".to_string(),
+        }
+    }
+}
+
 impl Memoed for Affiliate {
     fn to_memo(&self) -> String {
         format!("{}:{}", self.addr, self.basis_points)
+    }
+}
+
+impl Memoed for Option<Affiliate> {
+    fn to_memo(&self) -> String {
+        match self {
+            Some(x) => x.to_memo(),
+            None => ":".to_string(),
+        }
     }
 }
 
@@ -135,6 +153,15 @@ impl Memoed for Dex {
                 None => "".to_string(),
             }
         )
+    }
+}
+
+impl Memoed for Option<Dex> {
+    fn to_memo(&self) -> String {
+        match self {
+            Some(x) => x.to_memo(),
+            None => "".to_string(),
+        }
     }
 }
 
@@ -160,10 +187,7 @@ mod tests {
                 interval: 5,
                 quantity: Uint256::from(50u128),
             }),
-            Some(Affiliate {
-                addr: Addr::unchecked("affiliate"),
-                basis_points: 5,
-            }),
+            Some(Affiliate::new(Addr::unchecked("affiliate"), 5)),
             Some(Dex {
                 aggregator: "dexagg".to_string(),
                 target_address: Addr::unchecked("target"),
@@ -174,5 +198,46 @@ mod tests {
             msg.to_memo(),
             "=:eth-eth:recipient/refund:200/5/50:affiliate:5:dexagg:target:500"
         );
+
+        let msg = MsgSwap::new(
+            Coin::new(BridgeAsset::new(Chain::Btc, "BTC"), Uint256::from(100u128)),
+            BridgeAsset::new(Chain::Eth, "ETH"),
+            Destination::Direct(Addr::unchecked("recipient")),
+            Some(Slip::Limit(Uint256::from(200u128))),
+            Some(Affiliate::new(Addr::unchecked("affiliate"), 5)),
+            Some(Dex {
+                aggregator: "dexagg".to_string(),
+                target_address: Addr::unchecked("target"),
+                limit: None,
+            }),
+        );
+        assert_eq!(
+            msg.to_memo(),
+            "=:eth-eth:recipient:200:affiliate:5:dexagg:target"
+        );
+
+        let msg = MsgSwap::new(
+            Coin::new(BridgeAsset::new(Chain::Btc, "BTC"), Uint256::from(100u128)),
+            BridgeAsset::new(Chain::Eth, "ETH"),
+            Destination::Direct(Addr::unchecked("recipient")),
+            None,
+            None,
+            Some(Dex {
+                aggregator: "dexagg".to_string(),
+                target_address: Addr::unchecked("target"),
+                limit: None,
+            }),
+        );
+        assert_eq!(msg.to_memo(), "=:eth-eth:recipient::::dexagg:target");
+
+        let msg = MsgSwap::new(
+            Coin::new(BridgeAsset::new(Chain::Btc, "BTC"), Uint256::from(100u128)),
+            BridgeAsset::new(Chain::Eth, "ETH"),
+            Destination::Direct(Addr::unchecked("recipient")),
+            None,
+            None,
+            None,
+        );
+        assert_eq!(msg.to_memo(), "=:eth-eth:recipient");
     }
 }

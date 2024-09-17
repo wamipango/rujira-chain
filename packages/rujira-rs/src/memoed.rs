@@ -43,18 +43,6 @@ impl Memoed for &str {
     }
 }
 
-impl<T> Memoed for Option<T>
-where
-    T: Memoed,
-{
-    fn to_memo(&self) -> String {
-        match self {
-            Some(x) => x.to_memo(),
-            None => "".to_string(),
-        }
-    }
-}
-
 impl<T> Memoed for Vec<T>
 where
     T: Memoed,
