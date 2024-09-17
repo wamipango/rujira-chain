@@ -93,3 +93,48 @@ impl From<NativeAsset> for Asset {
         Self::Native(value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native() {
+        let native = NativeAsset::new("RUNE");
+        assert_eq!(native.to_string(), "RUNE.RUNE");
+        assert_eq!(native.denom_string(), "rune");
+        assert_eq!(format!("{}", native), "RUNE.RUNE");
+    }
+
+    #[test]
+    fn bridge() {
+        let native = BridgeAsset::new(Chain::Btc, "BTC");
+        assert_eq!(native.to_string(), "BTC-BTC");
+        assert_eq!(native.denom_string(), "btc-btc");
+        assert_eq!(format!("{}", native), "BTC-BTC");
+
+        let native = BridgeAsset::new(
+            Chain::Eth,
+            "RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb",
+        );
+        assert_eq!(
+            native.to_string(),
+            "ETH-RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb"
+        );
+        assert_eq!(native.ticker(), "RUNE");
+
+        assert_eq!(
+            format!("{}", native),
+            "ETH-RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb"
+        );
+    }
+
+    #[test]
+    fn memo() {
+        let asset: Asset = NativeAsset::new("RUNE").into();
+        assert_eq!(asset.to_memo(), "rune");
+
+        let asset: Asset = BridgeAsset::new(Chain::Btc, "BTC").into();
+        assert_eq!(asset.to_memo(), "btc-btc");
+    }
+}

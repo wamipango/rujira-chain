@@ -137,3 +137,42 @@ impl Memoed for Dex {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::Uint256;
+
+    use crate::{asset::BridgeAsset, chain::Chain};
+
+    use super::*;
+
+    #[test]
+    fn encoding() {
+        let msg = MsgSwap::new(
+            Coin::new(BridgeAsset::new(Chain::Btc, "BTC"), Uint256::from(100u128)),
+            BridgeAsset::new(Chain::Eth, "ETH"),
+            Destination::Refundable {
+                destination_addr: Addr::unchecked("recipient"),
+                refund_addr: Addr::unchecked("refund"),
+            },
+            Some(Slip::Stream {
+                limit: Uint256::from(200u128),
+                interval: 5,
+                quantity: Uint256::from(50u128),
+            }),
+            Some(Affiliate {
+                addr: Addr::unchecked("affiliate"),
+                basis_points: 5,
+            }),
+            Some(Dex {
+                aggregator: "dexagg".to_string(),
+                target_address: Addr::unchecked("target"),
+                limit: Some(Uint256::from(500u128)),
+            }),
+        );
+        assert_eq!(
+            msg.to_memo(),
+            "=:eth-eth:recipient/refund:200/5/50:affiliate:5:dexagg:target:500"
+        );
+    }
+}

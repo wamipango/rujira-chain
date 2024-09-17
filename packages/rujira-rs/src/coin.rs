@@ -30,3 +30,19 @@ impl From<&Coin> for Anybuf {
         value.clone().into()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::asset::NativeAsset;
+
+    use super::*;
+
+    #[test]
+    fn encoding() {
+        let buf: Anybuf = Coin::new(NativeAsset::new("uruji"), Uint256::from(100u128)).into();
+        assert_eq!(
+            buf.into_vec(),
+            vec![10, 10, 82, 85, 78, 69, 46, 117, 114, 117, 106, 105, 18, 3, 49, 48, 48,]
+        );
+    }
+}
