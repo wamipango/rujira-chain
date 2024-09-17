@@ -40,11 +40,11 @@ package name. -->
 ### 2. Compile & Commit
 
 1. Compile all contracts with scripts/optimize.sh, forcing x86_64 architecture
-1. Bump the workspace.version and create a new RC entry in RELEASES.md. Observe semver.
+1. Bump the relevant contract versions and create a new RC entry in RELEASES.md. Observe semver.
    - Major bump if contract interfaces are changed in a non backward-compatible way (eg fields are added without a `#[serde(default)]` decorator)
    - Minor if interfaces or functionality is changed and is backward compatible
    - Patch for bugfixes
-1. Include checksums for all contract artifacts, even if unchanged from the previous release
+1. Include entries for all contract artifacts, even if unchanged from the previous release
 1. Commit and create a tag with the current workspace.version
 
 ### Audit
