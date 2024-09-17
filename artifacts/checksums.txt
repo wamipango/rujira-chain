@@ -1,1 +1,1 @@
-ce648dc7587826e3dafab552c4510985aa7c263288cfbc0cfd74b6bcdda4cbb9  rujira_merge.wasm
+9bfdeacf37359456f8125b835d2c4adf5c623ef161761f11f12e9316ae97f680  rujira_merge.wasm
