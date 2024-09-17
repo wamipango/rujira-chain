@@ -40,26 +40,32 @@ package name. -->
 ### 2. Compile & Commit
 
 1. Compile all contracts with scripts/optimize.sh, forcing x86_64 architecture
-1. Bump the workspace.version and create a new entry in RELEASES.md
+1. Bump the workspace.version and create a new RC entry in RELEASES.md. Observe semver.
+   - Major bump if contract interfaces are changed in a non backward-compatible way (eg fields are added without a `#[serde(default)]` decorator)
+   - Minor if interfaces or functionality is changed and is backward compatible
+   - Patch for bugfixes
 1. Include checksums for all contract artifacts, even if unchanged from the previous release
 1. Commit and create a tag with the current workspace.version
 
 ### Audit
 
-// process
+1. Make code changes
+1. Re-compile and commit as per 2, bumping the RC tag
+1. Add links to the audit files in RELEASES.md
 
 ### STAGENET
 
 Apply to have it deployed on stagenet. Provide:
 
-1. The checksum(s) of the modified contract(s)
-1. The link to the audit and code, with tag
+1. The version tag
 1. The deployer address
 
 ### Deploy
 
-Deploy and link your app, conduct thorough testing
+1. Deploy and link your app, conduct thorough testing
+1. Any modifications to contracts must be re-audited as above, increasing the RC version
 
 ### Mainnet
 
-Apply for an ADR to launch on Mainnet.
+1. Create a release in RELEASES.md without the RC tag
+1. Apply for an ADR to launch on Mainnet
