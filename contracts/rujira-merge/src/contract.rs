@@ -247,6 +247,7 @@ mod tests {
             account,
             AccountResponse {
                 addr: owner.clone(),
+                merged: Uint128::from(1_000_000u128),
                 shares: Uint128::from(400_000u128),
                 size: Uint128::from(400_000u128),
             }
@@ -300,6 +301,7 @@ mod tests {
             account,
             AccountResponse {
                 addr: owner.clone(),
+                merged: Uint128::from(1_000_000u128),
                 shares: Uint128::from(200_000u128),
                 size: Uint128::from(200_000u128),
             }

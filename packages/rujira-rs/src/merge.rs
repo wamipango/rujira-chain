@@ -70,6 +70,9 @@ pub struct StatusResponse {
 pub struct AccountResponse {
     pub addr: Addr,
 
+    /// Total `[InstantiateMsg::merge_denom]` merged by this account
+    pub merged: Uint128,
+
     /// Total shares issued
     pub shares: Uint128,
 

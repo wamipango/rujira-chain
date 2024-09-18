@@ -12,7 +12,7 @@ use crate::{config::Config, ContractError};
 pub static TOTAL_MERGED: Item<Uint128> = Item::new("merged");
 pub static POOL_SIZE: Item<Uint128> = Item::new("size");
 pub static POOL_SHARES: Item<Uint128> = Item::new("shares");
-pub static ACCOUNTS: Map<Addr, Uint128> = Map::new("accounts");
+pub static ACCOUNTS: Map<Addr, (Uint128, Uint128)> = Map::new("accounts");
 
 pub fn init(storage: &mut dyn Storage) -> StdResult<()> {
     TOTAL_MERGED.save(storage, &Uint128::zero())?;
@@ -33,13 +33,14 @@ pub fn account(storage: &dyn Storage, addr: &Addr) -> Result<AccountResponse, Co
     let pool_size = POOL_SIZE.load(storage).unwrap_or_default();
     let shares_total = POOL_SHARES.load(storage).unwrap_or_default();
     let share_ratio = Decimal::checked_from_ratio(pool_size, shares_total)?;
-    let shares = ACCOUNTS.load(storage, addr.clone()).unwrap_or_default();
+    let (shares, merged) = ACCOUNTS.load(storage, addr.clone()).unwrap_or_default();
     let size = Decimal::from_ratio(shares, Uint128::one())
         .mul(share_ratio)
         .to_uint_floor();
     Ok(AccountResponse {
         addr: addr.clone(),
         shares,
+        merged,
         size,
     })
 }
@@ -83,9 +84,16 @@ pub fn execute_deposit(
 
     POOL_SHARES.save(storage, &shares_total_new)?;
     POOL_SIZE.save(storage, &pool_size_new)?;
-    ACCOUNTS.update(storage, account.clone(), |x| -> StdResult<Uint128> {
-        Ok(x.unwrap_or_default().add(shares_new))
-    })?;
+    ACCOUNTS.update(
+        storage,
+        account.clone(),
+        |x| -> StdResult<(Uint128, Uint128)> {
+            match x {
+                Some((shares, merged)) => Ok((shares.add(shares_new), merged.add(amount))),
+                None => Ok((shares_new, amount)),
+            }
+        },
+    )?;
 
     Ok(shares_new)
 }
@@ -106,7 +114,7 @@ pub fn execute_withdraw(
     let shares_total = POOL_SHARES.load(storage).unwrap_or_default();
     // If either are zero, nothing to withdraw
     let share_ratio = Decimal::checked_from_ratio(pool_size, shares_total)?;
-    let account_shares = ACCOUNTS.load(storage, account.clone()).unwrap_or_default();
+    let (account_shares, merged) = ACCOUNTS.load(storage, account.clone()).unwrap_or_default();
     let checked_amount = min(account_shares, amount);
     let allocation = Decimal::from_ratio(checked_amount, Uint128::one())
         .mul(share_ratio)
@@ -114,7 +122,7 @@ pub fn execute_withdraw(
     ACCOUNTS.save(
         storage,
         account.clone(),
-        &account_shares.sub(checked_amount),
+        &(account_shares.sub(checked_amount), merged),
     )?;
     POOL_SHARES.save(storage, &shares_total.sub(checked_amount))?;
     POOL_SIZE.save(storage, &pool_size.sub(allocation))?;
@@ -204,7 +212,7 @@ mod tests {
         );
         assert_eq!(
             ACCOUNTS.load(storage, account).unwrap(),
-            Uint128::from(2_500_000u128)
+            (Uint128::from(2_500_000u128), Uint128::from(5_000_000u128))
         );
 
         let account = Addr::unchecked("account2");
@@ -233,7 +241,7 @@ mod tests {
         );
         assert_eq!(
             ACCOUNTS.load(storage, account.clone()).unwrap(),
-            Uint128::from(5_000_000u128)
+            (Uint128::from(5_000_000u128), Uint128::from(10_000_000u128))
         );
 
         let withdrawal = execute_withdraw(
@@ -260,7 +268,7 @@ mod tests {
         );
         assert_eq!(
             ACCOUNTS.load(storage, account).unwrap(),
-            Uint128::from(3_000_000u128)
+            (Uint128::from(3_000_000u128), Uint128::from(10_000_000u128))
         );
     }
 
@@ -302,7 +310,7 @@ mod tests {
         );
         assert_eq!(
             ACCOUNTS.load(storage, Addr::unchecked("account")).unwrap(),
-            Uint128::from(2_500_000u128)
+            (Uint128::from(2_500_000u128), Uint128::from(5_000_000u128))
         );
 
         let shares = execute_deposit(
@@ -334,7 +342,38 @@ mod tests {
         );
         assert_eq!(
             ACCOUNTS.load(storage, Addr::unchecked("account2")).unwrap(),
-            Uint128::from(229_591u128)
+            (Uint128::from(229_591u128), Uint128::from(2_500_000u128))
+        );
+
+        // Deposit extra
+        let shares = execute_deposit(
+            storage,
+            &config,
+            Timestamp::from_seconds(101_000),
+            &Addr::unchecked("account2"),
+            Uint128::from(2_500_000u128),
+        )
+        .unwrap();
+        // 10% of the way through at a 1:2 initial ratio.
+        assert_eq!(shares, Uint128::from(229_591u128));
+        assert_eq!(
+            TOTAL_MERGED.load(storage).unwrap(),
+            Uint128::from(10_000_000u128)
+        );
+        // Initial allocation of 2.5m
+        // 10% of remaining 97.5m = 9.75m
+        // Deposit ownership of 5m * 0.5 * 0.9 = 2.5m
+        assert_eq!(
+            POOL_SIZE.load(storage).unwrap(),
+            Uint128::from(14_500_000u128)
+        );
+        assert_eq!(
+            POOL_SHARES.load(storage).unwrap(),
+            Uint128::from(2_959_182u128)
+        );
+        assert_eq!(
+            ACCOUNTS.load(storage, Addr::unchecked("account2")).unwrap(),
+            (Uint128::from(459_182u128), Uint128::from(5_000_000u128))
         );
 
         // Execute a merge after the decay window ends. All RUJI should be allocated and
@@ -351,7 +390,7 @@ mod tests {
         assert_eq!(shares, Uint128::zero());
         assert_eq!(
             TOTAL_MERGED.load(storage).unwrap(),
-            Uint128::from(10_000_000u128)
+            Uint128::from(12_500_000u128)
         );
         // Initial allocation of 2.5m
         // 10% of remaining 97.5m = 9.75m
@@ -362,11 +401,11 @@ mod tests {
         );
         assert_eq!(
             POOL_SHARES.load(storage).unwrap(),
-            Uint128::from(2_729_591u128)
+            Uint128::from(2_959_182u128)
         );
         assert_eq!(
             ACCOUNTS.load(storage, Addr::unchecked("account3")).unwrap(),
-            Uint128::zero()
+            (Uint128::zero(), Uint128::from(2_500_000u128))
         );
     }
 }
