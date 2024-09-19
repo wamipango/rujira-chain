@@ -203,7 +203,7 @@ FN:149,query
 FN:164,distribute_denom
 FNF:7
 FNDA:4,instantiate
-FNDA:26,execute
+FNDA:28,execute
 FNDA:11,get_action_msg
 FNDA:4,reply
 FNDA:4,execute_reply
@@ -214,8 +214,8 @@ DA:26,4
 DA:27,4
 DA:28,4
 DA:29,4
-DA:33,26
-DA:39,52
+DA:33,28
+DA:39,56
 DA:41,2
 DA:42,2
 DA:43,1
@@ -236,15 +236,15 @@ DA:64,2
 DA:65,1
 DA:68,1
 DA:69,1
-DA:71,1
-DA:72,1
-DA:73,0
+DA:71,2
+DA:72,2
+DA:73,1
 DA:76,1
 DA:77,1
 DA:78,1
-DA:80,1
-DA:81,1
-DA:82,0
+DA:80,2
+DA:81,2
+DA:82,1
 DA:84,1
 DA:85,1
 DA:86,1
@@ -287,14 +287,14 @@ DA:164,23
 DA:171,46
 DA:172,23
 DA:173,23
-DA:175,28
+DA:175,33
 DA:177,3
 DA:178,3
-DA:180,15
+DA:180,21
 DA:182,3
-DA:184,3
-DA:185,3
-DA:189,0
+DA:184,6
+DA:185,6
+DA:189,3
 DA:191,6
 DA:192,6
 DA:193,6
@@ -303,7 +303,7 @@ DA:195,6
 DA:197,6
 DA:201,23
 LF:93
-LH:89
+LH:92
 end_of_record
 TN:
 SF:/Users/jamesbradley/dev/rujira/ruji/contracts/rujira-revenue/src/state.rs
@@ -320,7 +320,7 @@ FN:135,Action::unset
 FN:139,Action::execute
 FN:156,<impl From for ActionResponse>::from
 FNF:12
-FNDA:31,Config::load
+FNDA:33,Config::load
 FNDA:7,Config::save
 FNDA:4,<impl From for Config>::from
 FNDA:1,<impl From for ConfigResponse>::from
@@ -332,8 +332,8 @@ FNDA:7,Action::set
 FNDA:1,Action::unset
 FNDA:8,Action::execute
 FNDA:1,<impl From for ActionResponse>::from
-DA:30,31
-DA:31,31
+DA:30,33
+DA:31,33
 DA:34,7
 DA:35,7
 DA:40,4

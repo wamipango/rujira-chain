@@ -344,6 +344,22 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
+            message_info(&Addr::unchecked("not-owner"), &vec![]),
+            ExecuteMsg::AddTargetDenom("new".to_string()),
+        )
+        .unwrap_err();
+
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&Addr::unchecked("not-owner"), &vec![]),
+            ExecuteMsg::SetExecutor(Addr::unchecked("new")),
+        )
+        .unwrap_err();
+
+        execute(
+            deps.as_mut(),
+            mock_env(),
             message_info(&Addr::unchecked("executor"), &vec![]),
             ExecuteMsg::Run {},
         )
@@ -556,7 +572,11 @@ mod tests {
                 &InstantiateMsg {
                     owner: owner.clone(),
                     target_denoms: vec!["uruji".to_string(), "another".to_string()],
-                    target_addresses: vec![(fees.clone(), 1), (another.clone(), 3)],
+                    target_addresses: vec![
+                        (fees.clone(), 1),
+                        (another.clone(), 3),
+                        (app.api().addr_make("nope"), 0),
+                    ],
                     executor: owner.clone(),
                 },
                 &vec![],
