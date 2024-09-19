@@ -348,6 +348,22 @@ mod tests {
             ExecuteMsg::Run {},
         )
         .unwrap();
+
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&Addr::unchecked("owner-new"), &vec![]),
+            ExecuteMsg::SetExecutor(Addr::unchecked("owner-new")),
+        )
+        .unwrap();
+
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&Addr::unchecked("owner-new"), &vec![]),
+            ExecuteMsg::Run {},
+        )
+        .unwrap();
     }
 
     #[test]
