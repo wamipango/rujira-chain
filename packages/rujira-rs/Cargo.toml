@@ -9,3 +9,4 @@ edition = { workspace = true }
 cosmwasm-schema = { workspace = true }
 cosmwasm-std = { workspace = true }
 anybuf = { workspace = true }
+thiserror = { workspace = true }

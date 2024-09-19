@@ -905,6 +905,23 @@ dependencies = [
  "anybuf",
  "cosmwasm-schema",
  "cosmwasm-std",
+ "thiserror",
+]
+
+[[package]]
+name = "rujira-staking"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "rujira-rs",
+ "schemars",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

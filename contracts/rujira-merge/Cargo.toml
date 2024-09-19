@@ -13,7 +13,6 @@ crate-type = ["cdylib", "rlib"]
 # use library feature to disable all instantiate/execute/query exports
 library = []
 
-
 [dependencies]
 rujira-rs = { workspace = true }
 cosmwasm-schema = { workspace = true }
