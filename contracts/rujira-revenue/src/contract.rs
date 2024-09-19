@@ -536,7 +536,11 @@ mod tests {
         let owner = app.api().addr_make("owner");
         let another = app.api().addr_make("another");
 
-        let funds = vec![coin(1000u128, "uruji"), coin(2000u128, "another")];
+        let funds = vec![
+            coin(1000u128, "uruji"),
+            coin(2000u128, "another"),
+            coin(2000u128, "ignored"),
+        ];
 
         app.init_modules(|router, _, storage| {
             router.bank.init_balance(storage, &owner, funds.clone())
@@ -591,6 +595,15 @@ mod tests {
                 .amount,
             Uint128::from(750u128)
         );
+
+        assert_eq!(
+            app.wrap()
+                .query_balance(another.clone(), "ignored")
+                .unwrap()
+                .amount,
+            Uint128::zero()
+        );
+
         assert_eq!(
             app.wrap()
                 .query_balance(fees.clone(), "another")
@@ -600,7 +613,44 @@ mod tests {
         );
 
         assert_eq!(
-            app.wrap().query_balance(another, "another").unwrap().amount,
+            app.wrap()
+                .query_balance(another.clone(), "another")
+                .unwrap()
+                .amount,
+            Uint128::from(1500u128)
+        );
+
+        assert_eq!(
+            app.wrap()
+                .query_balance(another.clone(), "ignored")
+                .unwrap()
+                .amount,
+            Uint128::zero()
+        );
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::AddTargetDenom("ignored".to_string()),
+            &vec![],
+        )
+        .unwrap();
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Run {},
+            &vec![],
+        )
+        .unwrap();
+
+        assert_eq!(
+            app.wrap().query_balance(fees, "ignored").unwrap().amount,
+            Uint128::from(500u128)
+        );
+
+        assert_eq!(
+            app.wrap().query_balance(another, "ignored").unwrap().amount,
             Uint128::from(1500u128)
         );
     }
