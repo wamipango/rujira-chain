@@ -1,5 +1,6 @@
 use cosmwasm_std::{CheckedFromRatioError, StdError};
 use cw_utils::PaymentError;
+use rujira_rs::SharePoolError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -12,6 +13,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     CheckedFromRatio(#[from] CheckedFromRatioError),
+
+    #[error("{0}")]
+    SharePool(#[from] SharePoolError),
 
     #[error("Unauthorized")]
     Unauthorized {},

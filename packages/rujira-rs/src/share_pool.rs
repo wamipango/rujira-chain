@@ -62,6 +62,10 @@ impl SharePool {
         self.size
     }
 
+    pub fn shares(&self) -> Uint128 {
+        self.shares
+    }
+
     pub fn ownership(&self, shares: Uint128) -> Uint128 {
         if shares.is_zero() {
             return Uint128::zero();
