@@ -206,10 +206,11 @@ mod tests {
 
     use super::*;
     use cosmwasm_std::{
-        coin, coins, from_json,
-        testing::{message_info, mock_dependencies, mock_dependencies_with_balances, mock_env},
-        BankMsg, ReplyOn, Uint128,
+        coin, from_json,
+        testing::{message_info, mock_dependencies, mock_env},
+        Uint128,
     };
+    use cw_multi_test::{BasicApp, ContractWrapper, Executor};
 
     #[test]
     fn instantiation() {
@@ -217,7 +218,7 @@ mod tests {
         let info = message_info(&Addr::unchecked("owner"), &vec![]);
         let msg = InstantiateMsg {
             owner: Addr::unchecked("owner"),
-            target_denoms: vec!["ukuji".to_string(), "another".to_string()],
+            target_denoms: vec!["uruji".to_string(), "another".to_string()],
             target_addresses: vec![(Addr::unchecked("fees"), 1)],
             executor: Addr::unchecked("executor"),
         };
@@ -227,7 +228,7 @@ mod tests {
         assert_eq!(config.owner, Addr::unchecked("owner"));
         assert_eq!(
             config.target_denoms,
-            vec!["ukuji".to_string(), "another".to_string()],
+            vec!["uruji".to_string(), "another".to_string()],
         );
         let status: StatusResponse =
             from_json(query(deps.as_ref(), mock_env(), QueryMsg::Status {}).unwrap()).unwrap();
@@ -242,7 +243,7 @@ mod tests {
         let info = message_info(&Addr::unchecked("owner"), &vec![]);
         let msg = InstantiateMsg {
             owner: Addr::unchecked("owner"),
-            target_denoms: vec!["ukuji".to_string(), "another".to_string()],
+            target_denoms: vec!["uruji".to_string(), "another".to_string()],
             target_addresses: vec![(Addr::unchecked("fees"), 1)],
             executor: Addr::unchecked("executor"),
         };
@@ -351,204 +352,240 @@ mod tests {
 
     #[test]
     fn cranking() {
-        let mut deps = mock_dependencies_with_balances(&[(
-            "cosmos2contract",
-            &[
-                // coin(1000u128, "token-a"),
-                coin(1000u128, "token-b"),
-                coin(1000u128, "token-c"),
-                coin(1000u128, "token-d"),
-                coin(1000u128, "token-e"),
-            ],
-        )]);
-        let info = message_info(&Addr::unchecked("contract-0"), &vec![]);
-        let msg = InstantiateMsg {
-            owner: Addr::unchecked("owner"),
-            target_denoms: vec!["ukuji".to_string(), "another".to_string()],
-            target_addresses: vec![(Addr::unchecked("fees"), 1)],
-            executor: Addr::unchecked("executor"),
-        };
-        instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+        let mut app = BasicApp::default();
+        let owner = app.api().addr_make("owner");
+        let fees = app.api().addr_make("fees");
 
-        // Make sure that execution ends when there are no actions
-        execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&Addr::unchecked("executor"), &vec![]),
-            ExecuteMsg::Run {},
+        let funds = vec![
+            // coin(1000u128, "token-a"),
+            coin(1000u128, "token-b"),
+            coin(1000u128, "token-c"),
+            coin(1000u128, "token-d"),
+            coin(1000u128, "token-e"),
+        ];
+
+        app.init_modules(|router, _, storage| {
+            router.bank.init_balance(storage, &owner, funds.clone())
+        })
+        .unwrap();
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query).with_reply(reply));
+        let code_id = app.store_code(code);
+        let contract = app
+            .instantiate_contract(
+                code_id,
+                owner.clone(),
+                &InstantiateMsg {
+                    owner: owner.clone(),
+                    target_denoms: vec!["uruji".to_string(), "another".to_string()],
+                    target_addresses: vec![(fees.clone(), 1)],
+                    executor: owner.clone(),
+                },
+                &vec![],
+                "revenue",
+                None,
+            )
+            .unwrap();
+
+        app.send_tokens(owner.clone(), contract.clone(), &funds)
+            .unwrap();
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Run {},
+            &vec![],
         )
         .unwrap();
-        let status: StatusResponse =
-            from_json(query(deps.as_ref(), mock_env(), QueryMsg::Status {}).unwrap()).unwrap();
+
+        // Make sure that execution ends when there are no actions
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
         assert_eq!(status.last, None);
 
         // Set some actions
-        set_action(deps.as_mut(), "token-a", "contract-a", Uint128::MAX);
-        set_action(deps.as_mut(), "token-b", "contract-b", Uint128::MAX);
+        set_action(&mut app, &contract, "token-a", "contract-a", Uint128::MAX);
+        set_action(&mut app, &contract, "token-b", "contract-b", Uint128::MAX);
         set_action(
-            deps.as_mut(),
+            &mut app,
+            &contract,
             "token-c",
             "contract-c",
             Uint128::from(100u128),
         );
-        set_action(deps.as_mut(), "token-d", "contract-d", Uint128::MAX);
-        set_action(deps.as_mut(), "token-e", "contract-e", Uint128::MAX);
+        set_action(&mut app, &contract, "token-d", "contract-d", Uint128::MAX);
+        set_action(&mut app, &contract, "token-e", "contract-e", Uint128::MAX);
 
-        let res = execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&Addr::unchecked("executor"), &vec![]),
-            ExecuteMsg::Run {},
-        )
-        .unwrap();
-        // Nothing done
-        assert_eq!(res.events.len(), 0);
-        let status: StatusResponse =
-            from_json(query(deps.as_ref(), mock_env(), QueryMsg::Status {}).unwrap()).unwrap();
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Run {},
+                &vec![],
+            )
+            .unwrap();
+        assert_eq!(res.events.len(), 1);
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
         assert_eq!(status.last, Some("token-a".to_string()));
 
         // Iterator should start at the beginning again and execute token-a
-        let res = execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&Addr::unchecked("executor"), &vec![]),
-            ExecuteMsg::Run {},
-        )
-        .unwrap();
-        let status: StatusResponse =
-            from_json(query(deps.as_ref(), mock_env(), QueryMsg::Status {}).unwrap()).unwrap();
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Run {},
+                &vec![],
+            )
+            .unwrap();
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
         assert_eq!(status.last, Some("token-b".to_string()));
-        assert_eq!(res.events[0].clone().ty, "revenue/run");
-        assert_eq!(res.events[0].clone().attributes[0].clone().key, "denom");
-        assert_eq!(res.events[0].clone().attributes[0].clone().value, "token-b");
+        assert_eq!(res.events[1].clone().ty, "wasm-revenue/run");
+        assert_eq!(res.events[1].clone().attributes[1].clone().key, "denom");
+        assert_eq!(res.events[1].clone().attributes[1].clone().value, "token-b");
 
         // Run for c, d, e and then loop back to a
-        let res = execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&Addr::unchecked("executor"), &vec![]),
-            ExecuteMsg::Run {},
-        )
-        .unwrap();
-        assert_eq!(res.events[0].clone().attributes[0].clone().value, "token-c");
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Run {},
+                &vec![],
+            )
+            .unwrap();
+        assert_eq!(res.events[1].clone().attributes[1].clone().value, "token-c");
 
-        let res = execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&Addr::unchecked("executor"), &vec![]),
-            ExecuteMsg::Run {},
-        )
-        .unwrap();
-        assert_eq!(res.events[0].clone().attributes[0].clone().value, "token-d");
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Run {},
+                &vec![],
+            )
+            .unwrap();
+        assert_eq!(res.events[1].clone().attributes[1].clone().value, "token-d");
 
-        let res = execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&Addr::unchecked("executor"), &vec![]),
-            ExecuteMsg::Run {},
-        )
-        .unwrap();
-        assert_eq!(res.events[0].clone().attributes[0].clone().value, "token-e");
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Run {},
+                &vec![],
+            )
+            .unwrap();
+        assert_eq!(res.events[1].clone().attributes[1].clone().value, "token-e");
 
-        let res = execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&Addr::unchecked("executor"), &vec![]),
-            ExecuteMsg::Run {},
-        )
-        .unwrap();
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Run {},
+                &vec![],
+            )
+            .unwrap();
 
-        assert_eq!(res.events.len(), 0);
-        let status: StatusResponse =
-            from_json(query(deps.as_ref(), mock_env(), QueryMsg::Status {}).unwrap()).unwrap();
+        assert_eq!(res.events.len(), 1);
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
         assert_eq!(status.last, Some("token-a".to_string()));
     }
 
-    fn set_action(deps: DepsMut, denom: &str, contract: &str, limit: Uint128) {
-        execute(
-            deps,
-            mock_env(),
-            message_info(&Addr::unchecked("owner"), &vec![]),
-            ExecuteMsg::SetAction {
+    fn set_action(app: &mut BasicApp, contract: &Addr, denom: &str, target: &str, limit: Uint128) {
+        app.execute_contract(
+            app.api().addr_make("owner"),
+            contract.clone(),
+            &ExecuteMsg::SetAction {
                 denom: denom.to_string(),
-                contract: Addr::unchecked(contract),
+                contract: app.api().addr_make(target),
                 limit: limit,
                 msg: Binary::default(),
             },
+            &vec![],
         )
         .unwrap();
     }
 
     #[test]
     fn distribution() {
-        let mut deps = mock_dependencies_with_balances(&[(
-            "cosmos2contract",
-            &[coin(1000u128, "ukuji"), coin(2000u128, "another")],
-        )]);
-        let info = message_info(&Addr::unchecked("contract-0"), &vec![]);
-        let msg = InstantiateMsg {
-            owner: Addr::unchecked("owner"),
-            target_denoms: vec!["ukuji".to_string(), "another".to_string()],
-            target_addresses: vec![
-                (Addr::unchecked("fees"), 1),
-                (Addr::unchecked("another"), 3),
-            ],
-            executor: Addr::unchecked("executor"),
-        };
-        instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+        let mut app = BasicApp::default();
+        let fees = app.api().addr_make("fees");
+        let owner = app.api().addr_make("owner");
+        let another = app.api().addr_make("another");
+
+        let funds = vec![coin(1000u128, "uruji"), coin(2000u128, "another")];
+
+        app.init_modules(|router, _, storage| {
+            router.bank.init_balance(storage, &owner, funds.clone())
+        })
+        .unwrap();
+
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query).with_reply(reply));
+        let code_id = app.store_code(code);
+        let contract = app
+            .instantiate_contract(
+                code_id,
+                owner.clone(),
+                &InstantiateMsg {
+                    owner: owner.clone(),
+                    target_denoms: vec!["uruji".to_string(), "another".to_string()],
+                    target_addresses: vec![(fees.clone(), 1), (another.clone(), 3)],
+                    executor: owner.clone(),
+                },
+                &vec![],
+                "revenue",
+                None,
+            )
+            .unwrap();
+
+        app.send_tokens(owner.clone(), contract.clone(), &funds)
+            .unwrap();
+
         // Dummy action to make sure it cranks the reply
-        set_action(deps.as_mut(), "token-a", "contract-a", Uint128::MAX);
+        set_action(&mut app, &contract, "token-a", "contract-a", Uint128::MAX);
 
         // Make sure that execution ends when there are no actions
-        let res = execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&Addr::unchecked("executor"), &vec![]),
-            ExecuteMsg::Run {},
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Run {},
+            &vec![],
         )
         .unwrap();
 
-        assert!(res.messages.contains(&SubMsg {
-            id: 0,
-            msg: CosmosMsg::Bank(BankMsg::Send {
-                to_address: "fees".to_string(),
-                amount: coins(250, "ukuji"),
-            },),
-            gas_limit: None,
-            reply_on: ReplyOn::Never,
-            payload: Binary::default()
-        }));
-        assert!(res.messages.contains(&SubMsg {
-            id: 0,
-            msg: CosmosMsg::Bank(BankMsg::Send {
-                to_address: "another".to_string(),
-                amount: coins(750, "ukuji"),
-            },),
-            gas_limit: None,
-            reply_on: ReplyOn::Never,
-            payload: Binary::default()
-        }));
+        assert_eq!(
+            app.wrap()
+                .query_balance(fees.clone(), "uruji")
+                .unwrap()
+                .amount,
+            Uint128::from(250u128)
+        );
 
-        assert!(res.messages.contains(&SubMsg {
-            id: 0,
-            msg: CosmosMsg::Bank(BankMsg::Send {
-                to_address: "fees".to_string(),
-                amount: coins(500, "another"),
-            },),
-            gas_limit: None,
-            reply_on: ReplyOn::Never,
-            payload: Binary::default()
-        }));
+        assert_eq!(
+            app.wrap()
+                .query_balance(another.clone(), "uruji")
+                .unwrap()
+                .amount,
+            Uint128::from(750u128)
+        );
+        assert_eq!(
+            app.wrap()
+                .query_balance(fees.clone(), "another")
+                .unwrap()
+                .amount,
+            Uint128::from(500u128)
+        );
 
-        assert!(res.messages.contains(&SubMsg {
-            id: 0,
-            msg: CosmosMsg::Bank(BankMsg::Send {
-                to_address: "another".to_string(),
-                amount: coins(1500, "another"),
-            },),
-            gas_limit: None,
-            reply_on: ReplyOn::Never,
-            payload: Binary::default()
-        }));
+        assert_eq!(
+            app.wrap().query_balance(another, "another").unwrap().amount,
+            Uint128::from(1500u128)
+        );
     }
 }
