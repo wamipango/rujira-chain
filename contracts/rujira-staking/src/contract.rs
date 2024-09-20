@@ -139,7 +139,7 @@ fn execute_liquid(
                 )
                 .add_message(share_denom.mint_msg(shares, info.sender)))
         }
-        LiquidMsg::Withdraw {} => {
+        LiquidMsg::Unbond {} => {
             let shares = must_pay(&info, share_denom.denom().as_str())?;
             let returned = execute_liquid_unbond(deps.storage, shares)?;
             Ok(Response::default()

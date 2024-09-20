@@ -35,7 +35,7 @@ pub enum LiquidMsg {
     /// Bond [InstantiateMsg::bond_denom] tokens, retuning minted Share tokens
     Bond {},
     /// Burn the provided Share tokens, returning the share of the underlying pooled assets
-    Withdraw {},
+    Unbond {},
 }
 
 #[cw_serde]
