@@ -36,7 +36,7 @@ impl TokenFactory {
             type_url: format!("{}MsgMint", TYPE_URL_PREFX),
             value: Anybuf::new()
                 .append_string(1, &self.env.contract.address)
-                .append_message(2, &coin_message(coin(amount.u128(), self.denom())))
+                .append_message(2, &coin_message(Coin::new(amount, self.denom())))
                 .append_string(3, &recipient)
                 .as_bytes()
                 .into(),
@@ -48,7 +48,7 @@ impl TokenFactory {
             type_url: format!("{}MsgBurn", TYPE_URL_PREFX),
             value: Anybuf::new()
                 .append_string(1, &self.env.contract.address)
-                .append_message(2, &coin_message(coin(amount.u128(), self.denom())))
+                .append_message(2, &coin_message(Coin::new(amount, self.denom())))
                 .as_bytes()
                 .into(),
         })

@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env, Event,
+    coin, coins, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, Event,
     MessageInfo, Response, StdResult, Uint128,
 };
 use cw2::set_contract_version;
@@ -112,8 +112,8 @@ fn execute_account(
         AccountMsg::Withdraw { amount } => {
             let (rewards, amount) = execute_account_withdraw(deps.storage, &info.sender, amount)?;
             let mut send = NativeBalance(vec![
-                coin(rewards.u128(), config.revenue_denom),
-                coin(amount.u128(), config.bond_denom),
+                Coin::new(rewards, config.revenue_denom),
+                Coin::new(amount, config.bond_denom),
             ]);
             send.normalize();
 
