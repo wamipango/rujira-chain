@@ -114,9 +114,6 @@ pub fn distribute(
         .query_balance(env.contract.address.clone(), config.revenue_denom.clone())?
         .amount;
 
-    dbg!(&bond_balance);
-    dbg!(&revenue_balance);
-
     let revenue_surplus = revenue_balance.checked_sub(account.pending)?;
 
     let account_allocation = if account.total.is_zero() {
@@ -245,7 +242,14 @@ mod tests {
         execute_account_bond(
             mutdeps.storage,
             &app.api().addr_make("account"),
-            Uint128::from(1_000u128),
+            Uint128::from(750u128),
+        )
+        .unwrap();
+
+        execute_account_bond(
+            mutdeps.storage,
+            &app.api().addr_make("account2"),
+            Uint128::from(250u128),
         )
         .unwrap();
 
@@ -291,6 +295,15 @@ mod tests {
         assert_eq!(
             POOL_ACCOUNTS.load(mutdeps.storage).unwrap().pending,
             Uint128::from(333u128)
+        );
+
+        assert_eq!(
+            account(mutdeps.storage, app.api().addr_make("account")).unwrap(),
+            AccountResponse {
+                addr: app.api().addr_make("account").to_string(),
+                bonded: Uint128::from(750u128),
+                pending_revenue: Uint128::from(249u128)
+            }
         );
     }
 }
