@@ -72,6 +72,8 @@ pub struct AccountPoolAccount {
 #[cfg(test)]
 mod tests {
 
+    use cosmwasm_std::assert_approx_eq;
+
     use super::*;
 
     #[test]
@@ -123,5 +125,25 @@ mod tests {
 
         pool.decrease_account(&account2, Uint128::from(5001u128))
             .unwrap_err();
+    }
+
+    #[test]
+    fn test_long_run() {
+        let mut pool = AccountPool::default();
+        // Simulate a passive majority
+        let account = pool.join(Uint128::from(1_000_000_000u128));
+        let mut account2 = pool.join(Uint128::from(10_000u128));
+
+        for n in 1..100_000 {
+            pool.distribute(Uint128::from(3_000_000u128));
+            assert_approx_eq!(
+                pool.pending_revenue(&account),
+                Uint128::from(2999970u128 * n),
+                "0.0000000001"
+            );
+            assert_eq!(pool.pending_revenue(&account2), Uint128::from(29u128));
+            let claimed = pool.claim(&mut account2);
+            assert_eq!(claimed, Uint128::from(29u128));
+        }
     }
 }
