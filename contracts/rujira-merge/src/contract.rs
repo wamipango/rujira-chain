@@ -14,7 +14,7 @@ use crate::error::ContractError;
 use crate::state::{account, execute_deposit, execute_withdraw, init, status};
 
 // version info for migration info
-const CONTRACT_NAME: &str = "crates.io:ruji";
+const CONTRACT_NAME: &str = "crates.io:rujira-merge";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
