@@ -99,12 +99,20 @@ fn execute_account(
                 coin(amount.u128(), config.bond_denom),
             ]);
             send.normalize();
-            Ok(
-                Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
+
+            let mut response = Response::default().add_event(
+                Event::new("staking/account/withdraw")
+                    .add_attribute("owner", info.sender.clone())
+                    .add_attribute("amount", amount)
+                    .add_attribute("rewards", rewards),
+            );
+            if !send.is_empty() {
+                response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),
                     amount: send.into_vec(),
-                })),
-            )
+                }));
+            }
+            Ok(response)
         }
     }
 }
@@ -122,12 +130,25 @@ fn execute_liquid(
         LiquidMsg::Bond {} => {
             let amount = must_pay(&info, config.bond_denom.as_str())?;
             let shares = execute_liquid_bond(deps.storage, amount)?;
-            Ok(Response::default().add_message(share_denom.mint_msg(shares, info.sender)))
+            Ok(Response::default()
+                .add_event(
+                    Event::new("staking/liquid/bond")
+                        .add_attribute("owner", info.sender.clone())
+                        .add_attribute("amount", amount)
+                        .add_attribute("shares", shares),
+                )
+                .add_message(share_denom.mint_msg(shares, info.sender)))
         }
         LiquidMsg::Withdraw {} => {
             let shares = must_pay(&info, share_denom.denom().as_str())?;
             let returned = execute_liquid_unbond(deps.storage, shares)?;
             Ok(Response::default()
+                .add_event(
+                    Event::new("staking/liquid/unbond")
+                        .add_attribute("owner", info.sender.clone())
+                        .add_attribute("shares", shares)
+                        .add_attribute("returned", returned),
+                )
                 .add_message(share_denom.burn_msg(shares))
                 .add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),
