@@ -11,6 +11,11 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
+    Run {},
+}
+
+#[cw_serde]
+pub enum SudoMsg {
     SetOwner(String),
     SetExecutor(String),
     SetAction {
@@ -24,7 +29,6 @@ pub enum ExecuteMsg {
     },
     UnsetAction(String),
     AddTargetDenom(String),
-    Run {},
 }
 
 #[cw_serde]

@@ -20,6 +20,16 @@ pub enum ExecuteMsg {
 }
 
 #[cw_serde]
+pub enum SudoMsg {
+    /// Update the configuration of the revenue converter
+    SetRevenueConverter {
+        contract: String,
+        msg: Binary,
+        limit: Uint128,
+    },
+}
+
+#[cw_serde]
 pub enum AccountMsg {
     /// Bond [InstantiateMsg::bond_denom] tokens to an account
     Bond {},

@@ -9,7 +9,7 @@ use crate::error::ContractError;
 use crate::state::{Action, Config};
 use rujira_rs::revenue::{
     ActionResponse, ActionsResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
-    StatusResponse,
+    StatusResponse, SudoMsg,
 };
 
 // version info for migration info
@@ -36,62 +36,8 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    let mut config = Config::load(deps.storage)?;
+    let config = Config::load(deps.storage)?;
     match msg {
-        ExecuteMsg::SetOwner(owner) => {
-            if info.sender != config.owner {
-                return Err(ContractError::Unauthorized {});
-            }
-
-            config.owner = deps.api.addr_validate(&owner)?;
-            config.save(deps.storage)?;
-            Ok(Response::default())
-        }
-        ExecuteMsg::SetAction {
-            denom,
-            contract,
-            limit,
-            msg,
-        } => {
-            if info.sender != config.owner {
-                return Err(ContractError::Unauthorized {});
-            }
-
-            Action::set(
-                deps.storage,
-                denom,
-                deps.api.addr_validate(&contract)?,
-                limit,
-                msg,
-            )?;
-            Ok(Response::default())
-        }
-        ExecuteMsg::UnsetAction(denom) => {
-            if info.sender != config.owner {
-                return Err(ContractError::Unauthorized {});
-            }
-
-            Action::unset(deps.storage, denom);
-            Ok(Response::default())
-        }
-        ExecuteMsg::SetExecutor(executor) => {
-            if info.sender != config.owner {
-                return Err(ContractError::Unauthorized {});
-            }
-
-            config.executor = deps.api.addr_validate(&executor)?;
-            config.save(deps.storage)?;
-            Ok(Response::default())
-        }
-        ExecuteMsg::AddTargetDenom(denom) => {
-            if info.sender != config.owner {
-                return Err(ContractError::Unauthorized {});
-            }
-            config.target_denoms.push(denom);
-            config.save(deps.storage)?;
-            Ok(Response::default())
-        }
-
         ExecuteMsg::Run {} => {
             if info.sender != config.executor {
                 return Err(ContractError::Unauthorized {});
@@ -116,6 +62,47 @@ pub fn execute(
                     Ok(Response::default().add_messages(sends))
                 }
             }
+        }
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+    let mut config = Config::load(deps.storage)?;
+    match msg {
+        SudoMsg::SetOwner(owner) => {
+            config.owner = deps.api.addr_validate(&owner)?;
+            config.save(deps.storage)?;
+            Ok(Response::default())
+        }
+        SudoMsg::SetAction {
+            denom,
+            contract,
+            limit,
+            msg,
+        } => {
+            Action::set(
+                deps.storage,
+                denom,
+                deps.api.addr_validate(&contract)?,
+                limit,
+                msg,
+            )?;
+            Ok(Response::default())
+        }
+        SudoMsg::UnsetAction(denom) => {
+            Action::unset(deps.storage, denom);
+            Ok(Response::default())
+        }
+        SudoMsg::SetExecutor(executor) => {
+            config.executor = deps.api.addr_validate(&executor)?;
+            config.save(deps.storage)?;
+            Ok(Response::default())
+        }
+        SudoMsg::AddTargetDenom(denom) => {
+            config.target_denoms.push(denom);
+            config.save(deps.storage)?;
+            Ok(Response::default())
         }
     }
 }
@@ -264,21 +251,13 @@ mod tests {
         };
         instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
-        execute(
+        sudo(
             deps.as_mut(),
             mock_env(),
-            info.clone(),
-            ExecuteMsg::SetOwner(app.api().addr_make("owner-new").to_string()),
+            SudoMsg::SetOwner(app.api().addr_make("owner-new").to_string()),
         )
         .unwrap();
 
-        execute(
-            deps.as_mut(),
-            mock_env(),
-            info.clone(),
-            ExecuteMsg::SetOwner(app.api().addr_make("owner-new").to_string()),
-        )
-        .unwrap_err();
         let contract = app.api().addr_make("fin");
         let action = Action {
             denom: "uatom".to_string(),
@@ -289,26 +268,10 @@ mod tests {
 
         let a = action.clone();
 
-        execute(
+        sudo(
             deps.as_mut(),
             mock_env(),
-            info.clone(),
-            ExecuteMsg::SetAction {
-                denom: a.denom,
-                contract: a.contract.to_string(),
-                limit: a.limit,
-                msg: a.msg,
-            },
-        )
-        .unwrap_err();
-
-        let a = action.clone();
-
-        execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&app.api().addr_make("owner-new"), &vec![]),
-            ExecuteMsg::SetAction {
+            SudoMsg::SetAction {
                 denom: a.denom,
                 contract: a.contract.to_string(),
                 limit: a.limit,
@@ -329,18 +292,10 @@ mod tests {
             }]
         );
 
-        execute(
+        sudo(
             deps.as_mut(),
             mock_env(),
-            info,
-            ExecuteMsg::UnsetAction(action.denom.clone()),
-        )
-        .unwrap_err();
-        execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&app.api().addr_make("owner-new"), &vec![]),
-            ExecuteMsg::UnsetAction(action.denom),
+            SudoMsg::UnsetAction(action.denom),
         )
         .unwrap();
 
@@ -351,40 +306,15 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&app.api().addr_make("owner-new"), &vec![]),
-            ExecuteMsg::Run {},
-        )
-        .unwrap_err();
-
-        execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&app.api().addr_make("not-owner"), &vec![]),
-            ExecuteMsg::AddTargetDenom("new".to_string()),
-        )
-        .unwrap_err();
-
-        execute(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&app.api().addr_make("not-owner"), &vec![]),
-            ExecuteMsg::SetExecutor(app.api().addr_make("new").to_string()),
-        )
-        .unwrap_err();
-
-        execute(
-            deps.as_mut(),
-            mock_env(),
             message_info(&executor, &vec![]),
             ExecuteMsg::Run {},
         )
         .unwrap();
 
-        execute(
+        sudo(
             deps.as_mut(),
             mock_env(),
-            message_info(&app.api().addr_make("owner-new"), &vec![]),
-            ExecuteMsg::SetExecutor(app.api().addr_make("owner-new").to_string()),
+            SudoMsg::SetExecutor(app.api().addr_make("owner-new").to_string()),
         )
         .unwrap();
 
@@ -415,7 +345,11 @@ mod tests {
             router.bank.init_balance(storage, &owner, funds.clone())
         })
         .unwrap();
-        let code = Box::new(ContractWrapper::new(execute, instantiate, query).with_reply(reply));
+        let code = Box::new(
+            ContractWrapper::new(execute, instantiate, query)
+                .with_reply(reply)
+                .with_sudo(sudo),
+        );
         let code_id = app.store_code(code);
         let contract = app
             .instantiate_contract(
@@ -546,16 +480,14 @@ mod tests {
     }
 
     fn set_action(app: &mut BasicApp, contract: &Addr, denom: &str, target: &str, limit: Uint128) {
-        app.execute_contract(
-            app.api().addr_make("owner"),
+        app.wasm_sudo(
             contract.clone(),
-            &ExecuteMsg::SetAction {
+            &SudoMsg::SetAction {
                 denom: denom.to_string(),
                 contract: app.api().addr_make(target).to_string(),
                 limit: limit,
                 msg: Binary::default(),
             },
-            &vec![],
         )
         .unwrap();
     }
@@ -578,7 +510,11 @@ mod tests {
         })
         .unwrap();
 
-        let code = Box::new(ContractWrapper::new(execute, instantiate, query).with_reply(reply));
+        let code = Box::new(
+            ContractWrapper::new(execute, instantiate, query)
+                .with_reply(reply)
+                .with_sudo(sudo),
+        );
         let code_id = app.store_code(code);
         let contract = app
             .instantiate_contract(
@@ -663,11 +599,9 @@ mod tests {
             Uint128::zero()
         );
 
-        app.execute_contract(
-            owner.clone(),
+        app.wasm_sudo(
             contract.clone(),
-            &ExecuteMsg::AddTargetDenom("ignored".to_string()),
-            &vec![],
+            &SudoMsg::AddTargetDenom("ignored".to_string()),
         )
         .unwrap();
 

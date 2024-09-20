@@ -6,7 +6,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, NativeBalance};
-use rujira_rs::staking::{AccountMsg, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg};
+use rujira_rs::staking::{AccountMsg, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, SudoMsg};
 use rujira_rs::TokenFactory;
 
 use crate::config::Config;
@@ -50,6 +50,23 @@ pub fn execute(
     match msg {
         ExecuteMsg::Account(account_msg) => execute_account(deps, info, config, account_msg),
         ExecuteMsg::Liquid(liquid_msg) => execute_liquid(deps, &env, info, config, liquid_msg),
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+    let mut config = Config::load(deps.storage)?;
+
+    match msg {
+        SudoMsg::SetRevenueConverter {
+            contract,
+            msg,
+            limit,
+        } => {
+            config.revenue_converter = (deps.api.addr_validate(&contract)?, msg, limit);
+            config.save(deps.storage)?;
+            Ok(Response::default())
+        }
     }
 }
 
