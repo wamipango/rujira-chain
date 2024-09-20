@@ -7,17 +7,19 @@ use rujira_rs::{
     staking::{AccountResponse, StatusResponse},
     AccountPool, AccountPoolAccount, SharePool,
 };
-use std::ops::Add;
+use std::{cmp::min, ops::Add, ops::Sub};
 
 use crate::{config::Config, ContractError};
 
 static POOL_LIQUID: Item<SharePool> = Item::new("l");
 static ACCOUNTS: Map<Addr, AccountPoolAccount> = Map::new("a");
 static POOL_ACCOUNTS: Item<AccountPool> = Item::new("p");
+static PENDING_SWAP: Item<Uint128> = Item::new("s");
 
 pub fn init(storage: &mut dyn Storage) -> StdResult<()> {
     POOL_LIQUID.save(storage, &Default::default())?;
     POOL_ACCOUNTS.save(storage, &Default::default())?;
+    PENDING_SWAP.save(storage, &Default::default())?;
     Ok(())
 }
 
@@ -105,6 +107,7 @@ pub fn distribute(
 ) -> StdResult<CosmosMsg> {
     let mut account = POOL_ACCOUNTS.load(storage)?;
     let mut liquid = POOL_LIQUID.load(storage)?;
+    let swap_pending = PENDING_SWAP.load(storage)?;
 
     let bond_balance = querier
         .query_balance(env.contract.address.clone(), config.bond_denom.clone())?
@@ -141,15 +144,22 @@ pub fn distribute(
 
     let bond_surplus = bond_balance
         .checked_sub(liquid.size())?
-        .checked_sub(account.total)?;
+        .checked_sub(account.total)?
+        .checked_sub(swap_pending)?;
 
     liquid.deposit(bond_surplus);
     POOL_LIQUID.save(storage, &liquid)?;
 
+    // Take pending swaps off the queue, add back any remaining
+    let swap_total = swap_pending.add(liquid_allocation);
+    let swap_amount = min(config.revenue_converter.2, swap_total);
+    let swap_remainder = swap_total.sub(swap_amount);
+    PENDING_SWAP.save(storage, &swap_remainder)?;
+
     Ok(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: config.revenue_converter.0.to_string(),
         msg: config.revenue_converter.1.clone(),
-        funds: coins(liquid_allocation.u128(), config.revenue_denom.clone()),
+        funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
     }))
 }
 
@@ -278,8 +288,13 @@ mod tests {
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: app.api().addr_make("revenue").to_string(),
                 msg: Binary::default(),
-                funds: coins(666, "uusdc"),
+                funds: coins(100, "uusdc"),
             })
+        );
+
+        assert_eq!(
+            PENDING_SWAP.load(mutdeps.storage).unwrap(),
+            Uint128::from(566u128)
         );
 
         assert_eq!(

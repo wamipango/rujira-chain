@@ -38,9 +38,6 @@ impl Config {
         if self.revenue_denom.is_empty() {
             return Err(ContractError::Invalid("ruji_denom".to_string()));
         }
-        if self.revenue_converter.2.is_zero() {
-            return Err(ContractError::Invalid("revenue_converter".to_string()));
-        }
 
         Ok(())
     }
@@ -68,14 +65,6 @@ mod tests {
             bond_denom: "uruji".to_string(),
             revenue_denom: "".to_string(),
             revenue_converter: (Addr::unchecked(""), Binary::default(), Uint128::one()),
-        }
-        .validate()
-        .unwrap_err();
-
-        Config {
-            bond_denom: "uruji".to_string(),
-            revenue_denom: "uusdc".to_string(),
-            revenue_converter: (Addr::unchecked(""), Binary::default(), Uint128::zero()),
         }
         .validate()
         .unwrap_err();
