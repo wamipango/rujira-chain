@@ -45,6 +45,10 @@ impl AccountPool {
     }
 
     pub fn distribute(&mut self, amount: Uint128) {
+        if amount.is_zero() {
+            return;
+        }
+
         self.pending += amount;
         self.sum += Decimal::from_ratio(amount, self.total);
     }

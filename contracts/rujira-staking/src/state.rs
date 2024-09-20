@@ -96,7 +96,7 @@ pub fn execute_liquid_unbond(
 /// Calculates the amount to be distributed between (account, liquid) pools;
 /// Revenue balance is queried and surplus (ie not allocated to Account stakers) is split pro-rata between ACCOUNT stakers, and LIQUID pool size.
 /// Revenue allocated to LIQUID is transformed to a Wasm Execute msg to swap to the bond token
-/// The surplus of bond_balance - LIQUID.size() is the return value of the previous swap and can be allocated to the total liquid pool
+/// The surplus of bond_balance - LIQUID.size() - ACCOUNT.total is the return value of the previous swap and can be allocated to the total liquid pool
 pub fn distribute(
     env: &Env,
     querier: QuerierWrapper,
@@ -114,24 +114,38 @@ pub fn distribute(
         .query_balance(env.contract.address.clone(), config.revenue_denom.clone())?
         .amount;
 
+    dbg!(&bond_balance);
+    dbg!(&revenue_balance);
+
     let revenue_surplus = revenue_balance.checked_sub(account.pending)?;
 
-    let account_allocation = Decimal::from_ratio(
-        account.total * revenue_surplus,
-        account.total.add(liquid.size()),
-    )
-    .to_uint_floor();
+    let account_allocation = if account.total.is_zero() {
+        Uint128::zero()
+    } else {
+        Decimal::from_ratio(
+            account.total * revenue_surplus,
+            account.total.add(liquid.size()),
+        )
+        .to_uint_floor()
+    };
 
-    let liquid_allocation = Decimal::from_ratio(
-        liquid.size() * revenue_surplus,
-        account.total.add(liquid.size()),
-    )
-    .to_uint_floor();
+    let liquid_allocation = if liquid.size().is_zero() {
+        Uint128::zero()
+    } else {
+        Decimal::from_ratio(
+            liquid.size() * revenue_surplus,
+            account.total.add(liquid.size()),
+        )
+        .to_uint_floor()
+    };
 
     account.distribute(account_allocation);
     POOL_ACCOUNTS.save(storage, &account)?;
 
-    let bond_surplus = bond_balance.checked_sub(liquid.size())?;
+    let bond_surplus = bond_balance
+        .checked_sub(liquid.size())?
+        .checked_sub(account.total)?;
+
     liquid.deposit(bond_surplus);
     POOL_LIQUID.save(storage, &liquid)?;
 
@@ -171,4 +185,112 @@ pub fn account(storage: &dyn Storage, addr: Addr) -> StdResult<AccountResponse> 
         bonded: account.amount,
         pending_revenue: accounts.pending_revenue(&account),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::{
+        coin,
+        testing::{mock_dependencies_with_balances, mock_env},
+        Binary,
+    };
+    use cw_multi_test::BasicApp;
+
+    use super::*;
+
+    #[test]
+    fn test_distribution() {
+        let app = BasicApp::default();
+        let env = mock_env();
+
+        let mut deps = mock_dependencies_with_balances(&[
+            (
+                app.api().addr_make("app").as_str(),
+                &coins(1_000_000u128, "uusdc"),
+            ),
+            (
+                env.contract.address.as_str(),
+                &vec![
+                    coin(1_000u128, "uusdc"),
+                    // Two operations below bond total of 3000 ruji
+                    // More complex testing executed in contract.rs with cw-multi-test
+                    coin(3_000u128, "uruji"),
+                ],
+            ),
+        ]);
+
+        let config = Config {
+            bond_denom: "uruji".to_string(),
+            revenue_denom: "uusdc".to_string(),
+            revenue_converter: (
+                app.api().addr_make("revenue"),
+                Binary::default(),
+                Uint128::from(100u128),
+            ),
+        };
+
+        init(deps.as_mut().storage).unwrap();
+
+        assert_eq!(
+            POOL_LIQUID.load(deps.as_mut().storage).unwrap(),
+            SharePool::default()
+        );
+
+        assert_eq!(
+            POOL_ACCOUNTS.load(deps.as_mut().storage).unwrap(),
+            AccountPool::default()
+        );
+        let mutdeps = deps.as_mut();
+
+        execute_account_bond(
+            mutdeps.storage,
+            &app.api().addr_make("account"),
+            Uint128::from(1_000u128),
+        )
+        .unwrap();
+
+        execute_liquid_bond(mutdeps.storage, Uint128::from(2_000u128)).unwrap();
+
+        assert_eq!(
+            POOL_LIQUID.load(mutdeps.storage).unwrap().shares(),
+            Uint128::from(2_000u128)
+        );
+
+        assert_eq!(
+            POOL_LIQUID.load(mutdeps.storage).unwrap().size(),
+            Uint128::from(2_000u128)
+        );
+
+        assert_eq!(
+            POOL_ACCOUNTS.load(mutdeps.storage).unwrap().total,
+            Uint128::from(1_000u128)
+        );
+
+        let msg = distribute(&env, mutdeps.querier, mutdeps.storage, &config).unwrap();
+        // Balance of 1000 USDC split across 3000 RUJI - 2000 liquid and 1000 account. so 666 to be swapped, 333 to be allocated
+
+        assert_eq!(
+            msg,
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: app.api().addr_make("revenue").to_string(),
+                msg: Binary::default(),
+                funds: coins(666, "uusdc"),
+            })
+        );
+
+        assert_eq!(
+            POOL_LIQUID.load(mutdeps.storage).unwrap().shares(),
+            Uint128::from(2_000u128)
+        );
+
+        assert_eq!(
+            POOL_LIQUID.load(mutdeps.storage).unwrap().size(),
+            Uint128::from(2_000u128)
+        );
+
+        assert_eq!(
+            POOL_ACCOUNTS.load(mutdeps.storage).unwrap().pending,
+            Uint128::from(333u128)
+        );
+    }
 }
