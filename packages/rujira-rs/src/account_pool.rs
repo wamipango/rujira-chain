@@ -20,6 +20,9 @@ impl AccountPool {
         }
     }
 
+    /// Increase stake in the AccountPool
+    ///
+    /// N.B Ensure that `pending_revenue` is claimed BEFORE calling `decrease account`, as this will reset allocations
     pub fn increase_account(
         &mut self,
         account: &AccountPoolAccount,
@@ -28,10 +31,14 @@ impl AccountPool {
         self.total += amount;
         AccountPoolAccount {
             amount: account.amount + amount,
+            sum_snapshot: self.sum,
             ..account.clone()
         }
     }
 
+    /// Decrease stake in the AccountPool
+    ///
+    /// N.B Ensure that `pending_revenue` is claimed BEFORE calling `decrease account`, as this will reset allocations
     pub fn decrease_account(
         &mut self,
         account: &AccountPoolAccount,
@@ -40,6 +47,7 @@ impl AccountPool {
         self.total = self.total.checked_sub(amount)?;
         Ok(AccountPoolAccount {
             amount: account.amount.checked_sub(amount)?,
+            sum_snapshot: self.sum,
             ..account.clone()
         })
     }
