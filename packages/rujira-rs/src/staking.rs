@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Binary, Uint128};
+use cosmwasm_std::{Binary, Uint128};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -8,7 +8,7 @@ pub struct InstantiateMsg {
     /// Configuration to convert `revenue_denom` into `bond_denom`
     ///
     /// `(contract_address, execute_msg, threshold_limit)`
-    pub revenue_converter: (Addr, Binary, Uint128),
+    pub revenue_converter: (String, Binary, Uint128),
 }
 
 #[cw_serde]
@@ -45,7 +45,7 @@ pub enum QueryMsg {
     Status {},
 
     #[returns(AccountResponse)]
-    Account { addr: Addr },
+    Account { addr: String },
 }
 
 #[cw_serde]
@@ -68,7 +68,7 @@ pub struct StatusResponse {
 
 #[cw_serde]
 pub struct AccountResponse {
-    pub addr: Addr,
+    pub addr: String,
     pub bonded: Uint128,
     pub pending_revenue: Uint128,
 }

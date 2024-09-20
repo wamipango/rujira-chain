@@ -1,22 +1,22 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Binary, Uint128};
+use cosmwasm_std::{Binary, Uint128};
 
 #[cw_serde]
 pub struct InstantiateMsg {
-    pub owner: Addr,
-    pub executor: Addr,
+    pub owner: String,
+    pub executor: String,
     pub target_denoms: Vec<String>,
-    pub target_addresses: Vec<(Addr, u8)>,
+    pub target_addresses: Vec<(String, u8)>,
 }
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    SetOwner(Addr),
-    SetExecutor(Addr),
+    SetOwner(String),
+    SetExecutor(String),
     SetAction {
         denom: String,
         /// The target contract for swapping
-        contract: Addr,
+        contract: String,
         /// The maximum amount of the token that can be included in any one execution of the Action
         limit: Uint128,
         /// The msg executed on the contract to swap to the target token
@@ -40,10 +40,10 @@ pub enum QueryMsg {
 
 #[cw_serde]
 pub struct ConfigResponse {
-    pub owner: Addr,
-    pub executor: Addr,
+    pub owner: String,
+    pub executor: String,
     pub target_denoms: Vec<String>,
-    pub target_addresses: Vec<(Addr, u8)>,
+    pub target_addresses: Vec<(String, u8)>,
 }
 
 #[cw_serde]
@@ -53,7 +53,7 @@ pub struct ActionsResponse {
 #[cw_serde]
 pub struct ActionResponse {
     pub denom: String,
-    pub contract: Addr,
+    pub contract: String,
     pub limit: Uint128,
     pub msg: Binary,
 }

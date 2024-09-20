@@ -36,7 +36,7 @@ pub fn account(storage: &dyn Storage, addr: &Addr) -> Result<AccountResponse, Co
     let (shares, merged) = ACCOUNTS.load(storage, addr.clone()).unwrap_or_default();
     let size = pool.ownership(shares);
     Ok(AccountResponse {
-        addr: addr.clone(),
+        addr: addr.to_string(),
         shares,
         merged,
         size,

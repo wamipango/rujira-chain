@@ -29,7 +29,7 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::from(msg);
+    let config = Config::new(deps.api, msg)?;
     config.validate()?;
     config.save(deps.storage)?;
     init(deps.storage)?;
@@ -163,7 +163,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     let config = Config::load(deps.storage)?;
     match msg {
         QueryMsg::Status {} => to_json_binary(&status(env, deps, &config)?),
-        QueryMsg::Account { addr } => to_json_binary(&account(deps.storage, addr)?),
+        QueryMsg::Account { addr } => {
+            to_json_binary(&account(deps.storage, deps.api.addr_validate(&addr)?)?)
+        }
     }
 }
 

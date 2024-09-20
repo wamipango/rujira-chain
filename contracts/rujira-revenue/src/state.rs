@@ -2,7 +2,8 @@ use std::cmp::min;
 
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    coins, Addr, Binary, Coin, CosmosMsg, Order, StdError, StdResult, Storage, Uint128, WasmMsg,
+    coins, Addr, Api, Binary, Coin, CosmosMsg, Order, StdError, StdResult, Storage, Uint128,
+    WasmMsg,
 };
 use cw_storage_plus::{Bound, Item, Map};
 use rujira_rs::revenue::{ActionResponse, ConfigResponse, InstantiateMsg};
@@ -27,6 +28,19 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn new(api: &dyn Api, value: InstantiateMsg) -> StdResult<Self> {
+        Ok(Self {
+            owner: api.addr_validate(&value.owner)?,
+            executor: api.addr_validate(&value.executor)?,
+            target_denoms: value.target_denoms,
+            target_addresses: value
+                .target_addresses
+                .iter()
+                .map(|(a, b)| Ok((api.addr_validate(a)?, *b)))
+                .collect::<StdResult<Vec<(Addr, u8)>>>()?,
+        })
+    }
+
     pub fn load(storage: &dyn Storage) -> StdResult<Self> {
         CONFIG.load(storage)
     }
@@ -36,24 +50,17 @@ impl Config {
     }
 }
 
-impl From<InstantiateMsg> for Config {
-    fn from(value: InstantiateMsg) -> Self {
-        Self {
-            owner: value.owner,
-            executor: value.executor,
-            target_denoms: value.target_denoms,
-            target_addresses: value.target_addresses,
-        }
-    }
-}
-
 impl From<Config> for ConfigResponse {
     fn from(value: Config) -> Self {
         Self {
-            owner: value.owner,
-            executor: value.executor,
+            owner: value.owner.to_string(),
+            executor: value.executor.to_string(),
             target_denoms: value.target_denoms,
-            target_addresses: value.target_addresses,
+            target_addresses: value
+                .target_addresses
+                .iter()
+                .map(|(a, b)| (a.to_string(), *b))
+                .collect::<Vec<(String, u8)>>(),
         }
     }
 }
@@ -156,7 +163,7 @@ impl From<Action> for ActionResponse {
     fn from(value: Action) -> Self {
         Self {
             denom: value.denom,
-            contract: value.contract,
+            contract: value.contract.to_string(),
             limit: value.limit,
             msg: value.msg,
         }

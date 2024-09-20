@@ -167,7 +167,7 @@ pub fn account(storage: &dyn Storage, addr: Addr) -> StdResult<AccountResponse> 
     let account = ACCOUNTS.load(storage, addr.clone())?;
 
     Ok(AccountResponse {
-        addr,
+        addr: addr.to_string(),
         bonded: account.amount,
         pending_revenue: accounts.pending_revenue(&account),
     })

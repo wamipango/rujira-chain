@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Binary, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Api, Binary, StdResult, Storage, Uint128};
 use cw_storage_plus::Item;
 use rujira_rs::staking::InstantiateMsg;
 
@@ -14,17 +14,19 @@ pub struct Config {
     pub revenue_converter: (Addr, Binary, Uint128),
 }
 
-impl From<InstantiateMsg> for Config {
-    fn from(value: InstantiateMsg) -> Self {
-        Self {
+impl Config {
+    pub fn new(api: &dyn Api, value: InstantiateMsg) -> StdResult<Self> {
+        Ok(Self {
             bond_denom: value.bond_denom,
             revenue_denom: value.revenue_denom,
-            revenue_converter: value.revenue_converter,
-        }
+            revenue_converter: (
+                api.addr_validate(&value.revenue_converter.0)?,
+                value.revenue_converter.1,
+                value.revenue_converter.2,
+            ),
+        })
     }
-}
 
-impl Config {
     pub fn load(storage: &dyn Storage) -> StdResult<Self> {
         CONFIG.load(storage)
     }

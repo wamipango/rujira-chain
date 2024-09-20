@@ -74,7 +74,10 @@ pub fn execute(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     match msg {
         QueryMsg::Status {} => Ok(to_json_binary(&status(deps.storage)?)?),
-        QueryMsg::Account { addr } => Ok(to_json_binary(&account(deps.storage, &addr)?)?),
+        QueryMsg::Account { addr } => Ok(to_json_binary(&account(
+            deps.storage,
+            &deps.api.addr_validate(&addr)?,
+        )?)?),
     }
 }
 
@@ -238,7 +241,7 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Account {
-                    addr: owner.clone(),
+                    addr: owner.to_string(),
                 },
             )
             .unwrap();
@@ -246,7 +249,7 @@ mod tests {
         assert_eq!(
             account,
             AccountResponse {
-                addr: owner.clone(),
+                addr: owner.to_string(),
                 merged: Uint128::from(1_000_000u128),
                 shares: Uint128::from(400_000u128),
                 size: Uint128::from(400_000u128),
@@ -292,7 +295,7 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Account {
-                    addr: owner.clone(),
+                    addr: owner.to_string(),
                 },
             )
             .unwrap();
@@ -300,7 +303,7 @@ mod tests {
         assert_eq!(
             account,
             AccountResponse {
-                addr: owner.clone(),
+                addr: owner.to_string(),
                 merged: Uint128::from(1_000_000u128),
                 shares: Uint128::from(200_000u128),
                 size: Uint128::from(200_000u128),

@@ -24,7 +24,7 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     cw2::set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::from(msg);
+    let config = Config::new(deps.api, msg)?;
     config.save(deps.storage)?;
     Ok(Response::default())
 }
@@ -43,7 +43,7 @@ pub fn execute(
                 return Err(ContractError::Unauthorized {});
             }
 
-            config.owner = owner;
+            config.owner = deps.api.addr_validate(&owner)?;
             config.save(deps.storage)?;
             Ok(Response::default())
         }
@@ -57,7 +57,13 @@ pub fn execute(
                 return Err(ContractError::Unauthorized {});
             }
 
-            Action::set(deps.storage, denom, contract, limit, msg)?;
+            Action::set(
+                deps.storage,
+                denom,
+                deps.api.addr_validate(&contract)?,
+                limit,
+                msg,
+            )?;
             Ok(Response::default())
         }
         ExecuteMsg::UnsetAction(denom) => {
@@ -73,7 +79,7 @@ pub fn execute(
                 return Err(ContractError::Unauthorized {});
             }
 
-            config.executor = executor;
+            config.executor = deps.api.addr_validate(&executor)?;
             config.save(deps.storage)?;
             Ok(Response::default())
         }
@@ -215,17 +221,21 @@ mod tests {
     #[test]
     fn instantiation() {
         let mut deps = mock_dependencies();
-        let info = message_info(&Addr::unchecked("owner"), &vec![]);
+        let app = BasicApp::default();
+        let owner = app.api().addr_make("owner");
+        let fees = app.api().addr_make("fees");
+        let executor = app.api().addr_make("executor");
+        let info = message_info(&owner, &vec![]);
         let msg = InstantiateMsg {
-            owner: Addr::unchecked("owner"),
+            owner: owner.to_string(),
             target_denoms: vec!["uruji".to_string(), "another".to_string()],
-            target_addresses: vec![(Addr::unchecked("fees"), 1)],
-            executor: Addr::unchecked("executor"),
+            target_addresses: vec![(fees.to_string(), 1)],
+            executor: executor.to_string(),
         };
         instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
         let config: ConfigResponse =
             from_json(query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
-        assert_eq!(config.owner, Addr::unchecked("owner"));
+        assert_eq!(config.owner, owner.to_string());
         assert_eq!(
             config.target_denoms,
             vec!["uruji".to_string(), "another".to_string()],
@@ -240,12 +250,17 @@ mod tests {
     #[test]
     fn authorization() {
         let mut deps = mock_dependencies();
-        let info = message_info(&Addr::unchecked("owner"), &vec![]);
+        let app = BasicApp::default();
+        let owner = app.api().addr_make("owner");
+        let fees = app.api().addr_make("fees");
+        let executor = app.api().addr_make("executor");
+
+        let info = message_info(&owner, &vec![]);
         let msg = InstantiateMsg {
-            owner: Addr::unchecked("owner"),
+            owner: owner.to_string(),
             target_denoms: vec!["uruji".to_string(), "another".to_string()],
-            target_addresses: vec![(Addr::unchecked("fees"), 1)],
-            executor: Addr::unchecked("executor"),
+            target_addresses: vec![(fees.to_string(), 1)],
+            executor: executor.to_string(),
         };
         instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
@@ -253,7 +268,7 @@ mod tests {
             deps.as_mut(),
             mock_env(),
             info.clone(),
-            ExecuteMsg::SetOwner(Addr::unchecked("owner-new")),
+            ExecuteMsg::SetOwner(app.api().addr_make("owner-new").to_string()),
         )
         .unwrap();
 
@@ -261,13 +276,13 @@ mod tests {
             deps.as_mut(),
             mock_env(),
             info.clone(),
-            ExecuteMsg::SetOwner(Addr::unchecked("owner-new")),
+            ExecuteMsg::SetOwner(app.api().addr_make("owner-new").to_string()),
         )
         .unwrap_err();
-
+        let contract = app.api().addr_make("fin");
         let action = Action {
             denom: "uatom".to_string(),
-            contract: Addr::unchecked("fin"),
+            contract,
             limit: Uint128::MAX,
             msg: Binary::default(),
         };
@@ -280,7 +295,7 @@ mod tests {
             info.clone(),
             ExecuteMsg::SetAction {
                 denom: a.denom,
-                contract: a.contract,
+                contract: a.contract.to_string(),
                 limit: a.limit,
                 msg: a.msg,
             },
@@ -292,10 +307,10 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&Addr::unchecked("owner-new"), &vec![]),
+            message_info(&app.api().addr_make("owner-new"), &vec![]),
             ExecuteMsg::SetAction {
                 denom: a.denom,
-                contract: a.contract,
+                contract: a.contract.to_string(),
                 limit: a.limit,
                 msg: a.msg,
             },
@@ -308,7 +323,7 @@ mod tests {
             actions.actions,
             vec![ActionResponse {
                 denom: action.denom.clone(),
-                contract: action.contract,
+                contract: action.contract.to_string(),
                 limit: action.limit,
                 msg: action.msg
             }]
@@ -324,7 +339,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&Addr::unchecked("owner-new"), &vec![]),
+            message_info(&app.api().addr_make("owner-new"), &vec![]),
             ExecuteMsg::UnsetAction(action.denom),
         )
         .unwrap();
@@ -336,7 +351,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&Addr::unchecked("owner-new"), &vec![]),
+            message_info(&app.api().addr_make("owner-new"), &vec![]),
             ExecuteMsg::Run {},
         )
         .unwrap_err();
@@ -344,7 +359,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&Addr::unchecked("not-owner"), &vec![]),
+            message_info(&app.api().addr_make("not-owner"), &vec![]),
             ExecuteMsg::AddTargetDenom("new".to_string()),
         )
         .unwrap_err();
@@ -352,15 +367,15 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&Addr::unchecked("not-owner"), &vec![]),
-            ExecuteMsg::SetExecutor(Addr::unchecked("new")),
+            message_info(&app.api().addr_make("not-owner"), &vec![]),
+            ExecuteMsg::SetExecutor(app.api().addr_make("new").to_string()),
         )
         .unwrap_err();
 
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&Addr::unchecked("executor"), &vec![]),
+            message_info(&executor, &vec![]),
             ExecuteMsg::Run {},
         )
         .unwrap();
@@ -368,15 +383,15 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&Addr::unchecked("owner-new"), &vec![]),
-            ExecuteMsg::SetExecutor(Addr::unchecked("owner-new")),
+            message_info(&app.api().addr_make("owner-new"), &vec![]),
+            ExecuteMsg::SetExecutor(app.api().addr_make("owner-new").to_string()),
         )
         .unwrap();
 
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&Addr::unchecked("owner-new"), &vec![]),
+            message_info(&app.api().addr_make("owner-new"), &vec![]),
             ExecuteMsg::Run {},
         )
         .unwrap();
@@ -407,10 +422,10 @@ mod tests {
                 code_id,
                 owner.clone(),
                 &InstantiateMsg {
-                    owner: owner.clone(),
+                    owner: owner.to_string(),
                     target_denoms: vec!["uruji".to_string(), "another".to_string()],
-                    target_addresses: vec![(fees.clone(), 1)],
-                    executor: owner.clone(),
+                    target_addresses: vec![(fees.to_string(), 1)],
+                    executor: owner.to_string(),
                 },
                 &vec![],
                 "revenue",
@@ -536,7 +551,7 @@ mod tests {
             contract.clone(),
             &ExecuteMsg::SetAction {
                 denom: denom.to_string(),
-                contract: app.api().addr_make(target),
+                contract: app.api().addr_make(target).to_string(),
                 limit: limit,
                 msg: Binary::default(),
             },
@@ -570,14 +585,14 @@ mod tests {
                 code_id,
                 owner.clone(),
                 &InstantiateMsg {
-                    owner: owner.clone(),
+                    owner: owner.to_string(),
                     target_denoms: vec!["uruji".to_string(), "another".to_string()],
                     target_addresses: vec![
-                        (fees.clone(), 1),
-                        (another.clone(), 3),
-                        (app.api().addr_make("nope"), 0),
+                        (fees.to_string(), 1),
+                        (another.to_string(), 3),
+                        (app.api().addr_make("nope").to_string(), 0),
                     ],
-                    executor: owner.clone(),
+                    executor: owner.to_string(),
                 },
                 &vec![],
                 "revenue",

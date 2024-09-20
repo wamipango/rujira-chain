@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Timestamp, Uint128};
+use cosmwasm_std::{Timestamp, Uint128};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -51,7 +51,7 @@ pub enum QueryMsg {
     Status {},
 
     #[returns(AccountResponse)]
-    Account { addr: Addr },
+    Account { addr: String },
 }
 
 #[cw_serde]
@@ -68,7 +68,7 @@ pub struct StatusResponse {
 
 #[cw_serde]
 pub struct AccountResponse {
-    pub addr: Addr,
+    pub addr: String,
 
     /// Total `[InstantiateMsg::merge_denom]` merged by this account
     pub merged: Uint128,
