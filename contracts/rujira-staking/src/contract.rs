@@ -1,18 +1,20 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, QuerierWrapper, Response, StdError, StdResult, Storage, WasmMsg,
+    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env, Event,
+    MessageInfo, Response, StdResult, Uint128,
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, NativeBalance};
 use rujira_rs::staking::{AccountMsg, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg};
 use rujira_rs::TokenFactory;
-use std::ops::Add;
 
 use crate::config::Config;
 use crate::error::ContractError;
-use crate::state::{account, init, status, ACCOUNTS, POOL_ACCOUNTS, POOL_LIQUID};
+use crate::state::{
+    account, distribute, execute_account_bond, execute_account_claim, execute_account_withdraw,
+    execute_liquid_bond, execute_liquid_unbond, init, status,
+};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:rujira-staking";
@@ -43,143 +45,96 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
-    let share_denom = TokenFactory::new(&env, SHARE_DENOM_NONCE);
-    distribute(env, deps.querier, deps.storage, &config)?;
+    distribute(&env, deps.querier, deps.storage, &config)?;
 
     match msg {
-        ExecuteMsg::Account(account_msg) => {
-            let mut pool = POOL_ACCOUNTS.load(deps.storage)?;
-            match account_msg {
-                AccountMsg::Bond {} => {
-                    let amount = must_pay(&info, config.bond_denom.as_str())?;
-                    match ACCOUNTS.load(deps.storage, info.sender.clone()) {
-                        Ok(mut account) => {
-                            let rewards = pool.claim(&mut account);
-                            let account = pool.increase_account(&account, amount);
-                            ACCOUNTS.save(deps.storage, info.sender.clone(), &account)?;
-                            POOL_ACCOUNTS.save(deps.storage, &pool)?;
-                            Ok(
-                                Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
-                                    to_address: info.sender.to_string(),
-                                    amount: coins(rewards.u128(), config.revenue_denom),
-                                })),
-                            )
-                        }
-                        Err(StdError::NotFound { .. }) => {
-                            let account = pool.join(amount);
-                            ACCOUNTS.save(deps.storage, info.sender, &account)?;
-                            POOL_ACCOUNTS.save(deps.storage, &pool)?;
-                            Ok(Response::default())
-                        }
-                        Err(err) => Err(ContractError::Std(err)),
-                    }
-                }
-                AccountMsg::Claim {} => match ACCOUNTS.load(deps.storage, info.sender.clone()) {
-                    Ok(mut account) => {
-                        let rewards = pool.claim(&mut account);
-                        ACCOUNTS.save(deps.storage, info.sender.clone(), &account)?;
-                        Ok(
-                            Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
-                                to_address: info.sender.to_string(),
-                                amount: coins(rewards.u128(), config.revenue_denom),
-                            })),
-                        )
-                    }
-                    Err(err) => Err(ContractError::Std(err)),
-                },
-                AccountMsg::Withdraw { amount } => {
-                    let mut account = ACCOUNTS.load(deps.storage, info.sender.clone())?;
-                    let rewards = pool.claim(&mut account);
-                    let amount = amount.unwrap_or_else(|| account.amount);
-                    let account = pool.decrease_account(&account, amount)?;
-                    ACCOUNTS.save(deps.storage, info.sender.clone(), &account)?;
-                    POOL_ACCOUNTS.save(deps.storage, &pool)?;
-                    let mut send = NativeBalance(vec![
-                        coin(rewards.u128(), config.revenue_denom),
-                        coin(amount.u128(), config.bond_denom),
-                    ]);
-                    send.normalize();
-                    Ok(
-                        Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
-                            to_address: info.sender.to_string(),
-                            amount: send.into_vec(),
-                        })),
-                    )
-                }
-            }
-        }
-        ExecuteMsg::Liquid(liquid_msg) => match liquid_msg {
-            LiquidMsg::Bond {} => {
-                // Add Bond token to the Compounding pool, mint and return the Compound Share Token
-                let amount = must_pay(&info, config.bond_denom.as_str())?;
-                let mut pool = POOL_LIQUID.load(deps.storage)?;
-                let shares = pool.join(amount)?;
-                POOL_LIQUID.save(deps.storage, &pool)?;
-                Ok(Response::default().add_message(share_denom.mint_msg(shares, info.sender)))
-            }
-            LiquidMsg::Withdraw {} => {
-                let shares = must_pay(&info, share_denom.denom().as_str())?;
-                let mut pool = POOL_LIQUID.load(deps.storage)?;
-                let returned = pool.leave(shares)?;
-                POOL_LIQUID.save(deps.storage, &pool)?;
-                Ok(Response::default()
-                    .add_message(share_denom.burn_msg(shares))
-                    .add_message(CosmosMsg::Bank(BankMsg::Send {
-                        to_address: info.sender.to_string(),
-                        amount: coins(returned.u128(), config.bond_denom),
-                    })))
-            }
-        },
+        ExecuteMsg::Account(account_msg) => execute_account(deps, info, config, account_msg),
+        ExecuteMsg::Liquid(liquid_msg) => execute_liquid(deps, &env, info, config, liquid_msg),
     }
 }
 
-/// Calculates the amount to be distributed between (account, liquid) pools;
-/// Revenue balance is queried and surplus (ie not allocated to Account stakers) is split pro-rata between ACCOUNT stakers, and LIQUID pool size.
-/// Revenue allocated to LIQUID is transformed to a Wasm Execute msg to swap to the bond token
-/// The surplus of bond_balance - LIQUID.size() is the return value of the previous swap and can be allocated to the total liquid pool
-fn distribute(
-    env: Env,
-    querier: QuerierWrapper,
-    storage: &mut dyn Storage,
-    config: &Config,
-) -> StdResult<CosmosMsg> {
-    let mut account = POOL_ACCOUNTS.load(storage)?;
-    let mut liquid = POOL_LIQUID.load(storage)?;
+fn execute_account(
+    deps: DepsMut,
+    info: MessageInfo,
+    config: Config,
+    msg: AccountMsg,
+) -> Result<Response, ContractError> {
+    match msg {
+        AccountMsg::Bond {} => {
+            let amount = must_pay(&info, config.bond_denom.as_str())?;
 
-    let bond_balance = querier
-        .query_balance(env.contract.address.clone(), config.bond_denom.clone())?
-        .amount;
+            let reward_amount = execute_account_bond(deps.storage, &info.sender, amount)?;
+            let mut response = Response::default().add_event(
+                Event::new("staking/account/bond")
+                    .add_attribute("owner", info.sender.clone())
+                    .add_attribute("amount", amount),
+            );
+            if reward_amount.gt(&Uint128::zero()) {
+                response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: info.sender.to_string(),
+                    amount: coins(reward_amount.u128(), config.revenue_denom),
+                }));
+            }
+            Ok(response)
+        }
+        AccountMsg::Claim {} => {
+            let reward_amount = execute_account_claim(deps.storage, &info.sender)?;
+            let mut response = Response::default().add_event(
+                Event::new("staking/account/claim")
+                    .add_attribute("owner", info.sender.clone())
+                    .add_attribute("amount", reward_amount),
+            );
+            if reward_amount.gt(&Uint128::zero()) {
+                response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: info.sender.to_string(),
+                    amount: coins(reward_amount.u128(), config.revenue_denom),
+                }));
+            }
+            Ok(response)
+        }
+        AccountMsg::Withdraw { amount } => {
+            let (rewards, amount) = execute_account_withdraw(deps.storage, &info.sender, amount)?;
+            let mut send = NativeBalance(vec![
+                coin(rewards.u128(), config.revenue_denom),
+                coin(amount.u128(), config.bond_denom),
+            ]);
+            send.normalize();
+            Ok(
+                Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: info.sender.to_string(),
+                    amount: send.into_vec(),
+                })),
+            )
+        }
+    }
+}
 
-    let revenue_balance = querier
-        .query_balance(env.contract.address.clone(), config.revenue_denom.clone())?
-        .amount;
+fn execute_liquid(
+    deps: DepsMut,
+    env: &Env,
+    info: MessageInfo,
+    config: Config,
+    msg: LiquidMsg,
+) -> Result<Response, ContractError> {
+    let share_denom = TokenFactory::new(env, SHARE_DENOM_NONCE);
 
-    let revenue_surplus = revenue_balance.checked_sub(account.pending)?;
-
-    let account_allocation = Decimal::from_ratio(
-        account.total * revenue_surplus,
-        account.total.add(liquid.size()),
-    )
-    .to_uint_floor();
-
-    let liquid_allocation = Decimal::from_ratio(
-        liquid.size() * revenue_surplus,
-        account.total.add(liquid.size()),
-    )
-    .to_uint_floor();
-
-    account.distribute(account_allocation);
-    POOL_ACCOUNTS.save(storage, &account)?;
-
-    let bond_surplus = bond_balance.checked_sub(liquid.size())?;
-    liquid.deposit(bond_surplus);
-    POOL_LIQUID.save(storage, &liquid)?;
-
-    Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.revenue_converter.0.to_string(),
-        msg: config.revenue_converter.1.clone(),
-        funds: coins(liquid_allocation.u128(), config.revenue_denom.clone()),
-    }))
+    match msg {
+        LiquidMsg::Bond {} => {
+            let amount = must_pay(&info, config.bond_denom.as_str())?;
+            let shares = execute_liquid_bond(deps.storage, amount)?;
+            Ok(Response::default().add_message(share_denom.mint_msg(shares, info.sender)))
+        }
+        LiquidMsg::Withdraw {} => {
+            let shares = must_pay(&info, share_denom.denom().as_str())?;
+            let returned = execute_liquid_unbond(deps.storage, shares)?;
+            Ok(Response::default()
+                .add_message(share_denom.burn_msg(shares))
+                .add_message(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: info.sender.to_string(),
+                    amount: coins(returned.u128(), config.bond_denom),
+                })))
+        }
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
