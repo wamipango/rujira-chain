@@ -4,6 +4,7 @@ use std::ops::Mul;
 
 /// An account-based revenue distribution system
 #[cw_serde]
+#[derive(Default)]
 pub struct AccountPool {
     pub pending: Uint128,
     pub total: Uint128,
@@ -59,16 +60,6 @@ impl AccountPool {
         self.pending -= amount;
         account.sum_snapshot = self.sum;
         amount
-    }
-}
-
-impl Default for AccountPool {
-    fn default() -> Self {
-        Self {
-            pending: Default::default(),
-            total: Default::default(),
-            sum: Default::default(),
-        }
     }
 }
 

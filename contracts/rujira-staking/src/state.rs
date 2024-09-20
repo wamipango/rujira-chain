@@ -65,7 +65,7 @@ pub fn execute_account_withdraw(
     let mut pool = POOL_ACCOUNTS.load(storage)?;
     let mut account = ACCOUNTS.load(storage, owner.clone())?;
     let rewards = pool.claim(&mut account);
-    let amount = amount.unwrap_or_else(|| account.amount);
+    let amount = amount.unwrap_or(account.amount);
     let account = pool.decrease_account(&account, amount)?;
     ACCOUNTS.save(storage, owner.clone(), &account)?;
     POOL_ACCOUNTS.save(storage, &pool)?;

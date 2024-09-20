@@ -30,10 +30,10 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<(), ContractError> {
-        if self.bond_denom == "" {
+        if self.bond_denom.is_empty() {
             return Err(ContractError::Invalid("ruji_denom".to_string()));
         }
-        if self.revenue_denom == "" {
+        if self.revenue_denom.is_empty() {
             return Err(ContractError::Invalid("ruji_denom".to_string()));
         }
         if self.revenue_converter.2.is_zero() {

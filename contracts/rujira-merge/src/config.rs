@@ -42,13 +42,13 @@ impl Config {
         if self.decay_ends_at.lt(&self.decay_starts_at) {
             return Err(ContractError::Invalid("decay_ends_at".to_string()));
         }
-        if self.merge_denom == "" {
+        if self.merge_denom.is_empty() {
             return Err(ContractError::Invalid("merge_denom".to_string()));
         }
         if self.merge_supply.eq(&Uint128::zero()) {
             return Err(ContractError::Invalid("merge_supply".to_string()));
         }
-        if self.ruji_denom == "" {
+        if self.ruji_denom.is_empty() {
             return Err(ContractError::Invalid("ruji_denom".to_string()));
         }
         if self.ruji_allocation.eq(&Uint128::zero()) {

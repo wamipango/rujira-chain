@@ -137,7 +137,7 @@ impl Action {
     }
 
     pub fn execute(&self, amount: Coin) -> StdResult<Option<CosmosMsg>> {
-        if amount.denom != self.denom.to_string() {
+        if amount.denom != self.denom {
             return Err(StdError::generic_err("Invalid Denom"));
         }
         let total = min(amount.amount, self.limit);

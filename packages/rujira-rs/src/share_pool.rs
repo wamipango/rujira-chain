@@ -4,6 +4,7 @@ use std::ops::{AddAssign, SubAssign};
 use thiserror::Error;
 
 #[cw_serde]
+#[derive(Default)]
 pub struct SharePool {
     size: Uint128,
     shares: Uint128,
@@ -75,15 +76,6 @@ impl SharePool {
 
     pub fn deposit(&mut self, amount: Uint128) {
         self.size.add_assign(amount);
-    }
-}
-
-impl Default for SharePool {
-    fn default() -> Self {
-        Self {
-            size: Default::default(),
-            shares: Default::default(),
-        }
     }
 }
 
