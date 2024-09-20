@@ -1,7 +1,7 @@
-use crate::msg::InstantiateMsg;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Binary, StdResult, Storage, Uint128};
 use cw_storage_plus::Item;
+use rujira_rs::staking::InstantiateMsg;
 
 use crate::ContractError;
 

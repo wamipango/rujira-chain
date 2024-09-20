@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Binary, Uint128};
+use cosmwasm_std::{Addr, Binary, Coin, Uint128};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -43,19 +43,32 @@ pub enum LiquidMsg {
 pub enum QueryMsg {
     #[returns(StatusResponse)]
     Status {},
+
+    #[returns(AccountResponse)]
+    Account { addr: Addr },
 }
 
 #[cw_serde]
 pub struct StatusResponse {
     /// The amount of [InstantiateMsg::bond_denom] bonded in Accounts
-    account_bond: Uint128,
+    pub account_bond: Uint128,
 
     /// The total amount of [InstantiateMsg::revenue_denom] available for Account staking to claim
-    account_revenue: Uint128,
+    pub account_revenue: Uint128,
+
+    /// The total shares issued for the liquid bonded tokens
+    pub liquid_bond_shares: Uint128,
 
     /// The total size of the Share Pool of liquid bonded tokens
-    liquid_bond: Uint128,
+    pub liquid_bond_size: Uint128,
 
-    /// The amount of [InstantiateMsg::revenue_denom] pending conversion to [InstantiateMsg::bond_denom]
-    pending_liquid_revenue: Uint128,
+    /// The amount of [InstantiateMsg::revenue_denom] pending distribution
+    pub pending_revenue: Uint128,
+}
+
+#[cw_serde]
+pub struct AccountResponse {
+    pub addr: Addr,
+    pub bonded: Uint128,
+    pub pending_revenue: Uint128,
 }

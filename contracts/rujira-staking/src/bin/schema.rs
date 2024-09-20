@@ -1,6 +1,6 @@
 use cosmwasm_schema::write_api;
 
-use rujira_staking::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use rujira_rs::staking::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 fn main() {
     write_api! {
