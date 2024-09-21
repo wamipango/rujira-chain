@@ -22,7 +22,7 @@ impl AccountPool {
 
     /// Increase stake in the AccountPool
     ///
-    /// N.B Ensure that `pending_revenue` is claimed BEFORE calling `decrease account`, as this will reset allocations
+    /// N.B Ensure that `pending_revenue` is claimed BEFORE calling `increase account`, as this will reset allocations
     pub fn increase_account(
         &mut self,
         account: &AccountPoolAccount,

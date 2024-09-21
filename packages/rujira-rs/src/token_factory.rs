@@ -1,5 +1,5 @@
 use anybuf::Anybuf;
-use cosmwasm_std::{coin, Addr, AnyMsg, Coin, CosmosMsg, Env, Uint128};
+use cosmwasm_std::{Addr, AnyMsg, Coin, CosmosMsg, Env, Uint128};
 
 pub struct TokenFactory {
     nonce: String,
@@ -25,7 +25,7 @@ impl TokenFactory {
             type_url: format!("{}MsgCreateDenom", TYPE_URL_PREFX),
             value: Anybuf::new()
                 .append_string(1, &self.env.contract.address)
-                .append_string(2, self.denom())
+                .append_string(2, &self.nonce)
                 .as_bytes()
                 .into(),
         })

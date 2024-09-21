@@ -2,7 +2,7 @@
 name = "rujira-staking"
 version = "0.1.0"
 authors = ["codehans <94654388+codehans@users.noreply.github.com>"]
-edition = "2021"
+edition = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -23,6 +23,7 @@ cw2 = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+rujira-rs-testing = { workspace = true }
 
 [dev-dependencies]
 cw-multi-test = { workspace = true }

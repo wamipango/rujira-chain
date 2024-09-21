@@ -909,6 +909,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rujira-rs-testing"
+version = "0.1.0"
+dependencies = [
+ "anybuf",
+ "anyhow",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "rujira-rs",
+ "schemars",
+ "serde",
+]
+
+[[package]]
 name = "rujira-staking"
 version = "0.1.0"
 dependencies = [
@@ -919,6 +934,7 @@ dependencies = [
  "cw-utils",
  "cw2",
  "rujira-rs",
+ "rujira-rs-testing",
  "schemars",
  "serde",
  "thiserror",

@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, Event,
-    MessageInfo, Response, StdResult, Uint128,
+    coins, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, Event,
+    MessageInfo, Response, StdResult, Storage, Uint128,
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, NativeBalance};
@@ -45,12 +45,19 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
+
+    let res = match msg {
+        ExecuteMsg::Account(account_msg) => {
+            execute_account(deps.storage, info, &config, account_msg)
+        }
+        ExecuteMsg::Liquid(liquid_msg) => {
+            execute_liquid(deps.storage, &env, info, &config, liquid_msg)
+        }
+    }?;
+
     distribute(&env, deps.querier, deps.storage, &config)?;
 
-    match msg {
-        ExecuteMsg::Account(account_msg) => execute_account(deps, info, config, account_msg),
-        ExecuteMsg::Liquid(liquid_msg) => execute_liquid(deps, &env, info, config, liquid_msg),
-    }
+    Ok(res)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -71,16 +78,16 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
 }
 
 fn execute_account(
-    deps: DepsMut,
+    storage: &mut dyn Storage,
     info: MessageInfo,
-    config: Config,
+    config: &Config,
     msg: AccountMsg,
 ) -> Result<Response, ContractError> {
     match msg {
         AccountMsg::Bond {} => {
             let amount = must_pay(&info, config.bond_denom.as_str())?;
 
-            let reward_amount = execute_account_bond(deps.storage, &info.sender, amount)?;
+            let reward_amount = execute_account_bond(storage, &info.sender, amount)?;
             let mut response = Response::default().add_event(
                 Event::new("staking/account/bond")
                     .add_attribute("owner", info.sender.clone())
@@ -89,13 +96,13 @@ fn execute_account(
             if reward_amount.gt(&Uint128::zero()) {
                 response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),
-                    amount: coins(reward_amount.u128(), config.revenue_denom),
+                    amount: coins(reward_amount.u128(), config.revenue_denom.clone()),
                 }));
             }
             Ok(response)
         }
         AccountMsg::Claim {} => {
-            let reward_amount = execute_account_claim(deps.storage, &info.sender)?;
+            let reward_amount = execute_account_claim(storage, &info.sender)?;
             let mut response = Response::default().add_event(
                 Event::new("staking/account/claim")
                     .add_attribute("owner", info.sender.clone())
@@ -104,16 +111,16 @@ fn execute_account(
             if reward_amount.gt(&Uint128::zero()) {
                 response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),
-                    amount: coins(reward_amount.u128(), config.revenue_denom),
+                    amount: coins(reward_amount.u128(), config.revenue_denom.clone()),
                 }));
             }
             Ok(response)
         }
         AccountMsg::Withdraw { amount } => {
-            let (rewards, amount) = execute_account_withdraw(deps.storage, &info.sender, amount)?;
+            let (rewards, amount) = execute_account_withdraw(storage, &info.sender, amount)?;
             let mut send = NativeBalance(vec![
-                Coin::new(rewards, config.revenue_denom),
-                Coin::new(amount, config.bond_denom),
+                Coin::new(rewards, config.revenue_denom.clone()),
+                Coin::new(amount, config.bond_denom.clone()),
             ]);
             send.normalize();
 
@@ -135,10 +142,10 @@ fn execute_account(
 }
 
 fn execute_liquid(
-    deps: DepsMut,
+    storage: &mut dyn Storage,
     env: &Env,
     info: MessageInfo,
-    config: Config,
+    config: &Config,
     msg: LiquidMsg,
 ) -> Result<Response, ContractError> {
     let share_denom = TokenFactory::new(env, SHARE_DENOM_NONCE);
@@ -146,7 +153,7 @@ fn execute_liquid(
     match msg {
         LiquidMsg::Bond {} => {
             let amount = must_pay(&info, config.bond_denom.as_str())?;
-            let shares = execute_liquid_bond(deps.storage, amount)?;
+            let shares = execute_liquid_bond(storage, amount)?;
             Ok(Response::default()
                 .add_event(
                     Event::new("staking/liquid/bond")
@@ -158,7 +165,7 @@ fn execute_liquid(
         }
         LiquidMsg::Unbond {} => {
             let shares = must_pay(&info, share_denom.denom().as_str())?;
-            let returned = execute_liquid_unbond(deps.storage, shares)?;
+            let returned = execute_liquid_unbond(storage, shares)?;
             Ok(Response::default()
                 .add_event(
                     Event::new("staking/liquid/unbond")
@@ -169,7 +176,7 @@ fn execute_liquid(
                 .add_message(share_denom.burn_msg(shares))
                 .add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),
-                    amount: coins(returned.u128(), config.bond_denom),
+                    amount: coins(returned.u128(), config.bond_denom.clone()),
                 })))
         }
     }
@@ -187,4 +194,72 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use cw_multi_test::{ContractWrapper, Executor};
+    use rujira_rs_testing::mock_rujira_app;
+
+    #[test]
+    fn lifecycle() {
+        let mut app = mock_rujira_app();
+        let apps = app.api().addr_make("apps");
+        let owner = app.api().addr_make("owner");
+        let staker_liquid = app.api().addr_make("staker_liquid");
+        let staker_account = app.api().addr_make("staker_account");
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &apps, coins(500_000_000, "uusdc"))
+                .unwrap();
+            router
+                .bank
+                .init_balance(storage, &staker_liquid, coins(500_000_000, "uruji"))
+                .unwrap();
+            router
+                .bank
+                .init_balance(storage, &staker_account, coins(500_000_000, "uruji"))
+                .unwrap()
+        });
+
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+        let code_id = app.store_code(code);
+        let contract = app
+            .instantiate_contract(
+                code_id,
+                owner.clone(),
+                &InstantiateMsg {
+                    bond_denom: "uruji".to_string(),
+                    revenue_denom: "uusdc".to_string(),
+                    revenue_converter: (
+                        app.api().addr_make("converter").to_string(),
+                        Binary::default(),
+                        Uint128::zero(),
+                    ),
+                },
+                &vec![],
+                "staking",
+                None,
+            )
+            .unwrap();
+
+        app.execute_contract(
+            staker_liquid.clone(),
+            contract.clone(),
+            &ExecuteMsg::Liquid(LiquidMsg::Bond {}),
+            &coins(1_000, "uruji"),
+        )
+        .unwrap();
+
+        let pool_balance = app.wrap().query_balance(contract.clone(), "uruji").unwrap();
+        assert_eq!(pool_balance.amount, Uint128::from(1_000u128));
+
+        let share_balance = app
+            .wrap()
+            .query_balance(
+                staker_liquid.to_string(),
+                format!("factory/{contract}/urcpt"),
+            )
+            .unwrap();
+        assert_eq!(share_balance.amount, Uint128::from(1_000u128));
+    }
+}

@@ -16,8 +16,7 @@ impl SharePool {
         if amount.is_zero() {
             return Err(SharePoolError::ZeroAmount {});
         }
-
-        if self.size.is_zero() {
+        if self.shares.is_zero() {
             self.size.add_assign(amount);
             self.shares.add_assign(amount);
             return Ok(amount);
