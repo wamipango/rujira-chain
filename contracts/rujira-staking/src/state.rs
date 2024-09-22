@@ -104,6 +104,7 @@ pub fn distribute(
     querier: QuerierWrapper,
     storage: &mut dyn Storage,
     config: &Config,
+    bond_amount_sent: &Uint128,
 ) -> StdResult<CosmosMsg> {
     let mut account = POOL_ACCOUNTS.load(storage)?;
     let mut liquid = POOL_LIQUID.load(storage)?;
@@ -143,6 +144,8 @@ pub fn distribute(
     POOL_ACCOUNTS.save(storage, &account)?;
 
     let bond_surplus = bond_balance
+        // Discount any bond tokens sent in the tx, so they're not incorrectly allocated to the Share pool size as swap returned funds
+        .checked_sub(*bond_amount_sent)?
         .checked_sub(liquid.size())?
         .checked_sub(account.total)?
         .checked_sub(swap_pending)?;
@@ -280,7 +283,14 @@ mod tests {
             Uint128::from(1_000u128)
         );
 
-        let msg = distribute(&env, mutdeps.querier, mutdeps.storage, &config).unwrap();
+        let msg = distribute(
+            &env,
+            mutdeps.querier,
+            mutdeps.storage,
+            &config,
+            &Uint128::zero(),
+        )
+        .unwrap();
         // Balance of 1000 USDC split across 3000 RUJI - 2000 liquid and 1000 account. so 666 to be swapped, 333 to be allocated
 
         assert_eq!(

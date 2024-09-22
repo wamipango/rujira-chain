@@ -5,7 +5,7 @@ use cosmwasm_std::{
     MessageInfo, Response, StdResult, Storage, Uint128,
 };
 use cw2::set_contract_version;
-use cw_utils::{must_pay, NativeBalance};
+use cw_utils::{may_pay, must_pay, NativeBalance};
 use rujira_rs::staking::{AccountMsg, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, SudoMsg};
 use rujira_rs::TokenFactory;
 
@@ -45,19 +45,17 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
+    let bond_amount_sent = may_pay(&info, config.bond_denom.as_str())?;
 
-    let res = match msg {
+    distribute(&env, deps.querier, deps.storage, &config, &bond_amount_sent)?;
+    match msg {
         ExecuteMsg::Account(account_msg) => {
             execute_account(deps.storage, info, &config, account_msg)
         }
         ExecuteMsg::Liquid(liquid_msg) => {
             execute_liquid(deps.storage, &env, info, &config, liquid_msg)
         }
-    }?;
-
-    distribute(&env, deps.querier, deps.storage, &config)?;
-
-    Ok(res)
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -197,6 +195,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 mod tests {
     use super::*;
     use cw_multi_test::{ContractWrapper, Executor};
+    use rujira_rs::staking::AccountResponse;
     use rujira_rs_testing::mock_rujira_app;
 
     #[test]
@@ -205,7 +204,8 @@ mod tests {
         let apps = app.api().addr_make("apps");
         let owner = app.api().addr_make("owner");
         let staker_liquid = app.api().addr_make("staker_liquid");
-        let staker_account = app.api().addr_make("staker_account");
+        let staker_account_1 = app.api().addr_make("staker_account_1");
+        let staker_account_2 = app.api().addr_make("staker_account_2");
         app.init_modules(|router, _, storage| {
             router
                 .bank
@@ -217,7 +217,11 @@ mod tests {
                 .unwrap();
             router
                 .bank
-                .init_balance(storage, &staker_account, coins(500_000_000, "uruji"))
+                .init_balance(storage, &staker_account_1, coins(500_000_000, "uruji"))
+                .unwrap();
+            router
+                .bank
+                .init_balance(storage, &staker_account_2, coins(500_000_000, "uruji"))
                 .unwrap()
         });
 
@@ -261,5 +265,52 @@ mod tests {
             )
             .unwrap();
         assert_eq!(share_balance.amount, Uint128::from(1_000u128));
+
+        app.execute_contract(
+            staker_account_1.clone(),
+            contract.clone(),
+            &ExecuteMsg::Account(AccountMsg::Bond {}),
+            &coins(500, "uruji"),
+        )
+        .unwrap();
+
+        app.send_tokens(apps.clone(), contract.clone(), &coins(100, "uusdc"))
+            .unwrap();
+
+        app.execute_contract(
+            staker_account_2.clone(),
+            contract.clone(),
+            &ExecuteMsg::Account(AccountMsg::Bond {}),
+            &coins(500, "uruji"),
+        )
+        .unwrap();
+
+        // We've staked _after_ the revenue has been collected. 33% share (given 1000/500 split when fee was collected)
+        let account: AccountResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Account {
+                    addr: staker_account_1.to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(account.bonded, Uint128::from(500u128));
+        assert_eq!(account.pending_revenue, Uint128::from(33u128));
+
+        // We've staked _after_ the revenue has been collected. No ownership
+        let account: AccountResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Account {
+                    addr: staker_account_2.to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(account.bonded, Uint128::from(500u128));
+        assert_eq!(account.pending_revenue, Uint128::zero());
     }
 }
