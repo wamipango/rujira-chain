@@ -1,6 +1,5 @@
 use cosmwasm_std::{
-    coins, Addr, CosmosMsg, Decimal, Deps, Env, QuerierWrapper, StdError, StdResult, Storage,
-    Uint128, WasmMsg,
+    Addr, Decimal, Deps, Env, QuerierWrapper, StdError, StdResult, Storage, Uint128,
 };
 use cw_storage_plus::{Item, Map};
 use rujira_rs::{
@@ -105,7 +104,7 @@ pub fn distribute(
     storage: &mut dyn Storage,
     config: &Config,
     bond_amount_sent: &Uint128,
-) -> StdResult<CosmosMsg> {
+) -> StdResult<Uint128> {
     let mut account = POOL_ACCOUNTS.load(storage)?;
     let mut liquid = POOL_LIQUID.load(storage)?;
     let swap_pending = PENDING_SWAP.load(storage)?;
@@ -160,11 +159,7 @@ pub fn distribute(
     let swap_remainder = swap_total.sub(swap_amount);
     PENDING_SWAP.save(storage, &swap_remainder)?;
 
-    Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.revenue_converter.0.to_string(),
-        msg: config.revenue_converter.1.clone(),
-        funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
-    }))
+    Ok(swap_amount)
 }
 
 pub fn status(env: Env, deps: Deps, config: &Config) -> StdResult<StatusResponse> {
@@ -201,7 +196,7 @@ pub fn account(storage: &dyn Storage, addr: Addr) -> StdResult<AccountResponse> 
 #[cfg(test)]
 mod tests {
     use cosmwasm_std::{
-        coin,
+        coin, coins,
         testing::{mock_dependencies_with_balances, mock_env},
         Binary,
     };
@@ -294,14 +289,7 @@ mod tests {
         .unwrap();
         // Balance of 1000 USDC split across 3000 RUJI - 2000 liquid and 1000 account. so 666 to be swapped, 333 to be allocated
 
-        assert_eq!(
-            msg,
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: app.api().addr_make("revenue").to_string(),
-                msg: Binary::default(),
-                funds: coins(100, "uusdc"),
-            })
-        );
+        assert_eq!(msg, Uint128::from(100u128));
 
         assert_eq!(
             PENDING_SWAP.load(mutdeps.storage).unwrap(),

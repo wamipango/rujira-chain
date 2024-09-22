@@ -1,0 +1,32 @@
+use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{
+    BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult,
+};
+use cw_multi_test::ContractWrapper;
+
+#[cw_serde]
+pub struct MsgSwap {
+    pub min_return: Coin,
+}
+
+fn instantiate(_deps: DepsMut, _env: Env, _info: MessageInfo, _msg: ()) -> StdResult<Response> {
+    Ok(Response::default())
+}
+
+fn execute(_deps: DepsMut, _env: Env, info: MessageInfo, msg: MsgSwap) -> StdResult<Response> {
+    Ok(
+        Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
+            to_address: info.sender.to_string(),
+            amount: vec![msg.min_return],
+        })),
+    )
+}
+
+fn query(_deps: Deps, _env: Env, _msg: ()) -> StdResult<Binary> {
+    Ok(Binary::default())
+}
+
+pub fn mock_swap_contract() -> Box<ContractWrapper<MsgSwap, (), (), StdError, StdError, StdError>> {
+    Box::new(ContractWrapper::new(execute, instantiate, query))
+}

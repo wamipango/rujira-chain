@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     coins, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, Event,
-    MessageInfo, Response, StdResult, Storage, Uint128,
+    MessageInfo, Response, StdResult, Storage, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{may_pay, must_pay, NativeBalance};
@@ -47,15 +47,23 @@ pub fn execute(
     let config = Config::load(deps.storage)?;
     let bond_amount_sent = may_pay(&info, config.bond_denom.as_str())?;
 
-    distribute(&env, deps.querier, deps.storage, &config, &bond_amount_sent)?;
-    match msg {
+    let swap_amount = distribute(&env, deps.querier, deps.storage, &config, &bond_amount_sent)?;
+    let mut res = match msg {
         ExecuteMsg::Account(account_msg) => {
             execute_account(deps.storage, info, &config, account_msg)
         }
         ExecuteMsg::Liquid(liquid_msg) => {
             execute_liquid(deps.storage, &env, info, &config, liquid_msg)
         }
+    }?;
+    if swap_amount.gt(&Uint128::zero()) {
+        res = res.add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: config.revenue_converter.0.to_string(),
+            msg: config.revenue_converter.1.clone(),
+            funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
+        }));
     }
+    Ok(res)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -194,9 +202,10 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cosmwasm_std::coin;
     use cw_multi_test::{ContractWrapper, Executor};
-    use rujira_rs::staking::AccountResponse;
-    use rujira_rs_testing::mock_rujira_app;
+    use rujira_rs::staking::{AccountResponse, StatusResponse};
+    use rujira_rs_testing::{mock_rujira_app, mock_swap_contract, MsgSwap};
 
     #[test]
     fn lifecycle() {
@@ -207,6 +216,11 @@ mod tests {
         let staker_account_1 = app.api().addr_make("staker_account_1");
         let staker_account_2 = app.api().addr_make("staker_account_2");
         app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &owner, coins(500_000_000, "uruji"))
+                .unwrap();
+
             router
                 .bank
                 .init_balance(storage, &apps, coins(500_000_000, "uusdc"))
@@ -225,6 +239,18 @@ mod tests {
                 .unwrap()
         });
 
+        let swap_code_id = app.store_code(mock_swap_contract());
+        let swap_contract = app
+            .instantiate_contract(
+                swap_code_id,
+                owner.clone(),
+                &(),
+                &coins(10_000_000u128, "uruji"),
+                "swapper",
+                None,
+            )
+            .unwrap();
+
         let code = Box::new(ContractWrapper::new(execute, instantiate, query));
         let code_id = app.store_code(code);
         let contract = app
@@ -235,9 +261,12 @@ mod tests {
                     bond_denom: "uruji".to_string(),
                     revenue_denom: "uusdc".to_string(),
                     revenue_converter: (
-                        app.api().addr_make("converter").to_string(),
-                        Binary::default(),
-                        Uint128::zero(),
+                        swap_contract.to_string(),
+                        to_json_binary(&MsgSwap {
+                            min_return: coin(10, "uruji"),
+                        })
+                        .unwrap(),
+                        Uint128::from(20u128),
                     ),
                 },
                 &vec![],
@@ -357,5 +386,14 @@ mod tests {
 
         assert_eq!(account.bonded, Uint128::from(500u128));
         assert_eq!(account.pending_revenue, Uint128::from(25u128));
+
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
+        assert_eq!(status.account_bond, Uint128::from(1500u128));
+        assert_eq!(status.account_revenue, Uint128::from(25u128));
+        assert_eq!(status.liquid_bond_shares, Uint128::from(1000u128));
+        assert_eq!(status.liquid_bond_size, Uint128::from(1010u128));
     }
 }
