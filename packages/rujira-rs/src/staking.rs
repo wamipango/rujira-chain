@@ -1,10 +1,13 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Binary, Uint128};
 
+use crate::TokenMetadata;
+
 #[cw_serde]
 pub struct InstantiateMsg {
     pub bond_denom: String,
     pub revenue_denom: String,
+    pub receipt_token_metadata: TokenMetadata,
     /// Configuration to convert `revenue_denom` into `bond_denom`
     ///
     /// `(contract_address, execute_msg, threshold_limit)`

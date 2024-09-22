@@ -3,14 +3,14 @@ use anyhow::{Error, Result as AnyResult};
 use cosmwasm_std::{
     attr, coins, ensure_eq,
     testing::{MockApi, MockStorage},
-    Addr, AnyMsg, Api, BankMsg, Binary, BlockInfo, CosmosMsg, CustomMsg, CustomQuery, Empty, Event,
-    GrpcQuery, Querier, Storage, Uint128,
+    Addr, AnyMsg, Api, BankMsg, Binary, BlockInfo, CosmosMsg, CustomMsg, CustomQuery,
+    DenomMetadata, DenomUnit, Empty, Event, GrpcQuery, Querier, Storage, Uint128,
 };
 use cw_multi_test::{
     App, AppResponse, BankKeeper, BankSudo, BasicAppBuilder, CosmosRouter, FailingModule,
     GovFailingModule, IbcFailingModule, Stargate, SudoMsg, WasmKeeper,
 };
-use cw_storage_plus::KeyDeserialize;
+use cw_storage_plus::Map;
 use serde::de::DeserializeOwned;
 use std::str::FromStr;
 
@@ -29,6 +29,9 @@ pub type RujiraApp = App<
     GovFailingModule,
     RujiraStargate,
 >;
+
+static DENOM_ADMIN: Map<String, String> = Map::new("denom_admin");
+static DENOM_METADATA: Map<String, DenomMetadata> = Map::new("denom_meta");
 
 pub fn mock_rujira_app() -> RujiraApp {
     BasicAppBuilder::new()
@@ -93,8 +96,36 @@ impl Stargate for RujiraStargate {
             "/types.MsgCreateDenom" => {
                 let sender = buf.string(1).unwrap();
                 let nonce = buf.string(2).unwrap();
+                let m = buf.message(3).unwrap();
+
+                let denom_units = m
+                    .repeated_bytes(2)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|x| {
+                        let m = Bufany::deserialize(x).unwrap();
+                        DenomUnit {
+                            denom: m.string(1).unwrap_or_default(),
+                            exponent: m.uint32(1).unwrap_or_default(),
+                            aliases: m.repeated_string(3).unwrap_or_default(),
+                        }
+                    })
+                    .collect();
+
+                let metadata = DenomMetadata {
+                    description: m.string(1).unwrap_or_default(),
+                    denom_units,
+                    base: m.string(3).unwrap_or_default(),
+                    display: m.string(4).unwrap_or_default(),
+                    name: m.string(5).unwrap_or_default(),
+                    symbol: m.string(6).unwrap_or_default(),
+                    uri: m.string(7).unwrap_or_default(),
+                    uri_hash: m.string(8).unwrap_or_default(),
+                };
+
                 let full = format!("factory/{sender}/{nonce}");
-                storage.set(full.as_bytes(), &sender.as_bytes());
+                DENOM_ADMIN.save(storage, full.clone(), &sender)?;
+                DENOM_METADATA.save(storage, full, &metadata)?;
 
                 Ok(AppResponse {
                     events: vec![],
@@ -109,7 +140,7 @@ impl Stargate for RujiraStargate {
                 let denom = coin.string(1).unwrap();
                 let amount = Uint128::from_str(&coin.string(2).unwrap())?;
 
-                let admin = String::from_vec(storage.get(denom.as_bytes()).unwrap())?;
+                let admin = DENOM_ADMIN.load(storage, denom.clone())?;
                 ensure_eq!(admin, sender, Error::msg("Unauthorized"));
 
                 router.sudo(
@@ -137,7 +168,7 @@ impl Stargate for RujiraStargate {
                 let denom = coin.string(1).unwrap();
                 let amount = Uint128::from_str(&coin.string(2).unwrap())?;
 
-                let admin = String::from_vec(storage.get(denom.as_bytes()).unwrap())?;
+                let admin = DENOM_ADMIN.load(storage, denom.clone())?;
                 ensure_eq!(admin, sender, Error::msg("Unauthorized"));
 
                 router.execute(
@@ -162,9 +193,9 @@ impl Stargate for RujiraStargate {
                 let denom = buf.string(2).unwrap();
                 let new_admin = buf.string(3).unwrap();
 
-                let admin = String::from_vec(storage.get(denom.as_bytes()).unwrap())?;
+                let admin = DENOM_ADMIN.load(storage, denom.clone())?;
                 ensure_eq!(admin, sender, Error::msg("Unauthorized"));
-                storage.set(denom.as_bytes(), &new_admin.as_bytes());
+                DENOM_ADMIN.save(storage, denom, &new_admin)?;
 
                 Ok(AppResponse {
                     events: vec![],

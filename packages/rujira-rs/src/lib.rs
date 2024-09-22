@@ -12,4 +12,4 @@ mod token_factory;
 
 pub use account_pool::{AccountPool, AccountPoolAccount};
 pub use share_pool::{SharePool, SharePoolError};
-pub use token_factory::TokenFactory;
+pub use token_factory::{TokenFactory, TokenMetadata};

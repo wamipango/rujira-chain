@@ -29,12 +29,12 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::new(deps.api, msg)?;
+    let config = Config::new(deps.api, msg.clone())?;
     config.validate()?;
     config.save(deps.storage)?;
     init(deps.storage)?;
     let share_denom = TokenFactory::new(&env, SHARE_DENOM_NONCE);
-    Ok(Response::default().add_message(share_denom.create_msg()))
+    Ok(Response::default().add_message(share_denom.create_msg(msg.receipt_token_metadata)))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -204,7 +204,10 @@ mod tests {
     use super::*;
     use cosmwasm_std::coin;
     use cw_multi_test::{ContractWrapper, Executor};
-    use rujira_rs::staking::{AccountResponse, StatusResponse};
+    use rujira_rs::{
+        staking::{AccountResponse, StatusResponse},
+        TokenMetadata,
+    };
     use rujira_rs_testing::{mock_rujira_app, mock_swap_contract, MsgSwap};
 
     #[test]
@@ -268,6 +271,15 @@ mod tests {
                         .unwrap(),
                         Uint128::from(20u128),
                     ),
+                    receipt_token_metadata: TokenMetadata {
+                        description: "description".to_string(),
+                        name: "Liquid Staked RUJI".to_string(),
+                        display: "sRUJI".to_string(),
+                        symbol: "sRUJI".to_string(),
+                        uri: None,
+                        uri_hash: None,
+                        exponent: 6,
+                    },
                 },
                 &vec![],
                 "staking",
