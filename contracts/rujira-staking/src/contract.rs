@@ -312,5 +312,50 @@ mod tests {
 
         assert_eq!(account.bonded, Uint128::from(500u128));
         assert_eq!(account.pending_revenue, Uint128::zero());
+
+        app.send_tokens(apps.clone(), contract.clone(), &coins(100, "uusdc"))
+            .unwrap();
+
+        // Another bond to trigger a distribution
+        app.execute_contract(
+            staker_account_1.clone(),
+            contract.clone(),
+            &ExecuteMsg::Account(AccountMsg::Bond {}),
+            &coins(500, "uruji"),
+        )
+        .unwrap();
+
+        // 1000/500 split of 100 + 1500/500 split of 100 = 33 + 25 = 58
+        let account: AccountResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Account {
+                    addr: staker_account_1.to_string(),
+                },
+            )
+            .unwrap();
+
+        let revenue_balance = app
+            .wrap()
+            .query_balance(staker_account_1.to_string(), format!("uusdc"))
+            .unwrap();
+        assert_eq!(revenue_balance.amount, Uint128::from(58u128));
+        assert_eq!(account.bonded, Uint128::from(1000u128));
+        assert_eq!(account.pending_revenue, Uint128::zero());
+
+        // 1500/500 split of 100 = 25
+        let account: AccountResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Account {
+                    addr: staker_account_2.to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(account.bonded, Uint128::from(500u128));
+        assert_eq!(account.pending_revenue, Uint128::from(25u128));
     }
 }

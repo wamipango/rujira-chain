@@ -118,7 +118,9 @@ pub fn distribute(
         .query_balance(env.contract.address.clone(), config.revenue_denom.clone())?
         .amount;
 
-    let revenue_surplus = revenue_balance.checked_sub(account.pending)?;
+    let revenue_surplus = revenue_balance
+        .checked_sub(account.pending)?
+        .checked_sub(swap_pending)?;
 
     let account_allocation = if account.total.is_zero() {
         Uint128::zero()
@@ -147,8 +149,7 @@ pub fn distribute(
         // Discount any bond tokens sent in the tx, so they're not incorrectly allocated to the Share pool size as swap returned funds
         .checked_sub(*bond_amount_sent)?
         .checked_sub(liquid.size())?
-        .checked_sub(account.total)?
-        .checked_sub(swap_pending)?;
+        .checked_sub(account.total)?;
 
     liquid.deposit(bond_surplus);
     POOL_LIQUID.save(storage, &liquid)?;
