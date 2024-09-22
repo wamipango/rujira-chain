@@ -55,6 +55,30 @@ impl TokenFactory {
                 .into(),
         })
     }
+
+    pub fn set_admin_msg(&self, new_admin: Addr) -> CosmosMsg {
+        CosmosMsg::Any(AnyMsg {
+            type_url: format!("{}MsgSetAdmin", TYPE_URL_PREFX),
+            value: Anybuf::new()
+                .append_string(1, &self.env.contract.address)
+                .append_string(2, &self.denom())
+                .append_string(3, &new_admin)
+                .as_bytes()
+                .into(),
+        })
+    }
+
+    pub fn set_metadata_msg(&self, new_metadata: TokenMetadata) -> CosmosMsg {
+        CosmosMsg::Any(AnyMsg {
+            type_url: format!("{}MsgSetMetadata", TYPE_URL_PREFX),
+            value: Anybuf::new()
+                .append_string(1, &self.env.contract.address)
+                .append_string(2, &self.denom())
+                .append_message(3, &new_metadata.to_message(self.denom()))
+                .as_bytes()
+                .into(),
+        })
+    }
 }
 
 fn coin_message(coin: Coin) -> Anybuf {

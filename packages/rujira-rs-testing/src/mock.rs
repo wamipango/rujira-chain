@@ -4,13 +4,14 @@ use cosmwasm_std::{
     attr, coins, ensure_eq,
     testing::{MockApi, MockStorage},
     Addr, AnyMsg, Api, BankMsg, Binary, BlockInfo, CosmosMsg, CustomMsg, CustomQuery,
-    DenomMetadata, DenomUnit, Empty, Event, GrpcQuery, Querier, Storage, Uint128,
+    DenomMetadata, DenomUnit, Empty, Event, GrpcQuery, Querier, StdResult, Storage, Uint128,
 };
 use cw_multi_test::{
     App, AppResponse, BankKeeper, BankSudo, BasicAppBuilder, CosmosRouter, FailingModule,
     GovFailingModule, IbcFailingModule, Stargate, SudoMsg, WasmKeeper,
 };
 use cw_storage_plus::Map;
+use rujira_rs::TokenMetadata;
 use serde::de::DeserializeOwned;
 use std::str::FromStr;
 
@@ -97,32 +98,7 @@ impl Stargate for RujiraStargate {
                 let sender = buf.string(1).unwrap();
                 let nonce = buf.string(2).unwrap();
                 let m = buf.message(3).unwrap();
-
-                let denom_units = m
-                    .repeated_bytes(2)
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|x| {
-                        let m = Bufany::deserialize(x).unwrap();
-                        DenomUnit {
-                            denom: m.string(1).unwrap_or_default(),
-                            exponent: m.uint32(1).unwrap_or_default(),
-                            aliases: m.repeated_string(3).unwrap_or_default(),
-                        }
-                    })
-                    .collect();
-
-                let metadata = DenomMetadata {
-                    description: m.string(1).unwrap_or_default(),
-                    denom_units,
-                    base: m.string(3).unwrap_or_default(),
-                    display: m.string(4).unwrap_or_default(),
-                    name: m.string(5).unwrap_or_default(),
-                    symbol: m.string(6).unwrap_or_default(),
-                    uri: m.string(7).unwrap_or_default(),
-                    uri_hash: m.string(8).unwrap_or_default(),
-                };
-
+                let metadata = decode_metadata(m);
                 let full = format!("factory/{sender}/{nonce}");
                 DENOM_ADMIN.save(storage, full.clone(), &sender)?;
                 DENOM_METADATA.save(storage, full, &metadata)?;
@@ -188,7 +164,7 @@ impl Stargate for RujiraStargate {
                     data: None,
                 })
             }
-            "/types.MsgChangeAdmin" => {
+            "/types.MsgSetAdmin" => {
                 let sender = buf.string(1).unwrap();
                 let denom = buf.string(2).unwrap();
                 let new_admin = buf.string(3).unwrap();
@@ -202,6 +178,22 @@ impl Stargate for RujiraStargate {
                     data: None,
                 })
             }
+            "/types.MsgSetMetadata" => {
+                let sender = buf.string(1).unwrap();
+                let denom = buf.string(2).unwrap();
+                let m = buf.message(3).unwrap();
+                let metadata = decode_metadata(m);
+
+                let admin = DENOM_ADMIN.load(storage, denom.clone())?;
+                ensure_eq!(admin, sender, Error::msg("Unauthorized"));
+                DENOM_METADATA.save(storage, denom, &metadata)?;
+
+                Ok(AppResponse {
+                    events: vec![],
+                    data: None,
+                })
+            }
+
             _ => {
                 anyhow::bail!("Unexpected any execute: msg={:?} from {}", msg, sender)
             }
@@ -217,5 +209,32 @@ impl Stargate for RujiraStargate {
         request: GrpcQuery,
     ) -> AnyResult<Binary> {
         anyhow::bail!("Unexpected grpc query: request={:?}", request)
+    }
+}
+
+fn decode_metadata(m: Bufany) -> DenomMetadata {
+    let denom_units = m
+        .repeated_bytes(2)
+        .unwrap_or_default()
+        .iter()
+        .map(|x| {
+            let m = Bufany::deserialize(x).unwrap();
+            DenomUnit {
+                denom: m.string(1).unwrap_or_default(),
+                exponent: m.uint32(1).unwrap_or_default(),
+                aliases: m.repeated_string(3).unwrap_or_default(),
+            }
+        })
+        .collect();
+
+    DenomMetadata {
+        description: m.string(1).unwrap_or_default(),
+        denom_units,
+        base: m.string(3).unwrap_or_default(),
+        display: m.string(4).unwrap_or_default(),
+        name: m.string(5).unwrap_or_default(),
+        symbol: m.string(6).unwrap_or_default(),
+        uri: m.string(7).unwrap_or_default(),
+        uri_hash: m.string(8).unwrap_or_default(),
     }
 }
