@@ -99,7 +99,7 @@ impl TokenMetadata {
         let denom_unit = Anybuf::new()
             .append_string(1, denom.clone())
             .append_uint32(2, self.exponent.into())
-            .append_repeated_string(3, &[self.name.clone()]);
+            .append_repeated_string(3, &[self.display.clone()]);
 
         Anybuf::new()
             .append_string(1, x.description)
