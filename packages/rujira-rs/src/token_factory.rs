@@ -70,14 +70,14 @@ fn coin_message(coin: Coin) -> Anybuf {
 pub struct TokenMetadata {
     pub description: String,
 
-    /// denom_units represents the of DenomUnit for a given coin
-    pub exponent: u8,
-
     /// exponent represents power of 10 exponent that one must
     /// raise the base_denom to in order to equal the given DenomUnit's denom
     /// 1 denom = 1^exponent base_denom
     /// (e.g. with a base_denom of uruji, one can create a DenomUnit of 'ruji' with
     /// exponent = 6, thus: 1 ruji = 10^6 uruji).
+    pub exponent: u8,
+
+    /// display indicates the suggested denom that should be displayed in clients.
     pub display: String,
 
     /// name defines the name of the token (eg: ruji)
