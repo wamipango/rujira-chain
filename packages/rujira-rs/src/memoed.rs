@@ -7,14 +7,6 @@ pub struct Memo {
     parts: Vec<String>,
 }
 
-impl Memo {
-    pub fn push<T: Memoed>(&self, part: &T) -> Self {
-        let mut parts = self.parts.clone();
-        parts.push(part.to_memo());
-        Self { parts }
-    }
-}
-
 impl Display for Memo {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.parts.join(":").trim_end_matches(":").fmt(f)
