@@ -220,7 +220,7 @@ fn decode_metadata(m: Bufany) -> DenomMetadata {
             let m = Bufany::deserialize(x).unwrap();
             DenomUnit {
                 denom: m.string(1).unwrap_or_default(),
-                exponent: m.uint32(1).unwrap_or_default(),
+                exponent: m.uint32(2).unwrap_or_default(),
                 aliases: m.repeated_string(3).unwrap_or_default(),
             }
         })
