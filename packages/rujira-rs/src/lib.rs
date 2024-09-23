@@ -5,6 +5,7 @@ mod chain;
 mod coin;
 mod memoed;
 pub mod merge;
+mod msg;
 pub mod revenue;
 mod share_pool;
 pub mod staking;

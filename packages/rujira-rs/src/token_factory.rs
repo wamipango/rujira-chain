@@ -1,13 +1,11 @@
-use anybuf::Anybuf;
+use crate::msg::token_factory::{MsgBurn, MsgCreateDenom, MsgMint, MsgSetAdmin, MsgSetMetadata};
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, AnyMsg, Coin, CosmosMsg, Env, Uint128};
+use cosmwasm_std::{Addr, Coin, CosmosMsg, DenomMetadata, DenomUnit, Env, Uint128};
 
 pub struct TokenFactory {
     nonce: String,
     env: Env,
 }
-
-static TYPE_URL_PREFX: &str = "/types.";
 
 impl TokenFactory {
     pub fn new(env: &Env, nonce: &str) -> Self {
@@ -22,69 +20,48 @@ impl TokenFactory {
     }
 
     pub fn create_msg(&self, metadata: TokenMetadata) -> CosmosMsg {
-        CosmosMsg::Any(AnyMsg {
-            type_url: format!("{}MsgCreateDenom", TYPE_URL_PREFX),
-            value: Anybuf::new()
-                .append_string(1, &self.env.contract.address)
-                .append_string(2, &self.nonce)
-                .append_message(3, &metadata.to_message(self.denom()))
-                .as_bytes()
-                .into(),
-        })
+        MsgCreateDenom {
+            sender: self.env.contract.address.clone(),
+            nonce: self.nonce.clone(),
+            metadata: metadata.to_sdk(self.denom()),
+        }
+        .into()
     }
 
     pub fn mint_msg(&self, amount: Uint128, recipient: Addr) -> CosmosMsg {
-        CosmosMsg::Any(AnyMsg {
-            type_url: format!("{}MsgMint", TYPE_URL_PREFX),
-            value: Anybuf::new()
-                .append_string(1, &self.env.contract.address)
-                .append_message(2, &coin_message(Coin::new(amount, self.denom())))
-                .append_string(3, &recipient)
-                .as_bytes()
-                .into(),
-        })
+        MsgMint {
+            sender: self.env.contract.address.clone(),
+            amount: Coin::new(amount, self.denom()),
+            recipient,
+        }
+        .into()
     }
 
     pub fn burn_msg(&self, amount: Uint128) -> CosmosMsg {
-        CosmosMsg::Any(AnyMsg {
-            type_url: format!("{}MsgBurn", TYPE_URL_PREFX),
-            value: Anybuf::new()
-                .append_string(1, &self.env.contract.address)
-                .append_message(2, &coin_message(Coin::new(amount, self.denom())))
-                .as_bytes()
-                .into(),
-        })
+        MsgBurn {
+            sender: self.env.contract.address.clone(),
+            amount: Coin::new(amount, self.denom()),
+        }
+        .into()
     }
 
     pub fn set_admin_msg(&self, new_admin: Addr) -> CosmosMsg {
-        CosmosMsg::Any(AnyMsg {
-            type_url: format!("{}MsgSetAdmin", TYPE_URL_PREFX),
-            value: Anybuf::new()
-                .append_string(1, &self.env.contract.address)
-                .append_string(2, &self.denom())
-                .append_string(3, &new_admin)
-                .as_bytes()
-                .into(),
-        })
+        MsgSetAdmin {
+            sender: self.env.contract.address.clone(),
+            denom: self.denom(),
+            new_admin,
+        }
+        .into()
     }
 
     pub fn set_metadata_msg(&self, new_metadata: TokenMetadata) -> CosmosMsg {
-        CosmosMsg::Any(AnyMsg {
-            type_url: format!("{}MsgSetMetadata", TYPE_URL_PREFX),
-            value: Anybuf::new()
-                .append_string(1, &self.env.contract.address)
-                .append_string(2, &self.denom())
-                .append_message(3, &new_metadata.to_message(self.denom()))
-                .as_bytes()
-                .into(),
-        })
+        MsgSetMetadata {
+            sender: self.env.contract.address.clone(),
+            denom: self.denom(),
+            new_metadata: new_metadata.to_sdk(self.denom()),
+        }
+        .into()
     }
-}
-
-fn coin_message(coin: Coin) -> Anybuf {
-    Anybuf::new()
-        .append_string(1, coin.denom)
-        .append_string(2, coin.amount.to_string())
 }
 
 /// Metadata represents a struct that describes a basic token.
@@ -118,21 +95,21 @@ pub struct TokenMetadata {
 }
 
 impl TokenMetadata {
-    fn to_message(&self, denom: String) -> Anybuf {
+    fn to_sdk(&self, denom: String) -> DenomMetadata {
         let x = self.clone();
-        let denom_unit = Anybuf::new()
-            .append_string(1, denom.clone())
-            .append_uint32(2, self.exponent.into())
-            .append_repeated_string(3, &[self.display.clone()]);
-
-        Anybuf::new()
-            .append_string(1, x.description)
-            .append_repeated_message(2, &[denom_unit])
-            .append_string(3, denom)
-            .append_string(4, x.display)
-            .append_string(5, x.name)
-            .append_string(6, x.symbol)
-            .append_string(7, x.uri.unwrap_or_default())
-            .append_string(8, x.uri_hash.unwrap_or_default())
+        DenomMetadata {
+            description: x.description,
+            denom_units: vec![DenomUnit {
+                denom: denom.clone(),
+                exponent: x.exponent.into(),
+                aliases: vec![],
+            }],
+            base: denom,
+            display: x.display,
+            name: x.name,
+            symbol: x.symbol,
+            uri: x.uri.unwrap_or_default(),
+            uri_hash: x.uri_hash.unwrap_or_default(),
+        }
     }
 }
