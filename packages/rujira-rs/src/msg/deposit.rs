@@ -3,7 +3,7 @@ use cosmwasm_std::{AnyMsg, CosmosMsg};
 
 use crate::coin::Coin;
 
-pub struct MsgDeposit {
+pub(crate) struct MsgDeposit {
     memo: String,
     coins: Vec<Coin>,
 }
