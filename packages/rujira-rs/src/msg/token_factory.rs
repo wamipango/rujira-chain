@@ -124,6 +124,6 @@ fn metadata_message(value: DenomMetadata) -> Anybuf {
 fn denom_unit_message(value: &DenomUnit) -> Anybuf {
     Anybuf::new()
         .append_string(1, value.denom.clone())
-        .append_uint32(2, value.exponent.clone())
+        .append_uint32(2, value.exponent)
         .append_repeated_string(3, &value.aliases)
 }

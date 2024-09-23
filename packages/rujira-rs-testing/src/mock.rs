@@ -14,6 +14,8 @@ use cw_storage_plus::Map;
 use serde::de::DeserializeOwned;
 use std::str::FromStr;
 
+use crate::fixtures::mock_pool_btc;
+
 pub type RujiraApp = App<
     BankKeeper,
     MockApi,
@@ -38,6 +40,7 @@ pub fn mock_rujira_app() -> RujiraApp {
         .with_stargate(RujiraStargate::default())
         .build(|_, _, _| {})
 }
+
 #[derive(Default)]
 pub struct RujiraStargate {}
 
@@ -207,7 +210,12 @@ impl Stargate for RujiraStargate {
         _block: &BlockInfo,
         request: GrpcQuery,
     ) -> AnyResult<Binary> {
-        anyhow::bail!("Unexpected grpc query: request={:?}", request)
+        match request.path.as_str() {
+            "/thorchain.Query/Pool" => Ok(mock_pool_btc()),
+            _ => {
+                anyhow::bail!("Unexpected grpc query: request={:?}", request)
+            }
+        }
     }
 }
 
@@ -235,5 +243,29 @@ fn decode_metadata(m: Bufany) -> DenomMetadata {
         symbol: m.string(6).unwrap_or_default(),
         uri: m.string(7).unwrap_or_default(),
         uri_hash: m.string(8).unwrap_or_default(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rujira_rs::{Asset, Chain, L1Asset, L1Pool, L1PoolStatus};
+
+    use super::*;
+
+    #[test]
+    fn query_pool() {
+        let app = mock_rujira_app();
+        let asset = L1Asset::new(Chain::Btc, "BTC");
+        let res = L1Pool::load(app.wrap(), &asset).unwrap();
+        assert_eq!(res.balance_rune, Uint128::from(1000u128));
+        assert_eq!(res.balance_asset, Uint128::from(2000u128));
+        assert_eq!(res.asset, Asset::L1(asset));
+        assert_eq!(res.lp_units, Uint128::from(3000u128));
+        assert_eq!(res.status, L1PoolStatus::Available);
+        assert_eq!(res.decimals, 6);
+        assert_eq!(res.synth_units, Uint128::zero());
+        assert_eq!(res.pending_inbound_rune, Uint128::zero());
+        assert_eq!(res.pending_inbound_asset, Uint128::zero());
+        assert_eq!(res.status_since, 1_000_000);
     }
 }

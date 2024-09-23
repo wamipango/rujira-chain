@@ -32,7 +32,6 @@ impl AccountPool {
         AccountPoolAccount {
             amount: account.amount + amount,
             sum_snapshot: self.sum,
-            ..account.clone()
         }
     }
 
@@ -48,7 +47,6 @@ impl AccountPool {
         Ok(AccountPoolAccount {
             amount: account.amount.checked_sub(amount)?,
             sum_snapshot: self.sum,
-            ..account.clone()
         })
     }
 

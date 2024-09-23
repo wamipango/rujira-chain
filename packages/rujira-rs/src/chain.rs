@@ -1,6 +1,8 @@
 use std::fmt::{Display, Formatter, Result};
 
-#[derive(Debug, Clone)]
+use cosmwasm_schema::cw_serde;
+
+#[cw_serde]
 pub enum Chain {
     Bsc,
     Eth,
