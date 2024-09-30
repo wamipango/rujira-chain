@@ -1,6 +1,6 @@
 [package]
 name = "rujira-staking"
-version = "0.1.0"
+version = "0.1.0-rc2"
 authors = ["codehans <94654388+codehans@users.noreply.github.com>"]
 edition = { workspace = true }
 
@@ -23,7 +23,7 @@ cw2 = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-rujira-rs-testing = { workspace = true }
 
 [dev-dependencies]
 cw-multi-test = { workspace = true }
+rujira-rs-testing = { workspace = true }

@@ -1,6 +1,6 @@
 [package]
 name = "rujira-merge"
-version = "0.1.0-rc1"
+version = "0.1.0-rc2"
 authors = ["codehans <94654388+codehans@users.noreply.github.com>"]
 edition = { workspace = true }
 
