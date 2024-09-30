@@ -45,8 +45,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
-    let bond_amount_sent = may_pay(&info, config.bond_denom.as_str())?;
-
+    let bond_amount_sent = may_pay(&info, config.bond_denom.as_str()).unwrap_or_default();
     let swap_amount = distribute(&env, deps.querier, deps.storage, &config, &bond_amount_sent)?;
     let mut res = match msg {
         ExecuteMsg::Account(account_msg) => {
@@ -407,5 +406,35 @@ mod tests {
         assert_eq!(status.account_revenue, Uint128::from(25u128));
         assert_eq!(status.liquid_bond_shares, Uint128::from(1000u128));
         assert_eq!(status.liquid_bond_size, Uint128::from(1010u128));
+
+        let res = app
+            .execute_contract(
+                staker_liquid.clone(),
+                contract.clone(),
+                &ExecuteMsg::Liquid(LiquidMsg::Unbond {}),
+                &coins(500, format!("factory/{contract}/urcpt")),
+            )
+            .unwrap();
+
+        res.assert_event(
+            &Event::new("burn")
+                .add_attribute("amount", "500")
+                .add_attribute("denom", format!("factory/{contract}/urcpt")),
+        );
+        // total distribution of 20 across 1000 shares, so withdrawal should be 510 uruji
+        res.assert_event(
+            &Event::new("transfer")
+                .add_attribute("amount", "510uruji")
+                .add_attribute("recipient", staker_liquid),
+        );
+
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
+        assert_eq!(status.account_bond, Uint128::from(1500u128));
+        assert_eq!(status.account_revenue, Uint128::from(25u128));
+        assert_eq!(status.liquid_bond_shares, Uint128::from(500u128));
+        assert_eq!(status.liquid_bond_size, Uint128::from(510u128));
     }
 }
