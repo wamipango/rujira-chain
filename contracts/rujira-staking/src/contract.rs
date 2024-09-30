@@ -5,7 +5,7 @@ use cosmwasm_std::{
     MessageInfo, Response, StdResult, Storage, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
-use cw_utils::{may_pay, must_pay, NativeBalance};
+use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
 use rujira_rs::staking::{AccountMsg, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, SudoMsg};
 use rujira_rs::TokenFactory;
 
@@ -91,7 +91,6 @@ fn execute_account(
     match msg {
         AccountMsg::Bond {} => {
             let amount = must_pay(&info, config.bond_denom.as_str())?;
-
             let reward_amount = execute_account_bond(storage, &info.sender, amount)?;
             let mut response = Response::default().add_event(
                 Event::new("staking/account/bond")
@@ -107,6 +106,7 @@ fn execute_account(
             Ok(response)
         }
         AccountMsg::Claim {} => {
+            nonpayable(&info)?;
             let reward_amount = execute_account_claim(storage, &info.sender)?;
             let mut response = Response::default().add_event(
                 Event::new("staking/account/claim")
@@ -122,6 +122,7 @@ fn execute_account(
             Ok(response)
         }
         AccountMsg::Withdraw { amount } => {
+            nonpayable(&info)?;
             let (rewards, amount) = execute_account_withdraw(storage, &info.sender, amount)?;
             let mut send = NativeBalance(vec![
                 Coin::new(rewards, config.revenue_denom.clone()),
@@ -418,7 +419,7 @@ mod tests {
         res.assert_event(
             &Event::new("transfer")
                 .add_attribute("amount", "25uusdc")
-                .add_attribute("recipient", staker_account_2),
+                .add_attribute("recipient", staker_account_2.clone()),
         );
 
         let status: StatusResponse = app
@@ -459,5 +460,63 @@ mod tests {
         assert_eq!(status.account_revenue, Uint128::zero());
         assert_eq!(status.liquid_bond_shares, Uint128::from(500u128));
         assert_eq!(status.liquid_bond_size, Uint128::from(515u128));
+
+        // Test partial withdrawal and that it claims rewards
+        // 100 split 75:25 account:liquid.
+        // 75 split 2:1 beteen staker 1 and 2
+        app.send_tokens(apps.clone(), contract.clone(), &coins(100, "uusdc"))
+            .unwrap();
+
+        let res = app
+            .execute_contract(
+                staker_account_1.clone(),
+                contract.clone(),
+                &ExecuteMsg::Account(AccountMsg::Withdraw {
+                    amount: Some(Uint128::from(50u128)),
+                }),
+                &vec![],
+            )
+            .unwrap();
+
+        res.assert_event(
+            &Event::new("transfer")
+                .add_attribute("amount", "50uruji,50uusdc")
+                .add_attribute("recipient", staker_account_1.clone()),
+        );
+
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
+        assert_eq!(status.account_bond, Uint128::from(1450u128));
+        assert_eq!(status.account_revenue, Uint128::from(25u128));
+        assert_eq!(status.liquid_bond_shares, Uint128::from(500u128));
+        assert_eq!(status.liquid_bond_size, Uint128::from(525u128));
+
+        let account: AccountResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Account {
+                    addr: staker_account_1.to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(account.bonded, Uint128::from(950u128));
+        assert_eq!(account.pending_revenue, Uint128::zero());
+
+        let account: AccountResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Account {
+                    addr: staker_account_2.to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(account.bonded, Uint128::from(500u128));
+        assert_eq!(account.pending_revenue, Uint128::from(25u128));
     }
 }
