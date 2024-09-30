@@ -409,6 +409,29 @@ mod tests {
 
         let res = app
             .execute_contract(
+                staker_account_2.clone(),
+                contract.clone(),
+                &ExecuteMsg::Account(AccountMsg::Claim {}),
+                &vec![],
+            )
+            .unwrap();
+        res.assert_event(
+            &Event::new("transfer")
+                .add_attribute("amount", "25uusdc")
+                .add_attribute("recipient", staker_account_2),
+        );
+
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
+        assert_eq!(status.account_bond, Uint128::from(1500u128));
+        assert_eq!(status.account_revenue, Uint128::zero());
+        assert_eq!(status.liquid_bond_shares, Uint128::from(1000u128));
+        assert_eq!(status.liquid_bond_size, Uint128::from(1020u128));
+
+        let res = app
+            .execute_contract(
                 staker_liquid.clone(),
                 contract.clone(),
                 &ExecuteMsg::Liquid(LiquidMsg::Unbond {}),
@@ -421,10 +444,10 @@ mod tests {
                 .add_attribute("amount", "500")
                 .add_attribute("denom", format!("factory/{contract}/urcpt")),
         );
-        // total distribution of 20 across 1000 shares, so withdrawal should be 510 uruji
+        // total distribution of 30 across 1000 shares, so withdrawal should be 515 uruji
         res.assert_event(
             &Event::new("transfer")
-                .add_attribute("amount", "510uruji")
+                .add_attribute("amount", "515uruji")
                 .add_attribute("recipient", staker_liquid),
         );
 
@@ -433,8 +456,8 @@ mod tests {
             .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
             .unwrap();
         assert_eq!(status.account_bond, Uint128::from(1500u128));
-        assert_eq!(status.account_revenue, Uint128::from(25u128));
+        assert_eq!(status.account_revenue, Uint128::zero());
         assert_eq!(status.liquid_bond_shares, Uint128::from(500u128));
-        assert_eq!(status.liquid_bond_size, Uint128::from(510u128));
+        assert_eq!(status.liquid_bond_size, Uint128::from(515u128));
     }
 }
