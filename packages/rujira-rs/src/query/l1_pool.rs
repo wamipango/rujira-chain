@@ -1,6 +1,6 @@
 use anybuf::{Anybuf, Bufany};
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Binary, QuerierWrapper, StdResult, Uint128};
+use cosmwasm_std::{Binary, Decimal, QuerierWrapper, StdResult, Uint128};
 use std::{ops::Add, str::FromStr};
 
 use crate::{asset::Asset, L1Asset};
@@ -62,5 +62,9 @@ impl L1Pool {
 
     pub fn units(&self) -> Uint128 {
         self.lp_units.add(self.synth_units)
+    }
+
+    pub fn price_tor(&self) -> Decimal {
+        Decimal::from_str("69000").unwrap()
     }
 }
