@@ -216,7 +216,7 @@ mod tests {
             ),
             (
                 env.contract.address.as_str(),
-                &vec![
+                &[
                     coin(1_000u128, "uusdc"),
                     // Two operations below bond total of 3000 ruji
                     // More complex testing executed in contract.rs with cw-multi-test

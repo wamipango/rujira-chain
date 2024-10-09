@@ -272,7 +272,7 @@ mod tests {
             &ExecuteMsg::Withdraw {
                 share_amount: Uint128::from(200_000u128),
             },
-            &vec![],
+            &[],
         )
         .unwrap();
 

@@ -64,7 +64,7 @@ impl BridgeAsset {
 
     pub fn ticker(&self) -> String {
         self.symbol
-            .split("-")
+            .split('-')
             .next()
             .unwrap_or_default()
             .to_string()
@@ -97,7 +97,7 @@ impl L1Asset {
 
     pub fn ticker(&self) -> String {
         self.symbol
-            .split("-")
+            .split('-')
             .next()
             .unwrap_or_default()
             .to_string()

@@ -281,7 +281,7 @@ mod tests {
                         exponent: 6,
                     },
                 },
-                &vec![],
+                &[],
                 "staking",
                 None,
             )
@@ -379,7 +379,7 @@ mod tests {
 
         let revenue_balance = app
             .wrap()
-            .query_balance(staker_account_1.to_string(), format!("uusdc"))
+            .query_balance(staker_account_1.to_string(), "uusdc")
             .unwrap();
         assert_eq!(revenue_balance.amount, Uint128::from(58u128));
         assert_eq!(account.bonded, Uint128::from(1000u128));
@@ -413,7 +413,7 @@ mod tests {
                 staker_account_2.clone(),
                 contract.clone(),
                 &ExecuteMsg::Account(AccountMsg::Claim {}),
-                &vec![],
+                &[],
             )
             .unwrap();
         res.assert_event(
@@ -474,7 +474,7 @@ mod tests {
                 &ExecuteMsg::Account(AccountMsg::Withdraw {
                     amount: Some(Uint128::from(50u128)),
                 }),
-                &vec![],
+                &[],
             )
             .unwrap();
 

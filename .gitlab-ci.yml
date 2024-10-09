@@ -1,0 +1,18 @@
+stages:
+  - build
+
+build:
+  stage: build
+  image: docker.io/rust:1.75-slim-bullseye
+  script:
+    - apt update -y
+    - apt install curl -y
+    - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/cargo/bin
+    - rustup component add clippy rustfmt
+    - just cargo-compile
+    - just cargo-clippy-check
+    - just cargo-fmt-check
+  cache:
+    paths:
+      - .cargo
+      - target

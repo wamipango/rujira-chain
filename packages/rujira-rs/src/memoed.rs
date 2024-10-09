@@ -17,7 +17,7 @@ impl Memo {
 
 impl Display for Memo {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.parts.join(":").trim_end_matches(":").fmt(f)
+        self.parts.join(":").trim_end_matches(':').fmt(f)
     }
 }
 

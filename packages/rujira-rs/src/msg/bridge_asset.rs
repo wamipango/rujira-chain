@@ -31,7 +31,7 @@ impl From<MsgBridgeAssetWithdraw> for CosmosMsg {
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::{testing::MockApi,  Uint256};
+    use cosmwasm_std::{testing::MockApi, Uint256};
 
     use crate::asset::NativeAsset;
 
