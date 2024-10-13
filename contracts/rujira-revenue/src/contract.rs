@@ -212,7 +212,7 @@ mod tests {
         let owner = app.api().addr_make("owner");
         let fees = app.api().addr_make("fees");
         let executor = app.api().addr_make("executor");
-        let info = message_info(&owner, &vec![]);
+        let info = message_info(&owner, &[]);
         let msg = InstantiateMsg {
             owner: owner.to_string(),
             target_denoms: vec!["uruji".to_string(), "another".to_string()],
@@ -242,7 +242,7 @@ mod tests {
         let fees = app.api().addr_make("fees");
         let executor = app.api().addr_make("executor");
 
-        let info = message_info(&owner, &vec![]);
+        let info = message_info(&owner, &[]);
         let msg = InstantiateMsg {
             owner: owner.to_string(),
             target_denoms: vec!["uruji".to_string(), "another".to_string()],
@@ -306,7 +306,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&executor, &vec![]),
+            message_info(&executor, &[]),
             ExecuteMsg::Run {},
         )
         .unwrap();
@@ -321,7 +321,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&app.api().addr_make("owner-new"), &vec![]),
+            message_info(&app.api().addr_make("owner-new"), &[]),
             ExecuteMsg::Run {},
         )
         .unwrap();
@@ -361,7 +361,7 @@ mod tests {
                     target_addresses: vec![(fees.to_string(), 1)],
                     executor: owner.to_string(),
                 },
-                &vec![],
+                &[],
                 "revenue",
                 None,
             )
@@ -370,13 +370,8 @@ mod tests {
         app.send_tokens(owner.clone(), contract.clone(), &funds)
             .unwrap();
 
-        app.execute_contract(
-            owner.clone(),
-            contract.clone(),
-            &ExecuteMsg::Run {},
-            &vec![],
-        )
-        .unwrap();
+        app.execute_contract(owner.clone(), contract.clone(), &ExecuteMsg::Run {}, &[])
+            .unwrap();
 
         // Make sure that execution ends when there are no actions
         let status: StatusResponse = app
@@ -399,12 +394,7 @@ mod tests {
         set_action(&mut app, &contract, "token-e", "contract-e", Uint128::MAX);
 
         let res = app
-            .execute_contract(
-                owner.clone(),
-                contract.clone(),
-                &ExecuteMsg::Run {},
-                &vec![],
-            )
+            .execute_contract(owner.clone(), contract.clone(), &ExecuteMsg::Run {}, &[])
             .unwrap();
         assert_eq!(res.events.len(), 1);
         let status: StatusResponse = app
@@ -415,12 +405,7 @@ mod tests {
 
         // Iterator should start at the beginning again and execute token-a
         let res = app
-            .execute_contract(
-                owner.clone(),
-                contract.clone(),
-                &ExecuteMsg::Run {},
-                &vec![],
-            )
+            .execute_contract(owner.clone(), contract.clone(), &ExecuteMsg::Run {}, &[])
             .unwrap();
         let status: StatusResponse = app
             .wrap()
@@ -433,42 +418,22 @@ mod tests {
 
         // Run for c, d, e and then loop back to a
         let res = app
-            .execute_contract(
-                owner.clone(),
-                contract.clone(),
-                &ExecuteMsg::Run {},
-                &vec![],
-            )
+            .execute_contract(owner.clone(), contract.clone(), &ExecuteMsg::Run {}, &[])
             .unwrap();
         assert_eq!(res.events[1].clone().attributes[1].clone().value, "token-c");
 
         let res = app
-            .execute_contract(
-                owner.clone(),
-                contract.clone(),
-                &ExecuteMsg::Run {},
-                &vec![],
-            )
+            .execute_contract(owner.clone(), contract.clone(), &ExecuteMsg::Run {}, &[])
             .unwrap();
         assert_eq!(res.events[1].clone().attributes[1].clone().value, "token-d");
 
         let res = app
-            .execute_contract(
-                owner.clone(),
-                contract.clone(),
-                &ExecuteMsg::Run {},
-                &vec![],
-            )
+            .execute_contract(owner.clone(), contract.clone(), &ExecuteMsg::Run {}, &[])
             .unwrap();
         assert_eq!(res.events[1].clone().attributes[1].clone().value, "token-e");
 
         let res = app
-            .execute_contract(
-                owner.clone(),
-                contract.clone(),
-                &ExecuteMsg::Run {},
-                &vec![],
-            )
+            .execute_contract(owner.clone(), contract.clone(), &ExecuteMsg::Run {}, &[])
             .unwrap();
 
         assert_eq!(res.events.len(), 1);
@@ -485,7 +450,7 @@ mod tests {
             &SudoMsg::SetAction {
                 denom: denom.to_string(),
                 contract: app.api().addr_make(target).to_string(),
-                limit: limit,
+                limit,
                 msg: Binary::default(),
             },
         )
@@ -530,7 +495,7 @@ mod tests {
                     ],
                     executor: owner.to_string(),
                 },
-                &vec![],
+                &[],
                 "revenue",
                 None,
             )
@@ -543,13 +508,8 @@ mod tests {
         set_action(&mut app, &contract, "token-a", "contract-a", Uint128::MAX);
 
         // Make sure that execution ends when there are no actions
-        app.execute_contract(
-            owner.clone(),
-            contract.clone(),
-            &ExecuteMsg::Run {},
-            &vec![],
-        )
-        .unwrap();
+        app.execute_contract(owner.clone(), contract.clone(), &ExecuteMsg::Run {}, &[])
+            .unwrap();
 
         assert_eq!(
             app.wrap()
@@ -605,13 +565,8 @@ mod tests {
         )
         .unwrap();
 
-        app.execute_contract(
-            owner.clone(),
-            contract.clone(),
-            &ExecuteMsg::Run {},
-            &vec![],
-        )
-        .unwrap();
+        app.execute_contract(owner.clone(), contract.clone(), &ExecuteMsg::Run {}, &[])
+            .unwrap();
 
         assert_eq!(
             app.wrap().query_balance(fees, "ignored").unwrap().amount,
