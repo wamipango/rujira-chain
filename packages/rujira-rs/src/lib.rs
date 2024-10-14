@@ -1,6 +1,5 @@
-mod asset;
-
 mod account_pool;
+mod asset;
 mod chain;
 mod coin;
 mod memoed;

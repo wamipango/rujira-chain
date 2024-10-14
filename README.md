@@ -7,12 +7,10 @@
 For a quick-start, use [cw-template](https://github.com/CosmWasm/cw-template)
 
 ```bash
-cd contracts
-cargo generate --git https://github.com/CosmWasm/cw-template.git --name PROJECT_NAME -d minimal=true
-cd PROJECT_NAME
-rm -rf .git
-rm .gitignore
+git checkout -b new_contract
+./scripts/create.sh NAME
 git add .
+git commit -m "New Contract"
 ```
 
 <!--
