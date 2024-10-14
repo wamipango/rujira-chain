@@ -1,5 +1,6 @@
 mod account_pool;
 mod asset;
+pub mod bow;
 mod chain;
 mod coin;
 mod memoed;
