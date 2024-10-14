@@ -10,6 +10,7 @@ mod query;
 pub mod revenue;
 mod share_pool;
 pub mod staking;
+pub mod template;
 mod token_factory;
 
 pub use account_pool::{AccountPool, AccountPoolAccount};
