@@ -3,6 +3,7 @@ mod asset;
 pub mod bow;
 mod chain;
 mod coin;
+pub mod fin;
 mod memoed;
 pub mod merge;
 mod msg;
