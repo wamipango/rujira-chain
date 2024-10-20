@@ -1,35 +1,37 @@
-use crate::msg::token_factory::{MsgBurn, MsgCreateDenom, MsgMint, MsgSetAdmin, MsgSetMetadata};
+use crate::msg::token_factory::{
+    MsgBurnTokens, MsgCreateDenom, MsgMintTokens, MsgSetDenomAdmin, MsgSetMetadata,
+};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Coin, CosmosMsg, DenomMetadata, DenomUnit, Env, Uint128};
 
 pub struct TokenFactory {
-    nonce: String,
+    id: String,
     env: Env,
 }
 
 impl TokenFactory {
-    pub fn new(env: &Env, nonce: &str) -> Self {
+    pub fn new(env: &Env, id: &str) -> Self {
         Self {
             env: env.clone(),
-            nonce: nonce.to_string(),
+            id: id.to_string(),
         }
     }
 
     pub fn denom(&self) -> String {
-        format!("factory/{}/{}", self.env.contract.address, self.nonce)
+        format!("factory/{}/{}", self.env.contract.address, self.id)
     }
 
     pub fn create_msg(&self, metadata: TokenMetadata) -> CosmosMsg {
         MsgCreateDenom {
             sender: self.env.contract.address.clone(),
-            nonce: self.nonce.clone(),
+            id: self.id.clone(),
             metadata: metadata.to_sdk(self.denom()),
         }
         .into()
     }
 
     pub fn mint_msg(&self, amount: Uint128, recipient: Addr) -> CosmosMsg {
-        MsgMint {
+        MsgMintTokens {
             sender: self.env.contract.address.clone(),
             amount: Coin::new(amount, self.denom()),
             recipient,
@@ -38,7 +40,7 @@ impl TokenFactory {
     }
 
     pub fn burn_msg(&self, amount: Uint128) -> CosmosMsg {
-        MsgBurn {
+        MsgBurnTokens {
             sender: self.env.contract.address.clone(),
             amount: Coin::new(amount, self.denom()),
         }
@@ -46,7 +48,7 @@ impl TokenFactory {
     }
 
     pub fn set_admin_msg(&self, new_admin: Addr) -> CosmosMsg {
-        MsgSetAdmin {
+        MsgSetDenomAdmin {
             sender: self.env.contract.address.clone(),
             denom: self.denom(),
             new_admin,

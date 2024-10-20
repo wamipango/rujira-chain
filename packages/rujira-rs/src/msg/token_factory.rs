@@ -1,26 +1,26 @@
 use anybuf::Anybuf;
 use cosmwasm_std::{Addr, AnyMsg, Coin, CosmosMsg, DenomMetadata, DenomUnit};
 
-static TYPE_URL_PREFX: &str = "/types.";
+static TYPE_URL_PREFIX: &str = "/thorchain.denom.";
 
 pub(crate) struct MsgCreateDenom {
     pub sender: Addr,
-    pub nonce: String,
+    pub id: String,
     pub metadata: DenomMetadata,
 }
 
-pub(crate) struct MsgMint {
+pub(crate) struct MsgMintTokens {
     pub sender: Addr,
     pub amount: Coin,
     pub recipient: Addr,
 }
 
-pub(crate) struct MsgBurn {
+pub(crate) struct MsgBurnTokens {
     pub sender: Addr,
     pub amount: Coin,
 }
 
-pub(crate) struct MsgSetAdmin {
+pub(crate) struct MsgSetDenomAdmin {
     pub sender: Addr,
     pub denom: String,
     pub new_admin: Addr,
@@ -35,10 +35,10 @@ pub(crate) struct MsgSetMetadata {
 impl From<MsgCreateDenom> for CosmosMsg {
     fn from(value: MsgCreateDenom) -> Self {
         CosmosMsg::Any(AnyMsg {
-            type_url: format!("{}MsgCreateDenom", TYPE_URL_PREFX),
+            type_url: format!("{}MsgCreateDenom", TYPE_URL_PREFIX),
             value: Anybuf::new()
                 .append_string(1, &value.sender)
-                .append_string(2, &value.nonce)
+                .append_string(2, &value.id)
                 .append_message(3, &metadata_message(value.metadata))
                 .as_bytes()
                 .into(),
@@ -46,10 +46,10 @@ impl From<MsgCreateDenom> for CosmosMsg {
     }
 }
 
-impl From<MsgMint> for CosmosMsg {
-    fn from(value: MsgMint) -> Self {
+impl From<MsgMintTokens> for CosmosMsg {
+    fn from(value: MsgMintTokens) -> Self {
         CosmosMsg::Any(AnyMsg {
-            type_url: format!("{}MsgMint", TYPE_URL_PREFX),
+            type_url: format!("{}MsgMintTokens", TYPE_URL_PREFIX),
             value: Anybuf::new()
                 .append_string(1, &value.sender)
                 .append_message(2, &coin_message(value.amount))
@@ -60,10 +60,10 @@ impl From<MsgMint> for CosmosMsg {
     }
 }
 
-impl From<MsgBurn> for CosmosMsg {
-    fn from(value: MsgBurn) -> Self {
+impl From<MsgBurnTokens> for CosmosMsg {
+    fn from(value: MsgBurnTokens) -> Self {
         CosmosMsg::Any(AnyMsg {
-            type_url: format!("{}MsgBurn", TYPE_URL_PREFX),
+            type_url: format!("{}MsgBurnTokens", TYPE_URL_PREFIX),
             value: Anybuf::new()
                 .append_string(1, &value.sender)
                 .append_message(2, &coin_message(value.amount))
@@ -73,10 +73,10 @@ impl From<MsgBurn> for CosmosMsg {
     }
 }
 
-impl From<MsgSetAdmin> for CosmosMsg {
-    fn from(value: MsgSetAdmin) -> Self {
+impl From<MsgSetDenomAdmin> for CosmosMsg {
+    fn from(value: MsgSetDenomAdmin) -> Self {
         CosmosMsg::Any(AnyMsg {
-            type_url: format!("{}MsgSetAdmin", TYPE_URL_PREFX),
+            type_url: format!("{}MsgSetDenomAdmin", TYPE_URL_PREFIX),
             value: Anybuf::new()
                 .append_string(1, &value.sender)
                 .append_string(2, &value.denom)
@@ -90,7 +90,7 @@ impl From<MsgSetAdmin> for CosmosMsg {
 impl From<MsgSetMetadata> for CosmosMsg {
     fn from(value: MsgSetMetadata) -> Self {
         CosmosMsg::Any(AnyMsg {
-            type_url: format!("{}MsgSetMetadata", TYPE_URL_PREFX),
+            type_url: format!("{}MsgSetMetadata", TYPE_URL_PREFIX),
             value: Anybuf::new()
                 .append_string(1, &value.sender)
                 .append_string(2, &value.denom)
