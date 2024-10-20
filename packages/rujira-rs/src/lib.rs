@@ -1,5 +1,6 @@
 mod account_pool;
 mod asset;
+pub mod authz;
 pub mod bow;
 mod chain;
 mod coin;
@@ -11,6 +12,7 @@ mod query;
 pub mod revenue;
 mod share_pool;
 pub mod staking;
+pub mod stream;
 pub mod template;
 mod token_factory;
 

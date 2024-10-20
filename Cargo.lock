@@ -868,6 +868,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rujira-authz"
+version = "0.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "rujira-rs",
+ "schemars",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "rujira-bow"
 version = "0.0.0"
 dependencies = [
@@ -937,6 +953,7 @@ dependencies = [
  "anybuf",
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-utils",
  "thiserror",
 ]
 
@@ -967,6 +984,22 @@ dependencies = [
  "cw2",
  "rujira-rs",
  "rujira-rs-testing",
+ "schemars",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "rujira-stream"
+version = "0.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "rujira-rs",
  "schemars",
  "serde",
  "thiserror",
