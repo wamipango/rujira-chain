@@ -40,7 +40,9 @@ pub fn execute(
     match msg {
         ExecuteMsg::Claim {} => {
             let claimant = info.sender;
-            let last_claim = CLAIMS.may_load(deps.storage, claimant.clone())?;
+            let last_claim = CLAIMS
+                .may_load(deps.storage, claimant.clone())?
+                .unwrap_or(env.block.time);
             let total_allocation = config.schedule.allocation(&last_claim, &env.block.time);
             let mut allocation = NativeBalance(
                 config
@@ -74,7 +76,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     match msg {
         QueryMsg::Pending { address } => {
             let claimant = deps.api.addr_validate(address.as_str())?;
-            let last_claim = CLAIMS.may_load(deps.storage, claimant.clone())?;
+            let last_claim = CLAIMS
+                .may_load(deps.storage, claimant.clone())?
+                .unwrap_or(env.block.time);
             let total_allocation = config.schedule.allocation(&last_claim, &env.block.time);
             let mut allocation = NativeBalance(
                 config

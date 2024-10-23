@@ -12,19 +12,45 @@ pub enum Schedule {
         amount: Vec<Coin>,
         period: u64,
     },
+    /// Fixed, single distribution
+    Fixed {
+        starts: Timestamp,
+        ends: Timestamp,
+        amount: Vec<Coin>,
+    },
 }
 
 impl Schedule {
-    pub fn allocation(&self, from: &Option<Timestamp>, to: &Timestamp) -> Vec<Coin> {
+    pub fn allocation(&self, from: &Timestamp, to: &Timestamp) -> Vec<Coin> {
         match self {
             Schedule::Continuous {
                 starts,
                 amount,
                 period,
             } => {
-                let from = from.unwrap_or(*starts);
+                let from = from.max(starts);
                 let duration = to.seconds().sub(from.seconds());
-                let ratio = Decimal::from_ratio(duration, *period);
+                let ratio = Decimal::checked_from_ratio(duration, *period).unwrap_or_default();
+                amount
+                    .iter()
+                    .map(|x| Coin {
+                        amount: x.amount.mul_floor(ratio),
+                        ..x.clone()
+                    })
+                    .collect()
+            }
+            Schedule::Fixed {
+                starts,
+                ends,
+                amount,
+            } => {
+                let from = from.max(starts);
+                let to = to.min(ends);
+                let ratio = Decimal::checked_from_ratio(
+                    from.seconds().sub(to.seconds()),
+                    starts.seconds().sub(ends.seconds()),
+                )
+                .unwrap_or_default();
                 amount
                     .iter()
                     .map(|x| Coin {
