@@ -2,6 +2,7 @@ mod account_pool;
 mod asset;
 mod chain;
 mod coin;
+mod coins;
 mod interfaces;
 mod memoed;
 mod msg;

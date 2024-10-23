@@ -3,6 +3,8 @@ use std::ops::Sub;
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Timestamp};
 
+use crate::coins::Coins;
+
 /// The schedule over which tokens can be streamed
 #[cw_serde]
 pub enum Schedule {
@@ -31,13 +33,7 @@ impl Schedule {
                 let from = from.max(starts);
                 let duration = to.seconds().sub(from.seconds());
                 let ratio = Decimal::checked_from_ratio(duration, *period).unwrap_or_default();
-                amount
-                    .iter()
-                    .map(|x| Coin {
-                        amount: x.amount.mul_floor(ratio),
-                        ..x.clone()
-                    })
-                    .collect()
+                amount.mul_coins(ratio)
             }
             Schedule::Fixed {
                 starts,
@@ -51,13 +47,7 @@ impl Schedule {
                     starts.seconds().sub(ends.seconds()),
                 )
                 .unwrap_or_default();
-                amount
-                    .iter()
-                    .map(|x| Coin {
-                        amount: x.amount.mul_floor(ratio),
-                        ..x.clone()
-                    })
-                    .collect()
+                amount.mul_coins(ratio)
             }
         }
     }
