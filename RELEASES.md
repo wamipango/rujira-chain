@@ -1,12 +1,12 @@
 # Releases
 
-## Unreleased
+## v1.0.0-rc1
 
 | Version    | Contract       | Artifact                      | Checksum                                                         | Audit | Code ID Stagenet | Code ID Mainnet |
 | ---------- | -------------- | ----------------------------- | ---------------------------------------------------------------- | ----- | ---------------- | --------------- |
-| v0.1.0-rc2 | rujira-merge   | artifacts/rujira_merge.wasm   | 93f2fb4a64a44839c39ac8ad073fdfd120f262f0cdf40312b2710a58a34fa4f2 |       |                  |                 |
-| v0.1.0-rc2 | rujira-revenue | artifacts/rujira_revenue.wasm | fd046a7a08dbdf9ce6733ab0215fdb27ff51cd3e6e6b544f67fb9faefe1fc4de |       |                  |                 |
-| v0.1.0-rc2 | rujira-staking | artifacts/rujira_staking.wasm | b0e96c07ebc5f743ab4f309b266d47b03c83a32bd0450ac2695d80d0ef8cdf5c |       |                  |                 |
+| v1.0.0-rc1 | rujira-merge   | artifacts/rujira_merge.wasm   | b87bb7eaab22e92d343ec45e6456c8a944a021c58faf8cf7efc71e4cad74a112 |       |                  |                 |
+| v1.0.0-rc1 | rujira-revenue | artifacts/rujira_revenue.wasm | 92ad6b990cf990847c240b15a5322456274873c903dd75369c3b21722842bbbb |       |                  |                 |
+| v1.0.0-rc1 | rujira-staking | artifacts/rujira_staking.wasm | db72a38f1218ae334a24b117e786e1e20aebeb832e404e979671c1d9adf083c5 |       |                  |                 |
 
 ## v0.1.0-rc1
 

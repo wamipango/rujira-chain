@@ -917,7 +917,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-merge"
-version = "0.1.0-rc2"
+version = "1.0.0-rc1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -933,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-revenue"
-version = "0.1.0-rc2"
+version = "1.0.0-rc1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -974,7 +974,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-staking"
-version = "0.1.0-rc2"
+version = "1.0.0-rc1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
