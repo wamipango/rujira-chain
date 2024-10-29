@@ -96,7 +96,7 @@ impl Stargate for RujiraStargate {
         let serialized = msg.value.to_vec();
         let buf = Bufany::deserialize(&serialized)?;
         match type_url.as_str() {
-            "/types.MsgCreateDenom" => {
+            "/thorchain.denom.MsgCreateDenom" => {
                 let sender = buf.string(1).unwrap();
                 let nonce = buf.string(2).unwrap();
                 let m = buf.message(3).unwrap();
@@ -110,7 +110,7 @@ impl Stargate for RujiraStargate {
                     data: None,
                 })
             }
-            "/types.MsgMint" => {
+            "/thorchain.denom.MsgMintTokens" => {
                 let sender = buf.string(1).unwrap();
                 let coin: Bufany<'_> = buf.message(2).unwrap();
                 let recipient = buf.string(3).unwrap();
@@ -139,7 +139,7 @@ impl Stargate for RujiraStargate {
                     data: None,
                 })
             }
-            "/types.MsgBurn" => {
+            "/thorchain.denom.MsgBurnTokens" => {
                 let sender = buf.string(1).unwrap();
                 let coin: Bufany<'_> = buf.message(2).unwrap();
 
@@ -166,7 +166,7 @@ impl Stargate for RujiraStargate {
                     data: None,
                 })
             }
-            "/types.MsgSetAdmin" => {
+            "/thorchain.denom.MsgSetDenomAdmin" => {
                 let sender = buf.string(1).unwrap();
                 let denom = buf.string(2).unwrap();
                 let new_admin = buf.string(3).unwrap();
@@ -180,7 +180,7 @@ impl Stargate for RujiraStargate {
                     data: None,
                 })
             }
-            "/types.MsgSetMetadata" => {
+            "/thorchain.denom.MsgSetDenomMetadata" => {
                 let sender = buf.string(1).unwrap();
                 let denom = buf.string(2).unwrap();
                 let m = buf.message(3).unwrap();
