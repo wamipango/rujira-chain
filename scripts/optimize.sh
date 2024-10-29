@@ -1,7 +1,7 @@
 :
 
 U="cosmwasm"
-V="0.16.0"
+V="0.16.1"
 
 M="x86_64" # Force Intel arch
 

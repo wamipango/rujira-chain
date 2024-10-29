@@ -8,9 +8,9 @@ use rujira_rs::stream::factory::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use rujira_rs::stream::InstantiateMsg as StreamInstantiateMsg;
 use std::ops::Add;
 
+use crate::config::Config;
 use crate::error::ContractError;
-use crate::factory::config::Config;
-use crate::factory::state::COUNTER;
+use crate::state::COUNTER;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:rujira-stream-controller";
