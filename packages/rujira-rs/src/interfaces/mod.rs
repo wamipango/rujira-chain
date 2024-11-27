@@ -1,5 +1,6 @@
 pub mod authz;
 pub mod bow;
+pub mod demo;
 pub mod fin;
 pub mod merge;
 pub mod revenue;

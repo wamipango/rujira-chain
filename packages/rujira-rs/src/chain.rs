@@ -25,7 +25,7 @@ impl TryFrom<&str> for Chain {
     type Error = ChainParseError;
 
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
-        match value.to_uppercase().as_str() {
+        match value {
             "AVAX" => Ok(Self::Avax),
             "BCH" => Ok(Self::Bch),
             "BSC" => Ok(Self::Bsc),

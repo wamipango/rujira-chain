@@ -130,7 +130,7 @@ impl Pool {
     pub fn load(q: QuerierWrapper, asset: &Layer1Asset) -> Result<Self, PoolError> {
         let req = QueryPoolRequest {
             asset: asset.to_string(),
-            height: "".to_string(),
+            height: "0".to_string(),
         };
         let res = QueryPoolResponse::get(q, req)?;
         Ok(Pool::try_from(res)?)
