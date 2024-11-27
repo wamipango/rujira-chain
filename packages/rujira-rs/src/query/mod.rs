@@ -1,1 +1,4 @@
-pub(crate) mod l1_pool;
+mod grpc;
+pub(crate) mod pool;
+
+pub use pool::{Pool, PoolError, PoolStatus};

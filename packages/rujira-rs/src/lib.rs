@@ -6,14 +6,14 @@ mod coins;
 mod interfaces;
 mod memoed;
 mod msg;
-mod query;
+pub mod proto;
+pub mod query;
 mod share_pool;
 mod token_factory;
 
 pub use account_pool::{AccountPool, AccountPoolAccount};
-pub use asset::{Asset, BridgeAsset, L1Asset, NativeAsset};
+pub use asset::{Asset, Layer1Asset, NativeAsset, SecuredAsset};
 pub use chain::Chain;
 pub use interfaces::*;
-pub use query::l1_pool::{L1Pool, L1PoolStatus};
 pub use share_pool::{SharePool, SharePoolError};
 pub use token_factory::{TokenFactory, TokenMetadata};

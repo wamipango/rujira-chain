@@ -23,7 +23,8 @@ thiserror = { version = "1.0.58" }
 rujira-rs = { path = "./packages/rujira-rs" }
 rujira-rs-testing = { path = "./packages/rujira-rs-testing" }
 anyhow = "1"
-
+prost = "0.13"
+regex = "1.11.1"
 
 [profile.release]
 rpath = false

@@ -1,22 +1,29 @@
-use std::fmt::{Display, Formatter, Result};
+use std::{
+    fmt::{Display, Formatter, Result},
+    result,
+};
 
 use cosmwasm_schema::cw_serde;
+use thiserror::Error;
 
-use crate::{chain::Chain, memoed::Memoed};
+use crate::{
+    chain::{Chain, ChainParseError},
+    memoed::Memoed,
+};
 
 #[cw_serde]
 pub enum Asset {
     Native(NativeAsset),
-    Bridge(BridgeAsset),
-    L1(L1Asset),
+    Secured(SecuredAsset),
+    Layer1(Layer1Asset),
 }
 
 impl Display for Asset {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
             Asset::Native(native) => native.fmt(f),
-            Asset::Bridge(bridge) => bridge.fmt(f),
-            Asset::L1(l1) => l1.fmt(f),
+            Asset::Secured(bridge) => bridge.fmt(f),
+            Asset::Layer1(l1) => l1.fmt(f),
         }
     }
 }
@@ -45,12 +52,12 @@ impl Display for NativeAsset {
 }
 
 #[cw_serde]
-pub struct BridgeAsset {
+pub struct SecuredAsset {
     chain: Chain,
     symbol: String,
 }
 
-impl BridgeAsset {
+impl SecuredAsset {
     pub fn new(chain: Chain, symbol: &str) -> Self {
         Self {
             chain,
@@ -71,19 +78,19 @@ impl BridgeAsset {
     }
 }
 
-impl Display for BridgeAsset {
+impl Display for SecuredAsset {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{}-{}", self.chain, self.symbol)
     }
 }
 
 #[cw_serde]
-pub struct L1Asset {
+pub struct Layer1Asset {
     chain: Chain,
     symbol: String,
 }
 
-impl L1Asset {
+impl Layer1Asset {
     pub fn new(chain: Chain, symbol: &str) -> Self {
         Self {
             chain,
@@ -104,25 +111,48 @@ impl L1Asset {
     }
 }
 
-impl Display for L1Asset {
+impl Display for Layer1Asset {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{}.{}", self.chain, self.symbol)
     }
+}
+
+impl TryFrom<String> for Layer1Asset {
+    type Error = Layer1AssetError;
+
+    fn try_from(value: String) -> result::Result<Self, Self::Error> {
+        match value.split(".").collect::<Vec<_>>().as_slice() {
+            [chain, symbol] => Ok(Self {
+                chain: Chain::try_from(*chain)?,
+                symbol: symbol.to_string(),
+            }),
+            _ => Err(Layer1AssetError::Invalid(value)),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum Layer1AssetError {
+    #[error("{0}")]
+    Chain(#[from] ChainParseError),
+
+    #[error("Invalid {0}")]
+    Invalid(String),
 }
 
 impl Memoed for Asset {
     fn to_memo(&self) -> String {
         match self {
             Asset::Native(native) => native.denom_string(),
-            Asset::Bridge(bridge) => bridge.denom_string(),
-            Asset::L1(l1) => l1.denom_string(),
+            Asset::Secured(bridge) => bridge.denom_string(),
+            Asset::Layer1(l1) => l1.denom_string(),
         }
     }
 }
 
-impl From<BridgeAsset> for Asset {
-    fn from(value: BridgeAsset) -> Self {
-        Self::Bridge(value)
+impl From<SecuredAsset> for Asset {
+    fn from(value: SecuredAsset) -> Self {
+        Self::Secured(value)
     }
 }
 
@@ -146,12 +176,12 @@ mod tests {
 
     #[test]
     fn bridge() {
-        let native = BridgeAsset::new(Chain::Btc, "BTC");
+        let native = SecuredAsset::new(Chain::Btc, "BTC");
         assert_eq!(native.to_string(), "BTC-BTC");
         assert_eq!(native.denom_string(), "btc-btc");
         assert_eq!(format!("{}", native), "BTC-BTC");
 
-        let native = BridgeAsset::new(
+        let native = SecuredAsset::new(
             Chain::Eth,
             "RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb",
         );
@@ -169,12 +199,12 @@ mod tests {
 
     #[test]
     fn l1() {
-        let l1 = L1Asset::new(Chain::Btc, "BTC");
+        let l1 = Layer1Asset::new(Chain::Btc, "BTC");
         assert_eq!(l1.to_string(), "BTC.BTC");
         assert_eq!(l1.denom_string(), "btc.btc");
         assert_eq!(format!("{}", l1), "BTC.BTC");
 
-        let l1 = L1Asset::new(
+        let l1 = Layer1Asset::new(
             Chain::Eth,
             "RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb",
         );
@@ -195,7 +225,7 @@ mod tests {
         let asset: Asset = NativeAsset::new("RUNE").into();
         assert_eq!(asset.to_memo(), "rune");
 
-        let asset: Asset = BridgeAsset::new(Chain::Btc, "BTC").into();
+        let asset: Asset = SecuredAsset::new(Chain::Btc, "BTC").into();
         assert_eq!(asset.to_memo(), "btc-btc");
     }
 }

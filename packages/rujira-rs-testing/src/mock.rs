@@ -211,7 +211,7 @@ impl Stargate for RujiraStargate {
         request: GrpcQuery,
     ) -> AnyResult<Binary> {
         match request.path.as_str() {
-            "/thorchain.Query/Pool" => Ok(mock_pool_btc()),
+            "/types.Query/Pool" => Ok(mock_pool_btc()),
             _ => {
                 anyhow::bail!("Unexpected grpc query: request={:?}", request)
             }
@@ -248,24 +248,47 @@ fn decode_metadata(m: Bufany) -> DenomMetadata {
 
 #[cfg(test)]
 mod tests {
-    use rujira_rs::{Asset, Chain, L1Asset, L1Pool, L1PoolStatus};
+    use cosmwasm_std::Decimal;
+    use rujira_rs::{
+        query::{Pool, PoolStatus},
+        Asset, Chain, Layer1Asset,
+    };
 
     use super::*;
 
     #[test]
     fn query_pool() {
         let app = mock_rujira_app();
-        let asset = L1Asset::new(Chain::Btc, "BTC");
-        let res = L1Pool::load(app.wrap(), &asset).unwrap();
-        assert_eq!(res.balance_rune, Uint128::from(1000u128));
-        assert_eq!(res.balance_asset, Uint128::from(2000u128));
-        assert_eq!(res.asset, Asset::L1(asset));
-        assert_eq!(res.lp_units, Uint128::from(3000u128));
-        assert_eq!(res.status, L1PoolStatus::Available);
-        assert_eq!(res.decimals, 6);
-        assert_eq!(res.synth_units, Uint128::zero());
-        assert_eq!(res.pending_inbound_rune, Uint128::zero());
-        assert_eq!(res.pending_inbound_asset, Uint128::zero());
-        assert_eq!(res.status_since, 1_000_000);
+        let asset = Layer1Asset::new(Chain::Btc, "BTC");
+        let res = Pool::load(app.wrap(), &asset).unwrap();
+        assert_eq!(
+            res.asset,
+            Asset::Layer1(Layer1Asset::new(Chain::Btc, "BTC")),
+        );
+        assert_eq!(res.short_code, "b".to_string());
+        assert_eq!(res.status, PoolStatus::Available);
+        assert_eq!(res.decimals, 8);
+        assert_eq!(res.pending_inbound_asset, Uint128::from(156524579u128));
+        assert_eq!(res.pending_inbound_rune, Uint128::from(0u128));
+        assert_eq!(res.balance_asset, Uint128::from(68602648901u128));
+        assert_eq!(res.balance_rune, Uint128::from(1172427071332399u128));
+        assert_eq!(
+            res.asset_tor_price,
+            Decimal::from_str("93308.37628318").unwrap(),
+        );
+        assert_eq!(res.pool_units, Uint128::from(613518358320559u128));
+        assert_eq!(res.lp_units, Uint128::from(347866097255926u128));
+        assert_eq!(res.synth_units, Uint128::from(265652261064633u128));
+        assert_eq!(res.synth_supply, Uint128::from(59409628248u128));
+        assert_eq!(res.savers_depth, Uint128::from(58882558588u128));
+        assert_eq!(res.savers_units, Uint128::from(56192173382u128));
+        assert_eq!(res.savers_fill_bps, 8660);
+        assert_eq!(res.savers_capacity_remaining, Uint128::from(9193020653u128));
+        assert_eq!(res.synth_mint_paused, false);
+        assert_eq!(res.synth_supply_remaining, Uint128::from(22913550433u128));
+        assert_eq!(res.loan_collateral, Uint128::from(167294477784u128));
+        assert_eq!(res.loan_collateral_remaining, Uint128::from(0u128));
+        assert_eq!(res.loan_cr, Decimal::zero());
+        assert_eq!(res.derived_depth_bps, 9639);
     }
 }
