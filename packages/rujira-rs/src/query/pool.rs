@@ -27,7 +27,21 @@ pub enum PoolStatus {
 impl TryFrom<String> for PoolStatus {
     type Error = StdError;
     fn try_from(value: String) -> StdResult<Self> {
-        match proto::types::PoolStatus::from_str_name(value.as_str()) {
+        value.as_str().try_into()
+    }
+}
+
+impl TryFrom<&String> for PoolStatus {
+    type Error = StdError;
+    fn try_from(value: &String) -> StdResult<Self> {
+        value.as_str().try_into()
+    }
+}
+
+impl TryFrom<&str> for PoolStatus {
+    type Error = StdError;
+    fn try_from(value: &str) -> StdResult<Self> {
+        match proto::types::PoolStatus::from_str_name(value) {
             Some(proto::types::PoolStatus::Available) => Ok(PoolStatus::Available),
             Some(proto::types::PoolStatus::Staged) => Ok(PoolStatus::Staged),
             Some(proto::types::PoolStatus::UnknownPoolStatus) => Ok(PoolStatus::Unknown),
@@ -37,6 +51,14 @@ impl TryFrom<String> for PoolStatus {
                 value
             ))),
         }
+    }
+}
+
+impl FromStr for PoolStatus {
+    type Err = StdError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.try_into()
     }
 }
 
