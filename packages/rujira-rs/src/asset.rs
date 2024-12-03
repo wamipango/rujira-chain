@@ -1,6 +1,7 @@
 use std::{
     fmt::{Display, Formatter, Result},
     result,
+    str::FromStr,
 };
 
 use cosmwasm_schema::cw_serde;
@@ -117,17 +118,41 @@ impl Display for Layer1Asset {
     }
 }
 
+impl TryFrom<&String> for Layer1Asset {
+    type Error = Layer1AssetError;
+
+    fn try_from(value: &String) -> result::Result<Self, Self::Error> {
+        value.as_str().try_into()
+    }
+}
+
 impl TryFrom<String> for Layer1Asset {
     type Error = Layer1AssetError;
 
     fn try_from(value: String) -> result::Result<Self, Self::Error> {
+        value.as_str().try_into()
+    }
+}
+
+impl TryFrom<&str> for Layer1Asset {
+    type Error = Layer1AssetError;
+
+    fn try_from(value: &str) -> result::Result<Self, Self::Error> {
         match value.split(".").collect::<Vec<_>>().as_slice() {
             [chain, symbol] => Ok(Self {
                 chain: Chain::try_from(*chain)?,
                 symbol: symbol.to_string(),
             }),
-            _ => Err(Layer1AssetError::Invalid(value)),
+            _ => Err(Layer1AssetError::Invalid(value.to_owned())),
         }
+    }
+}
+
+impl FromStr for Layer1Asset {
+    type Err = Layer1AssetError;
+
+    fn from_str(s: &str) -> result::Result<Self, Self::Err> {
+        s.try_into()
     }
 }
 
