@@ -5,7 +5,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, nonpayable};
-use rujira_rs::merge::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use rujira_rs::merge::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 // use cw2::set_contract_version;
 
@@ -73,12 +73,21 @@ pub fn execute(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     match msg {
+        QueryMsg::Config {} => Ok(to_json_binary(&ConfigResponse::from(Config::load(
+            deps.storage,
+        )?))?),
         QueryMsg::Status {} => Ok(to_json_binary(&status(deps.storage)?)?),
         QueryMsg::Account { addr } => Ok(to_json_binary(&account(
             deps.storage,
             &deps.api.addr_validate(&addr)?,
         )?)?),
     }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    Ok(Response::default())
 }
 
 #[cfg(test)]

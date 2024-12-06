@@ -42,6 +42,9 @@ pub enum ExecuteMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(ConfigResponse)]
+    Config {},
+
     /// Queries the total amount of unallocated `[InstantiateMsg::ruji_denom]` that cannot mathematically be allocated to new deposits
     /// Unallocated $RUJI is dependent on individual Deposit actions. Each time there is a deposit, Shares are claimed at
     /// Defined as `amount = ([InstantiateMsg::ruji_allocation] - TOTAL_ALLOCATED) + (decay_factor * base_ratio * ([InstantiateMsg::merge_supply] - TOTAL_MERGED)` where
@@ -52,6 +55,16 @@ pub enum QueryMsg {
 
     #[returns(AccountResponse)]
     Account { addr: String },
+}
+
+#[cw_serde]
+pub struct ConfigResponse {
+    pub merge_denom: String,
+    pub merge_supply: Uint128,
+    pub ruji_denom: String,
+    pub ruji_allocation: Uint128,
+    pub decay_starts_at: Timestamp,
+    pub decay_ends_at: Timestamp,
 }
 
 #[cw_serde]

@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Item;
-use rujira_rs::merge::InstantiateMsg;
+use rujira_rs::merge::{ConfigResponse, InstantiateMsg};
 
 use crate::ContractError;
 
@@ -19,6 +19,19 @@ pub struct Config {
 
 impl From<InstantiateMsg> for Config {
     fn from(value: InstantiateMsg) -> Self {
+        Self {
+            merge_denom: value.merge_denom,
+            merge_supply: value.merge_supply,
+            ruji_denom: value.ruji_denom,
+            ruji_allocation: value.ruji_allocation,
+            decay_starts_at: value.decay_starts_at,
+            decay_ends_at: value.decay_ends_at,
+        }
+    }
+}
+
+impl From<Config> for ConfigResponse {
+    fn from(value: Config) -> Self {
         Self {
             merge_denom: value.merge_denom,
             merge_supply: value.merge_supply,
