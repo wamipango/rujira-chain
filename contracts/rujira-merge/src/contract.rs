@@ -1,7 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    ensure_eq, to_json_binary, Binary, Deps, DepsMut, Env, Event, MessageInfo, Response,
+    ensure_eq, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, Event,
+    MessageInfo, Response,
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, nonpayable};
@@ -60,7 +61,11 @@ pub fn execute(
         ExecuteMsg::Withdraw { share_amount } => {
             nonpayable(&info)?;
             let amount = execute_withdraw(deps.storage, &config, time, &info.sender, share_amount)?;
-            Ok(Response::default().add_event(
+            let msg = CosmosMsg::Bank(BankMsg::Send {
+                to_address: info.sender.to_string(),
+                amount: vec![Coin::new(amount, config.ruji_denom)],
+            });
+            Ok(Response::default().add_message(msg).add_event(
                 Event::new("merge/withdraw")
                     .add_attribute("account", info.sender)
                     .add_attribute("shares", share_amount)
@@ -275,15 +280,22 @@ mod tests {
         )
         .unwrap_err();
 
-        app.execute_contract(
-            owner.clone(),
-            contract.clone(),
-            &ExecuteMsg::Withdraw {
-                share_amount: Uint128::from(200_000u128),
-            },
-            &[],
-        )
-        .unwrap();
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Withdraw {
+                    share_amount: Uint128::from(200_000u128),
+                },
+                &[],
+            )
+            .unwrap();
+
+        res.assert_event(&Event::new("transfer").add_attributes(vec![
+            ("recipient", owner.as_str()),
+            ("sender", contract.as_str()),
+            ("amount", "200000uruji"),
+        ]));
 
         let status: StatusResponse = app
             .wrap()
