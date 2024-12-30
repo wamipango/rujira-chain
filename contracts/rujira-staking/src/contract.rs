@@ -6,7 +6,9 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
-use rujira_rs::staking::{AccountMsg, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, SudoMsg};
+use rujira_rs::staking::{
+    AccountMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, SudoMsg,
+};
 use rujira_rs::TokenFactory;
 
 use crate::config::Config;
@@ -192,6 +194,7 @@ fn execute_liquid(
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     let config = Config::load(deps.storage)?;
     match msg {
+        QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
         QueryMsg::Status {} => to_json_binary(&status(env, deps, &config)?),
         QueryMsg::Account { addr } => {
             to_json_binary(&account(deps.storage, deps.api.addr_validate(&addr)?)?)

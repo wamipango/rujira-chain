@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, Binary, StdResult, Storage, Uint128};
 use cw_storage_plus::Item;
-use rujira_rs::staking::InstantiateMsg;
+use rujira_rs::staking::{ConfigResponse, InstantiateMsg};
 
 use crate::ContractError;
 
@@ -44,6 +44,20 @@ impl Config {
 
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
         CONFIG.save(storage, self)
+    }
+}
+
+impl From<Config> for ConfigResponse {
+    fn from(value: Config) -> Self {
+        Self {
+            bond_denom: value.bond_denom,
+            revenue_denom: value.revenue_denom,
+            revenue_converter: (
+                value.revenue_converter.0.to_string(),
+                value.revenue_converter.1,
+                value.revenue_converter.2,
+            ),
+        }
     }
 }
 

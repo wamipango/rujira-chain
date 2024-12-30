@@ -54,11 +54,21 @@ pub enum LiquidMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(ConfigResponse)]
+    Config {},
+
     #[returns(StatusResponse)]
     Status {},
 
     #[returns(AccountResponse)]
     Account { addr: String },
+}
+
+#[cw_serde]
+pub struct ConfigResponse {
+    pub bond_denom: String,
+    pub revenue_denom: String,
+    pub revenue_converter: (String, Binary, Uint128),
 }
 
 #[cw_serde]
