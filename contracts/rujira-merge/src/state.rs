@@ -56,8 +56,7 @@ pub fn execute_deposit(
     // 1. We allocate before we process the deposit in order to increase the share ratio _after_ the
     // suplus has been applied to it. Otherwise a new depositor would instantly earn a share of the
     // surplus accrued since the last `allocate`
-    allocate(storage, config, factor)?;
-    let mut pool = POOL.load(storage)?;
+    let mut pool = allocate(storage, config, factor)?;
 
     // The value of the merge amount, denominated in RUJI, with the decay factor applied
     let value = merge_ratio(config, &factor).mul(Decimal::from_ratio(amount, Uint128::one()));
@@ -90,8 +89,7 @@ pub fn execute_withdraw(
     amount: Uint128,
 ) -> Result<Uint128, ContractError> {
     let factor = decay_factor(config, &now);
-    allocate(storage, config, factor)?;
-    let mut pool = POOL.load(storage)?;
+    let mut pool = allocate(storage, config, factor)?;
     let (account_shares, merged) = ACCOUNTS.load(storage, account.clone()).unwrap_or_default();
     let checked_amount = min(account_shares, amount);
     let allocation = pool.leave(checked_amount)?;
@@ -107,7 +105,7 @@ pub fn execute_withdraw(
 /// Calculates the maximum liability of the contract based on the remaining merge tokens,
 /// and therefore the surplus supply of allocation, which can be dsitributed to current
 /// Share holders (mergers), and increases TOTAL_ALLOCATED accordingly
-fn allocate(storage: &mut dyn Storage, config: &Config, factor: Decimal) -> StdResult<Uint128> {
+fn allocate(storage: &dyn Storage, config: &Config, factor: Decimal) -> StdResult<SharePool> {
     let mut pool = POOL.load(storage)?;
     let merged = TOTAL_MERGED.load(storage).unwrap_or_default();
     let remaining = config.merge_supply.checked_sub(merged)?;
@@ -117,8 +115,7 @@ fn allocate(storage: &mut dyn Storage, config: &Config, factor: Decimal) -> StdR
 
     let surplus = config.ruji_allocation.sub(pool.size()).sub(liability);
     pool.deposit(surplus);
-    POOL.save(storage, &pool)?;
-    Ok(pool.size())
+    Ok(pool)
 }
 
 /// The amount of decay remaining in a linear model
@@ -366,12 +363,10 @@ mod tests {
             TOTAL_MERGED.load(storage).unwrap(),
             Uint128::from(10_000_000u128)
         );
-        // Initial allocation of 2.5m
-        // 10% of remaining 97.5m = 9.75m
-        // Deposit ownership of 2.5m * 0.5 * 0.9 = 1.125m
+        // Size remains the same - execute_deposit errors before the pool is saved
         assert_eq!(
             POOL.load(storage).unwrap().size(),
-            Uint128::from(100_000_000u128)
+            Uint128::from(14_500_000u128)
         );
         assert_eq!(
             POOL.load(storage).unwrap().shares(),
