@@ -49,7 +49,9 @@ pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> Result<Binary, ContractE
 mod tests {
 
     use super::*;
+    use cosmwasm_std::Decimal;
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
+    use rujira_rs::Tick;
 
     #[test]
     fn instantiation() {
@@ -58,7 +60,20 @@ mod tests {
 
         let code = Box::new(ContractWrapper::new(execute, instantiate, query));
         let code_id = app.store_code(code);
-        app.instantiate_contract(code_id, owner, &InstantiateMsg {}, &[], "template", None)
-            .unwrap();
+        app.instantiate_contract(
+            code_id,
+            owner,
+            &InstantiateMsg {
+                denoms: ["ruji".to_string(), "eth-usdc".to_string()],
+                tick: Tick::new(4u8),
+                fee_taker: Decimal::zero(),
+                fee_maker: Decimal::zero(),
+                fee_address: app.api().addr_make("fee").to_string(),
+            },
+            &[],
+            "template",
+            None,
+        )
+        .unwrap();
     }
 }

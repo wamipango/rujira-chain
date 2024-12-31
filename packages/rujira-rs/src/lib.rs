@@ -19,4 +19,5 @@ pub use callback::{CallbackData, CallbackMsg};
 pub use chain::Chain;
 pub use interfaces::*;
 pub use share_pool::{SharePool, SharePoolError};
+pub use tick::{Tick, TickError};
 pub use token_factory::{TokenFactory, TokenMetadata};
