@@ -1,5 +1,6 @@
 mod account_pool;
 mod asset;
+mod callback;
 mod chain;
 mod coin;
 mod coins;
@@ -9,10 +10,12 @@ mod msg;
 pub mod proto;
 pub mod query;
 mod share_pool;
+mod tick;
 mod token_factory;
 
 pub use account_pool::{AccountPool, AccountPoolAccount};
 pub use asset::{Asset, Layer1Asset, NativeAsset, SecuredAsset};
+pub use callback::{CallbackData, CallbackMsg};
 pub use chain::Chain;
 pub use interfaces::*;
 pub use share_pool::{SharePool, SharePoolError};
