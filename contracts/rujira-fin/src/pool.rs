@@ -382,6 +382,37 @@ mod tests {
         assert_eq!(Side::Ask, pool.side);
         assert_eq!(key.1, pool.price);
 
+        let iter = POOLS.prefix((Side::Bid, PoolType::Oracle)).range(
+            &store,
+            None,
+            None,
+            cosmwasm_std::Order::Ascending,
+        );
+
+        let ordered = iter.collect::<StdResult<Vec<(Price, Pool)>>>().unwrap();
+
+        assert_eq!(ordered.len(), 4);
+
+        let (price, pool) = ordered[0].clone();
+        assert_eq!(price, Price::Oracle(-1));
+        assert_eq!(Side::Bid, pool.side);
+        assert_eq!(price, pool.price);
+
+        let (price, pool) = ordered[1].clone();
+        assert_eq!(price, Price::Oracle(0));
+        assert_eq!(Side::Bid, pool.side);
+        assert_eq!(price, pool.price);
+
+        let (price, pool) = ordered[2].clone();
+        assert_eq!(price, Price::Oracle(1));
+        assert_eq!(Side::Bid, pool.side);
+        assert_eq!(price, pool.price);
+
+        let (price, pool) = ordered[3].clone();
+        assert_eq!(price, Price::Oracle(2));
+        assert_eq!(Side::Bid, pool.side);
+        assert_eq!(price, pool.price);
+
         // assert_eq!(key_bytes.len(), 2);
     }
 }
