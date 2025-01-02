@@ -180,15 +180,14 @@ impl<'a> PrimaryKey<'a> for PoolKey {
         let mut key = self.side.key();
 
         match self.price {
-            Price::Fixed(fixed) => {
+            Price::Fixed(_) => {
                 key.extend(PoolType::Fixed.key());
-                key.extend(vec![Key::Val128(fixed.numerator().to_be_bytes())])
             }
-            Price::Oracle(deviation) => {
+            Price::Oracle(_) => {
                 key.extend(PoolType::Oracle.key());
-                key.extend(vec![Key::Val8(deviation.to_cw_bytes())])
             }
         };
+        key.extend(self.price.key());
         key
     }
 }

@@ -58,6 +58,20 @@ pub enum Price {
     Oracle(i8),
 }
 
+impl PrimaryKey<'_> for Price {
+    type Prefix = ();
+    type SubPrefix = ();
+    type Suffix = ();
+    type SuperSuffix = ();
+
+    fn key(&self) -> std::vec::Vec<Key<'_>> {
+        match self {
+            Price::Fixed(fixed) => vec![Key::Val128(fixed.numerator().to_be_bytes())],
+            Price::Oracle(deviation) => vec![Key::Val8(deviation.to_cw_bytes())],
+        }
+    }
+}
+
 impl KeyDeserialize for Price {
     type Output = Self;
     const KEY_ELEMS: u16 = 1;
