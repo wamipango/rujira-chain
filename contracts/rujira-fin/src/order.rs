@@ -1,57 +1,17 @@
 use std::cmp::min;
 
-use crate::{error::ContractError, pool::Pool};
+use crate::{error::ContractError, pool::Pool, pool_key::PoolKey};
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, StdError, StdResult, Storage, Timestamp, Uint128};
-use cw_storage_plus::{Key, KeyDeserialize, Map, Prefixer, PrimaryKey};
+use cosmwasm_std::{Addr, StdResult, Storage, Timestamp, Uint128};
+use cw_storage_plus::Map;
 use rujira_rs::{
     bid_pool,
     fin::{Price, Side},
 };
 
-pub const ORDERS: Map<(Addr, OrderKey), Order> = Map::new("orders");
+pub const ORDERS: Map<(Addr, PoolKey), Order> = Map::new("orders");
 const MAX_LIMIT: u8 = 31;
 const DEFAULT_LIMIT: u8 = 10;
-
-#[derive(Clone)]
-pub struct OrderKey(Side, Price);
-
-impl OrderKey {
-    pub fn new(side: Side, price: Price) -> Self {
-        Self(side, price)
-    }
-}
-
-impl PrimaryKey<'_> for OrderKey {
-    type Prefix = ();
-    type SubPrefix = ();
-    type Suffix = ();
-    type SuperSuffix = ();
-
-    fn key(&self) -> Vec<cw_storage_plus::Key> {
-        match self.0 {
-            Side::Bid => [0u8].key(),
-            Side::Ask => [1u8].key(),
-        }
-    }
-}
-impl<'a> Prefixer<'a> for OrderKey {
-    fn prefix(&self) -> Vec<Key> {
-        self.key()
-    }
-}
-impl KeyDeserialize for OrderKey {
-    type Output = Self;
-    const KEY_ELEMS: u16 = 1;
-
-    fn from_vec(value: Vec<u8>) -> cosmwasm_std::StdResult<Self::Output> {
-        match value.first() {
-            Some(0u8) => Ok(Self(Side::Ask, todo!())),
-            Some(1u8) => Ok(Self(Side::Bid, todo!())),
-            _ => Err(StdError::generic_err("invalid Side key")),
-        }
-    }
-}
 
 #[cw_serde]
 pub struct Order {
@@ -71,7 +31,7 @@ impl Order {
         ORDERS
             .load(
                 storage,
-                (owner.clone(), OrderKey::new(side.clone(), price.clone())),
+                (owner.clone(), PoolKey::new(side.clone(), price.clone())),
             )
             .map_err(|_| ContractError::NotFound {})
     }
@@ -101,7 +61,7 @@ impl Order {
             storage,
             (
                 self.owner.clone(),
-                OrderKey::new(pool.side.clone(), pool.price.clone()),
+                PoolKey::new(pool.side.clone(), pool.price.clone()),
             ),
             self,
         )?;
@@ -113,8 +73,66 @@ impl Order {
             storage,
             (
                 self.owner.clone(),
-                OrderKey::new(pool.side.clone(), pool.price.clone()),
+                PoolKey::new(pool.side.clone(), pool.price.clone()),
             ),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::{testing::MockStorage, Addr, Timestamp, Uint128};
+    use rujira_rs::fin::{Price, Side};
+
+    use crate::{pool::Pool, pool_key::PoolKey};
+
+    #[test]
+    fn query_order() {
+        let mut store = MockStorage::new();
+        let timestamp = Timestamp::default();
+        let owner = Addr::unchecked("owner");
+        let offer = Uint128::from(100u128);
+        let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
+        let k = PoolKey::new(Side::Bid, Price::Oracle(0));
+        pool.create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        pool.save(&mut store).unwrap();
+
+        let order = Order::load(&store, &owner, &Side::Bid, &Price::Oracle(0)).unwrap();
+        assert_eq!(order.owner, owner);
+        assert_eq!(order.offer, offer);
+    }
+
+    #[test]
+    fn query_orders_by_owner() {
+        let mut store = MockStorage::new();
+        let timestamp = Timestamp::default();
+        let owner = Addr::unchecked("owner");
+        let owner2 = Addr::unchecked("owner2");
+        let offer = Uint128::from(100u128);
+        let mut pool1 = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
+        let mut pool2 = Pool::load(&store, &Price::Oracle(1), &Side::Bid);
+        let mut pool3 = Pool::load(&store, &Price::Oracle(2), &Side::Bid);
+        pool1
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+        pool2
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+        pool3
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+        pool1
+            .create_order(&mut store, timestamp, &owner2, offer)
+            .unwrap();
+
+        pool1.save(&mut store).unwrap();
+
+        let orders = Order::by_owner(&store, &owner, None, None).unwrap();
+        assert_eq!(orders.len(), 3);
+        assert_eq!(orders[0].owner, owner);
+        assert_eq!(orders[0].offer, offer);
     }
 }

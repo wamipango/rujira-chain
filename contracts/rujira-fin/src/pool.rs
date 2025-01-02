@@ -1,15 +1,13 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{
-    Addr, Decimal, Fraction, StdError, StdResult, Storage, Timestamp, Uint128, Uint256,
-};
-use cw_storage_plus::{IntKey, Key, KeyDeserialize, Map, Prefixer, PrimaryKey};
+use cosmwasm_std::{Addr, StdResult, Storage, Timestamp, Uint128};
+use cw_storage_plus::Map;
 use rujira_rs::{
     bid_pool,
     fin::{Price, Side},
     Frac,
 };
 
-use crate::{order::Order, ContractError};
+use crate::{order::Order, pool_key::PoolKey, ContractError};
 const SNAPSHOTS: Map<(PoolKey, bid_pool::SumSnapshotKey), Frac> = Map::new("snapshots");
 const POOLS: Map<PoolKey, Pool> = Map::new("pools");
 const BID_POOLS: Map<PoolKey, bid_pool::Pool> = Map::new("bid-pools");
@@ -59,6 +57,7 @@ impl Pool {
             bid: self.pool.new_bid(offer.into()),
         };
         self.save(storage)?;
+        order.save(storage, &self)?;
         Ok(order)
     }
 
@@ -118,104 +117,12 @@ impl Pool {
     }
 }
 
-// Provided as a type to prefix on price type, without duplicating in the key
-#[derive(Clone, Debug, PartialEq)]
-enum PoolType {
-    Fixed,
-    Oracle,
-}
-
-impl PrimaryKey<'_> for PoolType {
-    type Prefix = ();
-    type SubPrefix = ();
-    type Suffix = ();
-    type SuperSuffix = ();
-
-    fn key(&self) -> std::vec::Vec<Key<'_>> {
-        match self {
-            PoolType::Fixed => vec![Key::Val8([0])],
-            PoolType::Oracle => vec![Key::Val8([1])],
-        }
-    }
-}
-
-impl<'a> Prefixer<'a> for PoolType {
-    fn prefix(&self) -> Vec<Key> {
-        self.key()
-    }
-}
-
-impl KeyDeserialize for PoolType {
-    type Output = Self;
-    const KEY_ELEMS: u16 = 1;
-
-    fn from_vec(value: Vec<u8>) -> cosmwasm_std::StdResult<Self::Output> {
-        match value.first() {
-            Some(0u8) => Ok(Self::Fixed),
-            Some(1u8) => Ok(Self::Oracle),
-            _ => Err(StdError::generic_err("invalid PoolType key")),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct PoolKey {
-    side: Side,
-    price: Price,
-}
-
-impl PoolKey {
-    pub fn new(side: Side, price: Price) -> Self {
-        Self { side, price }
-    }
-}
-
-impl<'a> PrimaryKey<'a> for PoolKey {
-    type Prefix = (Side, PoolType);
-    type SubPrefix = Side;
-    type Suffix = Price;
-    type SuperSuffix = (PoolType, Price);
-
-    fn key(&self) -> std::vec::Vec<Key<'_>> {
-        let mut key = self.side.key();
-
-        match self.price {
-            Price::Fixed(_) => {
-                key.extend(PoolType::Fixed.key());
-            }
-            Price::Oracle(_) => {
-                key.extend(PoolType::Oracle.key());
-            }
-        };
-        key.extend(self.price.key());
-        key
-    }
-}
-
-impl<'a> Prefixer<'a> for PoolKey {
-    fn prefix(&self) -> Vec<Key> {
-        self.key()
-    }
-}
-
-impl KeyDeserialize for PoolKey {
-    type Output = Self;
-    const KEY_ELEMS: u16 = 3;
-
-    fn from_vec(value: Vec<u8>) -> cosmwasm_std::StdResult<Self::Output> {
-        // 2 bytes namespace length
-        let side = <Side>::from_vec(value[2..3].to_vec())?;
-        // 2 more
-        let price = <Price>::from_vec(value[6..].to_vec())?;
-        Ok(Self { side, price })
-    }
-}
-
 #[cfg(test)]
-
 mod tests {
+    use crate::pool_key::PoolType;
+
     use super::*;
-    use cosmwasm_std::{testing::MockStorage, Decimal, Decimal256};
+    use cosmwasm_std::{testing::MockStorage, Decimal, Decimal256, Uint256};
     use cw_storage_plus::Bound;
     use rujira_rs::fin::{Price, Side};
     use std::str::FromStr;
@@ -251,53 +158,6 @@ mod tests {
         // Now check it's restored to the pool correctly
         let pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
         assert_eq!(pool.pool, bp);
-    }
-
-    #[test]
-    fn pool_key() {
-        let key = PoolKey::new(Side::Ask, Price::Fixed(Decimal::from_str("1.0").unwrap()));
-        let key_bytes = key.key();
-
-        assert_eq!(key_bytes.len(), 3);
-        assert_eq!(key_bytes[0].as_ref(), &[0]);
-        assert_eq!(key_bytes[1].as_ref(), &[0]);
-        assert_eq!(
-            key_bytes[2].as_ref(),
-            &[0, 0, 0, 0, 0, 0, 0, 0, 13, 224, 182, 179, 167, 100, 0, 0]
-        );
-
-        let key = PoolKey::new(Side::Bid, Price::Oracle(-15));
-        let key_bytes = key.key();
-
-        assert_eq!(key_bytes[0].as_ref(), &[1]);
-        assert_eq!(key_bytes[1].as_ref(), &[1]);
-        assert_eq!(key_bytes[2].as_ref(), &[113]);
-
-        let key = PoolKey::new(Side::Bid, Price::Oracle(21));
-        let key_bytes = key.key();
-
-        assert_eq!(key_bytes[0].as_ref(), &[1]);
-        assert_eq!(key_bytes[1].as_ref(), &[1]);
-        assert_eq!(key_bytes[2].as_ref(), &[149]);
-
-        let key = PoolKey::new(Side::Bid, Price::Oracle(0));
-        let key_bytes = key.key();
-
-        assert_eq!(key_bytes[0].as_ref(), &[1]);
-        assert_eq!(key_bytes[1].as_ref(), &[1]);
-        assert_eq!(key_bytes[2].as_ref(), &[128]);
-
-        let key = PoolKey::new(Side::Bid, Price::Oracle(0));
-        assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
-
-        let key = PoolKey::new(Side::Ask, Price::Oracle(0));
-        assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
-
-        let key = PoolKey::new(Side::Ask, Price::Fixed(Decimal::one()));
-        assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
-
-        let key = PoolKey::new(Side::Bid, Price::Fixed(Decimal::one()));
-        assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
     }
 
     #[test]
