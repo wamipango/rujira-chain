@@ -216,6 +216,7 @@ impl KeyDeserialize for PoolKey {
 mod tests {
     use super::*;
     use cosmwasm_std::{testing::MockStorage, Decimal};
+    use cw_storage_plus::Bound;
     use rujira_rs::fin::{Price, Side};
     use std::str::FromStr;
 
@@ -409,6 +410,27 @@ mod tests {
         assert_eq!(price, pool.price);
 
         let (price, pool) = ordered[3].clone();
+        assert_eq!(price, Price::Oracle(2));
+        assert_eq!(Side::Bid, pool.side);
+        assert_eq!(price, pool.price);
+
+        let iter = POOLS.prefix((Side::Bid, PoolType::Oracle)).range(
+            &store,
+            Some(Bound::exclusive(Price::Oracle(0))),
+            None,
+            cosmwasm_std::Order::Ascending,
+        );
+
+        let ordered = iter.collect::<StdResult<Vec<(Price, Pool)>>>().unwrap();
+
+        assert_eq!(ordered.len(), 2);
+
+        let (price, pool) = ordered[0].clone();
+        assert_eq!(price, Price::Oracle(1));
+        assert_eq!(Side::Bid, pool.side);
+        assert_eq!(price, pool.price);
+
+        let (price, pool) = ordered[1].clone();
         assert_eq!(price, Price::Oracle(2));
         assert_eq!(Side::Bid, pool.side);
         assert_eq!(price, pool.price);
