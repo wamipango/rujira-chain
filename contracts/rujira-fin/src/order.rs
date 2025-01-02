@@ -9,7 +9,7 @@ use rujira_rs::{
     fin::{Price, Side},
 };
 
-pub const ORDERS: Map<(Addr, PoolKey), Order> = Map::new("orders");
+pub const ORDERS: Map<(Addr, PoolKey), (Timestamp, Uint128, bid_pool::Bid)> = Map::new("orders");
 const MAX_LIMIT: u8 = 31;
 const DEFAULT_LIMIT: u8 = 10;
 
@@ -28,12 +28,18 @@ impl Order {
         side: &Side,
         price: &Price,
     ) -> Result<Self, ContractError> {
-        ORDERS
+        let (updated_at, offer, bid) = ORDERS
             .load(
                 storage,
                 (owner.clone(), PoolKey::new(side.clone(), price.clone())),
             )
-            .map_err(|_| ContractError::NotFound {})
+            .map_err(|_| ContractError::NotFound {})?;
+        Ok(Self {
+            owner: owner.clone(),
+            updated_at,
+            offer,
+            bid,
+        })
     }
 
     pub fn by_owner(
@@ -48,7 +54,14 @@ impl Order {
             .range(storage, None, None, cosmwasm_std::Order::Ascending)
             .skip(offset.unwrap_or(0) as usize)
             .take(limit as usize)
-            .map(|x| x.map(|(_, o)| o))
+            .map(|x| {
+                x.map(|(_, (updated_at, offer, bid))| Self {
+                    owner: owner.clone(),
+                    updated_at,
+                    offer,
+                    bid,
+                })
+            })
             .collect()
     }
 
@@ -63,7 +76,7 @@ impl Order {
                 self.owner.clone(),
                 PoolKey::new(pool.side.clone(), pool.price.clone()),
             ),
-            self,
+            &(self.updated_at, self.offer, self.bid.clone()),
         )?;
         Ok(())
     }

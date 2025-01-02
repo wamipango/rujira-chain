@@ -178,6 +178,7 @@ mod tests {
         // Now check it's restored to the pool correctly
         let pool = Pool::load(&store, &price, &Side::Bid);
         assert_eq!(pool.pool, bp);
+        dbg!(&store);
     }
 
     #[test]
