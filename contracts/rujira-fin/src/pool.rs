@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, StdResult, Storage, Timestamp, Uint128};
+use cosmwasm_std::{Addr, Decimal256, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Map;
 use rujira_rs::{
     bid_pool,
@@ -34,15 +34,18 @@ impl Pool {
     }
 
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
-        let key = PoolKey::new(self.side.clone(), self.price.clone());
-        BID_POOLS.save(storage, key.clone(), &self.pool)?;
+        BID_POOLS.save(storage, self.key(), &self.pool)?;
         // Clear empty pools so they're not iterated over during a swap
         if self.pool.is_zero() {
-            POOLS.remove(storage, key);
+            POOLS.remove(storage, self.key());
             return Ok(());
         }
 
-        POOLS.save(storage, key, &())
+        POOLS.save(storage, self.key(), &())
+    }
+
+    fn key(&self) -> PoolKey {
+        PoolKey::new(self.side.clone(), self.price.clone())
     }
 
     pub fn create_order(
@@ -92,6 +95,22 @@ impl Pool {
         Ok(Uint128::try_from(claimed)?)
     }
 
+    pub fn distribute(&mut self, storage: &mut dyn Storage, amount: Uint128) -> StdResult<Uint128> {
+        let price = match self.price {
+            Price::Fixed(decimal) => decimal,
+            Price::Oracle(_) => todo!(),
+        };
+        let (amount, _, snapshots) = self
+            .pool
+            .distribute(amount.into(), &Decimal256::from(price))?;
+
+        for s in snapshots {
+            SNAPSHOTS.save(storage, (self.key(), s.key()), &s.sum)?;
+        }
+
+        Ok(amount.try_into()?)
+    }
+
     pub fn sync_order(
         &self,
         storage: &dyn Storage,
@@ -124,7 +143,7 @@ mod tests {
     use crate::pool_key::PoolType;
 
     use super::*;
-    use cosmwasm_std::{testing::MockStorage, Decimal, Decimal256, Uint256};
+    use cosmwasm_std::{testing::MockStorage, Decimal};
     use cw_storage_plus::Bound;
     use rujira_rs::fin::{Price, Side};
     use std::str::FromStr;
@@ -136,8 +155,9 @@ mod tests {
         let timestamp = Timestamp::default();
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
-        let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
-        let k = PoolKey::new(Side::Bid, Price::Oracle(0));
+        let price = Price::Fixed(Decimal::one());
+        let mut pool = Pool::load(&store, &price, &Side::Bid);
+        let k = PoolKey::new(Side::Bid, price.clone());
         pool.create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
@@ -146,9 +166,7 @@ mod tests {
         POOLS.load(&store, k.clone()).unwrap();
         BID_POOLS.load(&store, k.clone()).unwrap();
 
-        pool.pool
-            .distribute(Uint256::from(100u128), &Decimal256::one())
-            .unwrap();
+        pool.distribute(&mut store, Uint128::from(100u128)).unwrap();
 
         // Bid Pool should have been emptied, so the container Pool shold be cleared, but the BidPool should remain
         pool.save(&mut store).unwrap();
@@ -158,7 +176,7 @@ mod tests {
         assert_ne!(bp, bid_pool::Pool::default());
 
         // Now check it's restored to the pool correctly
-        let pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
+        let pool = Pool::load(&store, &price, &Side::Bid);
         assert_eq!(pool.pool, bp);
     }
 
