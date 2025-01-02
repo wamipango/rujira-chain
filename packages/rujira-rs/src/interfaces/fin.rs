@@ -1,5 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, Decimal, Timestamp, Uint128};
+use cosmwasm_std::{Coin, Decimal, Fraction, StdError, Timestamp, Uint128};
+use cw_storage_plus::{IntKey, Key, KeyDeserialize, Prefixer, PrimaryKey};
 
 use crate::{tick::Tick, CallbackData};
 
@@ -48,13 +49,79 @@ pub enum ExecuteMsg {
     ///
     /// Funds sent must be equal to the net change of balances. Funds withdrawn in step 0 and retracted in 1's,
     /// can be reused to fund orders in 1 and 3  
-    Order(Vec<(Price, Uint128)>),
+    Order(Vec<(Side, Price, Uint128)>),
 }
 
 #[cw_serde]
 pub enum Price {
     Fixed(Decimal),
     Oracle(i8),
+}
+
+impl PrimaryKey<'_> for Price {
+    type Prefix = ();
+    type SubPrefix = ();
+    type Suffix = ();
+    type SuperSuffix = ();
+
+    fn key(&self) -> std::vec::Vec<Key<'_>> {
+        match self {
+            Price::Fixed(fixed) => vec![Key::Val128(fixed.numerator().to_be_bytes())],
+            Price::Oracle(deviation) => vec![Key::Val8(deviation.to_cw_bytes())],
+        }
+    }
+}
+
+impl KeyDeserialize for Price {
+    type Output = Self;
+    const KEY_ELEMS: u16 = 1;
+
+    fn from_vec(value: Vec<u8>) -> cosmwasm_std::StdResult<Self::Output> {
+        match value.first() {
+            Some(0u8) => Ok(Self::Fixed(todo!())),
+            Some(1u8) => Ok(Self::Oracle(todo!())),
+            _ => Err(StdError::generic_err("invalid PoolType key")),
+        }
+    }
+}
+
+#[cw_serde]
+pub enum Side {
+    Ask,
+    Bid,
+}
+
+impl PrimaryKey<'_> for Side {
+    type Prefix = ();
+    type SubPrefix = ();
+    type Suffix = ();
+    type SuperSuffix = ();
+
+    fn key(&self) -> std::vec::Vec<Key<'_>> {
+        match self {
+            Side::Ask => vec![Key::Val8([0])],
+            Side::Bid => vec![Key::Val8([1])],
+        }
+    }
+}
+
+impl<'a> Prefixer<'a> for Side {
+    fn prefix(&self) -> Vec<Key> {
+        self.key()
+    }
+}
+
+impl KeyDeserialize for Side {
+    type Output = Self;
+    const KEY_ELEMS: u16 = 1;
+
+    fn from_vec(value: Vec<u8>) -> cosmwasm_std::StdResult<Self::Output> {
+        match value.first() {
+            Some(0u8) => Ok(Self::Ask),
+            Some(1u8) => Ok(Self::Bid),
+            _ => Err(StdError::generic_err("invalid Side key")),
+        }
+    }
 }
 
 #[cw_serde]
@@ -81,14 +148,15 @@ pub enum QueryMsg {
     #[returns(SimulationResponse)]
     Simulate(Coin),
 
+    /// Find a specific order for a user at a price
     #[returns(OrderResponse)]
-    Order(Uint128),
+    Order((String, Side, Price)),
 
     /// Paginate user orders. Upper limit of 30 per page
     #[returns(OrdersResponse)]
     Orders {
         owner: String,
-        start_after: Option<Uint128>,
+        offset: Option<u8>,
         limit: Option<u8>,
     },
 
@@ -125,11 +193,11 @@ pub enum StatusResponse {
 
 #[cw_serde]
 pub struct OrderResponse {
-    /// A unique ID for the order
-    pub idx: Uint128,
-
     /// The account which placed the order
     pub owner: String,
+
+    /// The side of the order
+    pub side: Side,
 
     /// The quote price of this order
     pub price: Price,
@@ -138,13 +206,13 @@ pub struct OrderResponse {
     pub updated_at: Timestamp,
 
     /// Offer amount at updated_at time
-    pub offer: Coin,
+    pub offer: Uint128,
 
     /// The remaining offer amount
-    pub remaining: Coin,
+    pub remaining: Uint128,
 
     /// Amount of filled order awaiting withdrawal
-    pub filled: Coin,
+    pub filled: Uint128,
 }
 
 #[cw_serde]

@@ -11,6 +11,7 @@ pub struct AccountPool {
     sum: Decimal,
 }
 
+/// Basic account-based revenue distribution system
 impl AccountPool {
     pub fn join(&mut self, amount: Uint128) -> AccountPoolAccount {
         self.total += amount;

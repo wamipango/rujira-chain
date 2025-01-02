@@ -1,41 +1,45 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{StdResult, Storage};
+use cosmwasm_std::{Addr, Api, Decimal, StdResult};
 use cw_storage_plus::Item;
-use rujira_rs::fin::InstantiateMsg;
+use rujira_rs::{
+    fin::{ConfigResponse, InstantiateMsg},
+    Tick,
+};
 
-use crate::ContractError;
-
-static CONFIG: Item<Config> = Item::new("config");
+pub static CONFIG: Item<Config> = Item::new("config");
 
 #[cw_serde]
-pub struct Config {}
-
-impl From<InstantiateMsg> for Config {
-    fn from(_: InstantiateMsg) -> Self {
-        Self {}
-    }
+pub struct Config {
+    pub denoms: [String; 2],
+    // pub oracles: Oracles,
+    pub tick: Tick,
+    pub fee_maker: Decimal,
+    pub fee_taker: Decimal,
+    pub fee_address: Addr,
 }
 
 impl Config {
-    pub fn load(storage: &dyn Storage) -> StdResult<Self> {
-        CONFIG.load(storage)
-    }
-
-    pub fn validate(&self) -> Result<(), ContractError> {
-        Ok(())
-    }
-
-    pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
-        CONFIG.save(storage, self)
+    pub fn new(api: &dyn Api, value: InstantiateMsg) -> StdResult<Self> {
+        Ok(Self {
+            denoms: value.denoms.clone(),
+            tick: value.tick,
+            fee_taker: value.fee_taker,
+            fee_maker: value.fee_maker,
+            fee_address: api.addr_validate(value.fee_address.as_str())?,
+            // oracles: value.oracles,
+        })
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn validation() {
-        Config {}.validate().unwrap();
+impl From<Config> for ConfigResponse {
+    fn from(value: Config) -> Self {
+        Self {
+            denoms: value.denoms,
+            tick: value.tick,
+            fee_maker: value.fee_maker.into(),
+            fee_taker: value.fee_taker.into(),
+            fee_address: value.fee_address.to_string(),
+            // oracles: value.oracles,
+        }
     }
 }

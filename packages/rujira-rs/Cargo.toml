@@ -13,3 +13,5 @@ anybuf = { workspace = true }
 thiserror = { workspace = true }
 prost = { workspace = true }
 regex = { workspace = true }
+schemars = { workspace = true }
+cw-storage-plus = { workspace = true }

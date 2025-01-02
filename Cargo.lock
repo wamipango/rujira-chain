@@ -1007,9 +1007,11 @@ dependencies = [
  "anybuf",
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-storage-plus",
  "cw-utils",
  "prost",
  "regex",
+ "schemars",
  "thiserror",
 ]
 

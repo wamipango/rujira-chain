@@ -2,10 +2,15 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response};
 use cw2::set_contract_version;
-use rujira_rs::fin::{ExecuteMsg, InstantiateMsg, QueryMsg, SudoMsg};
+use rujira_rs::fin::{
+    BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, Price,
+    QueryMsg, Side, StatusResponse, SudoMsg,
+};
 
-use crate::config::Config;
+use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
+use crate::order::Order;
+use crate::pool::Pool;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:rujira-fin";
@@ -19,9 +24,9 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::from(msg);
-    config.validate()?;
-    config.save(deps.storage)?;
+    let config = Config::new(deps.api, msg);
+    // config.validate()?;
+    // config.save(deps.storage)?;
     Ok(Response::default())
 }
 
@@ -41,8 +46,63 @@ pub fn sudo(_deps: DepsMut, _env: Env, _msg: SudoMsg) -> Result<Response, Contra
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> Result<Binary, ContractError> {
-    Ok(to_json_binary(&())?)
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    // let rate = Rate::load(&deps.querier, &config)?;
+    match msg {
+        QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
+        QueryMsg::Status {} => to_json_binary(&StatusResponse::Active),
+        QueryMsg::Order((owner, side, price)) => {
+            let addr = deps.api.addr_validate(&owner)?;
+            let pool = Pool::load(deps.storage, &price, &side);
+            let order = pool.load_order(deps.storage, &addr)?;
+            to_json_binary(&order_response(&order, &pool.side, &pool.price))
+        }
+        QueryMsg::Orders {
+            owner,
+            offset,
+            limit,
+        } => {
+            let addr = deps.api.addr_validate(owner.as_str())?;
+            let orders: Result<Vec<OrderResponse>, ContractError> =
+                Order::by_owner(deps.storage, &addr, offset, limit)?
+                    .iter_mut()
+                    .map(|order| {
+                        // TODO: Decode from key in by_owner
+                        let side = todo!();
+                        let price = todo!();
+                        let pool = Pool::load(deps.storage, &price, &side);
+                        pool.sync_order(deps.storage, &mut order)?;
+                        Ok(order_response(order, &side, &price))
+                    })
+                    .collect();
+
+            to_json_binary(&OrdersResponse { orders: orders? })
+        }
+        QueryMsg::Book { limit, offset } => {
+            let limit = limit.unwrap_or(100);
+            let offset = offset.unwrap_or(0);
+
+            to_json_binary(&BookResponse {
+                base: todo!(),
+                quote: todo!(),
+            })
+        }
+        QueryMsg::Simulate(offer) => todo!(),
+    }
+    .map_err(ContractError::Std)
+}
+
+fn order_response(order: &Order, side: &Side, price: &Price) -> OrderResponse {
+    OrderResponse {
+        owner: order.owner.to_string(),
+        side: side.clone(),
+        price: price.clone(),
+        updated_at: order.updated_at,
+        offer: order.offer,
+        remaining: order.bid.amount().try_into().unwrap(),
+        filled: order.bid.filled().try_into().unwrap(),
+    }
 }
 
 #[cfg(test)]

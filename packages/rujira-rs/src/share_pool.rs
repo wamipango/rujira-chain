@@ -10,6 +10,7 @@ pub struct SharePool {
     shares: Uint128,
 }
 
+/// Simple share-based pool implementation where your membership entitles you to a share of the pool
 impl SharePool {
     /// Adds a deposit to the pool, returning the new shares issued
     pub fn join(&mut self, amount: Uint128) -> Result<Uint128, SharePoolError> {

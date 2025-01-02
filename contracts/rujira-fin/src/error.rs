@@ -1,6 +1,6 @@
-use cosmwasm_std::{CheckedFromRatioError, StdError};
+use cosmwasm_std::{CheckedFromRatioError, ConversionOverflowError, StdError};
 use cw_utils::PaymentError;
-use rujira_rs::SharePoolError;
+use rujira_rs::bid_pool::BidPoolError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -15,13 +15,16 @@ pub enum ContractError {
     CheckedFromRatio(#[from] CheckedFromRatioError),
 
     #[error("{0}")]
-    SharePool(#[from] SharePoolError),
+    ConversionOverflow(#[from] ConversionOverflowError),
+
+    #[error("{0}")]
+    BidPool(#[from] BidPoolError),
 
     #[error("Unauthorized")]
     Unauthorized {},
 
-    #[error("InsufficientFunds")]
-    InsufficientFunds {},
+    #[error("NotFound")]
+    NotFound {},
 
     #[error("Invalid: {0}")]
     Invalid(String),
