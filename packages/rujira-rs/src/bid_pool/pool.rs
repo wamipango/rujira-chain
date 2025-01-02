@@ -86,7 +86,7 @@ impl Pool {
         self.increment_epoch();
         snapshots.push(SumSnapshot::from(*self));
 
-        Ok((consumed_amount, todo!(), snapshots))
+        Ok((consumed_amount, consumed_offer.to_uint_ceil(), snapshots))
     }
 
     fn distribute_partial(

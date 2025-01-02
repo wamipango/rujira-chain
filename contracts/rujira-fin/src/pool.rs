@@ -215,10 +215,43 @@ impl KeyDeserialize for PoolKey {
 
 mod tests {
     use super::*;
-    use cosmwasm_std::{testing::MockStorage, Decimal};
+    use cosmwasm_std::{testing::MockStorage, Decimal, Decimal256};
     use cw_storage_plus::Bound;
     use rujira_rs::fin::{Price, Side};
     use std::str::FromStr;
+
+    #[test]
+    // Verify that when a Pool is removed from storage, the BidPool is retained and the correct values used for syncing bids
+    fn pool_bid_pool_replacement() {
+        let mut store = MockStorage::new();
+        let timestamp = Timestamp::default();
+        let owner = Addr::unchecked("owner");
+        let offer = Uint128::from(100u128);
+        let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
+        let k = PoolKey::new(Side::Bid, Price::Oracle(0));
+        pool.create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        pool.save(&mut store).unwrap();
+        // Check both the pool and bid pool are stored
+        POOLS.load(&store, k.clone()).unwrap();
+        BID_POOLS.load(&store, k.clone()).unwrap();
+
+        pool.pool
+            .distribute(Uint256::from(100u128), &Decimal256::one())
+            .unwrap();
+
+        // Bid Pool should have been emptied, so the container Pool shold be cleared, but the BidPool should remain
+        pool.save(&mut store).unwrap();
+        POOLS.load(&store, k.clone()).unwrap_err();
+        let bp = BID_POOLS.load(&store, k.clone()).unwrap();
+        // Check it's different from the default
+        assert_ne!(bp, bid_pool::Pool::default());
+
+        // Now check it's restored to the pool correctly
+        let pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
+        assert_eq!(pool.pool, bp);
+    }
 
     #[test]
     fn pool_key() {
