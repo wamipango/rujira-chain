@@ -9,7 +9,9 @@ use rujira_rs::{
 
 use crate::{order::Order, pool_key::PoolKey, ContractError};
 const SNAPSHOTS: Map<(PoolKey, bid_pool::SumSnapshotKey), Frac> = Map::new("snapshots");
-const POOLS: Map<PoolKey, Pool> = Map::new("pools");
+// The POOLS Map is used simply as an indicator that there is a non-zero BidPool at this key
+// The BID_POOLS Map is used to store the BidPool itself, and the Key is used to populate the Pool values
+const POOLS: Map<PoolKey, ()> = Map::new("pools");
 const BID_POOLS: Map<PoolKey, bid_pool::Pool> = Map::new("bid-pools");
 
 /// A wrapper around a BidPool to provide a side & price, used for keying orders and
@@ -24,11 +26,11 @@ pub struct Pool {
 impl Pool {
     pub fn load(storage: &dyn Storage, price: &Price, side: &Side) -> Self {
         let key = PoolKey::new(side.clone(), price.clone());
-        POOLS.load(storage, key.clone()).unwrap_or_else(|_| Self {
+        Self {
             price: price.clone(),
             side: side.clone(),
             pool: BID_POOLS.load(storage, key).unwrap_or_default(),
-        })
+        }
     }
 
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
@@ -40,7 +42,7 @@ impl Pool {
             return Ok(());
         }
 
-        POOLS.save(storage, key, self)
+        POOLS.save(storage, key, &())
     }
 
     pub fn create_order(
@@ -204,54 +206,40 @@ mod tests {
 
         let iter = POOLS.range(&store, None, None, cosmwasm_std::Order::Ascending);
 
-        let ordered = iter.collect::<StdResult<Vec<(PoolKey, Pool)>>>().unwrap();
+        let ordered = iter.collect::<StdResult<Vec<(PoolKey, ())>>>().unwrap();
         assert_eq!(ordered.len(), 7);
 
         // Result should be ordered by Side, then Price Type, then Price Value
-        let (key, pool) = ordered[0].clone();
+        let (key, _) = ordered[0].clone();
         assert_eq!(key.side, Side::Ask);
         assert_eq!(key.price, Price::Fixed(Decimal::one()));
-        assert_eq!(key.side, pool.side);
-        assert_eq!(key.price, pool.price);
 
-        let (key, pool) = ordered[1].clone();
+        let (key, _) = ordered[1].clone();
         assert_eq!(key.side, Side::Ask);
         assert_eq!(key.price, Price::Oracle(2));
-        assert_eq!(key.side, pool.side);
-        assert_eq!(key.price, pool.price);
 
-        let (key, pool) = ordered[2].clone();
+        let (key, _) = ordered[2].clone();
         assert_eq!(key.side, Side::Bid);
         assert_eq!(
             key.price,
             Price::Fixed(Decimal::from_str("1.111111111111111111").unwrap())
         );
-        assert_eq!(key.side, pool.side);
-        assert_eq!(key.price, pool.price);
 
-        let (key, pool) = ordered[3].clone();
+        let (key, _) = ordered[3].clone();
         assert_eq!(key.side, Side::Bid);
         assert_eq!(key.price, Price::Oracle(-1));
-        assert_eq!(key.side, pool.side);
-        assert_eq!(key.price, pool.price);
 
-        let (key, pool) = ordered[4].clone();
+        let (key, _) = ordered[4].clone();
         assert_eq!(key.side, Side::Bid);
         assert_eq!(key.price, Price::Oracle(0));
-        assert_eq!(key.side, pool.side);
-        assert_eq!(key.price, pool.price);
 
-        let (key, pool) = ordered[5].clone();
+        let (key, _) = ordered[5].clone();
         assert_eq!(key.side, Side::Bid);
         assert_eq!(key.price, Price::Oracle(1));
-        assert_eq!(key.side, pool.side);
-        assert_eq!(key.price, pool.price);
 
-        let (key, pool) = ordered[6].clone();
+        let (key, _) = ordered[6].clone();
         assert_eq!(key.side, Side::Bid);
         assert_eq!(key.price, Price::Oracle(2));
-        assert_eq!(key.side, pool.side);
-        assert_eq!(key.price, pool.price);
 
         let iter =
             POOLS
@@ -259,22 +247,18 @@ mod tests {
                 .range(&store, None, None, cosmwasm_std::Order::Ascending);
 
         let ordered = iter
-            .collect::<StdResult<Vec<((PoolType, Price), Pool)>>>()
+            .collect::<StdResult<Vec<((PoolType, Price), ())>>>()
             .unwrap();
 
         assert_eq!(ordered.len(), 2);
 
-        let (key, pool) = ordered[0].clone();
+        let (key, _) = ordered[0].clone();
         assert_eq!(key.0, PoolType::Fixed);
         assert_eq!(key.1, Price::Fixed(Decimal::one()));
-        assert_eq!(Side::Ask, pool.side);
-        assert_eq!(key.1, pool.price);
 
-        let (key, pool) = ordered[1].clone();
+        let (key, _) = ordered[1].clone();
         assert_eq!(key.0, PoolType::Oracle);
         assert_eq!(key.1, Price::Oracle(2));
-        assert_eq!(Side::Ask, pool.side);
-        assert_eq!(key.1, pool.price);
 
         let iter = POOLS.prefix((Side::Bid, PoolType::Oracle)).range(
             &store,
@@ -283,29 +267,21 @@ mod tests {
             cosmwasm_std::Order::Ascending,
         );
 
-        let ordered = iter.collect::<StdResult<Vec<(Price, Pool)>>>().unwrap();
+        let ordered = iter.collect::<StdResult<Vec<(Price, ())>>>().unwrap();
 
         assert_eq!(ordered.len(), 4);
 
-        let (price, pool) = ordered[0].clone();
+        let (price, _) = ordered[0].clone();
         assert_eq!(price, Price::Oracle(-1));
-        assert_eq!(Side::Bid, pool.side);
-        assert_eq!(price, pool.price);
 
-        let (price, pool) = ordered[1].clone();
+        let (price, _) = ordered[1].clone();
         assert_eq!(price, Price::Oracle(0));
-        assert_eq!(Side::Bid, pool.side);
-        assert_eq!(price, pool.price);
 
-        let (price, pool) = ordered[2].clone();
+        let (price, _) = ordered[2].clone();
         assert_eq!(price, Price::Oracle(1));
-        assert_eq!(Side::Bid, pool.side);
-        assert_eq!(price, pool.price);
 
-        let (price, pool) = ordered[3].clone();
+        let (price, _) = ordered[3].clone();
         assert_eq!(price, Price::Oracle(2));
-        assert_eq!(Side::Bid, pool.side);
-        assert_eq!(price, pool.price);
 
         let iter = POOLS.prefix((Side::Bid, PoolType::Oracle)).range(
             &store,
@@ -314,19 +290,15 @@ mod tests {
             cosmwasm_std::Order::Ascending,
         );
 
-        let ordered = iter.collect::<StdResult<Vec<(Price, Pool)>>>().unwrap();
+        let ordered = iter.collect::<StdResult<Vec<(Price, ())>>>().unwrap();
 
         assert_eq!(ordered.len(), 2);
 
-        let (price, pool) = ordered[0].clone();
+        let (price, _) = ordered[0].clone();
         assert_eq!(price, Price::Oracle(1));
-        assert_eq!(Side::Bid, pool.side);
-        assert_eq!(price, pool.price);
 
-        let (price, pool) = ordered[1].clone();
+        let (price, _) = ordered[1].clone();
         assert_eq!(price, Price::Oracle(2));
-        assert_eq!(Side::Bid, pool.side);
-        assert_eq!(price, pool.price);
 
         // assert_eq!(key_bytes.len(), 2);
     }
