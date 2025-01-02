@@ -206,18 +206,8 @@ impl KeyDeserialize for PoolKey {
 
     fn from_vec(value: Vec<u8>) -> cosmwasm_std::StdResult<Self::Output> {
         let side = <Side>::from_vec(value[..1].to_vec())?;
-        let type_ = <PoolType>::from_vec(value[1..2].to_vec())?;
-        match type_ {
-            PoolType::Oracle => Ok(Self {
-                side,
-                price: Price::Oracle(i8::from_cw_bytes([value[2]])),
-            }),
-            PoolType::Fixed => {
-                let val = Uint128::from(u128::from_be_bytes(value[2..18].try_into().unwrap()));
-                let price = Price::Fixed(Decimal::new(val));
-                Ok(Self { side, price })
-            }
-        }
+        let price = <Price>::from_vec(value[2..].to_vec())?;
+        Ok(Self { side, price })
     }
 }
 
@@ -321,9 +311,9 @@ mod tests {
 
         let iter = POOLS.range(&store, None, None, cosmwasm_std::Order::Ascending);
 
-        for x in iter {
-            dbg!(x);
-        }
+        let ordered: Vec<StdResult<(PoolKey, Pool)>> = iter.collect();
+        assert_eq!(ordered.len(), 6);
+        dbg!(ordered);
 
         // assert_eq!(key_bytes.len(), 2);
     }

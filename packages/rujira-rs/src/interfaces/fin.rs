@@ -58,29 +58,17 @@ pub enum Price {
     Oracle(i8),
 }
 
-impl PrimaryKey<'_> for Price {
-    type Prefix = ();
-    type SubPrefix = ();
-    type Suffix = ();
-    type SuperSuffix = ();
-
-    fn key(&self) -> std::vec::Vec<Key<'_>> {
-        match self {
-            Price::Fixed(fixed) => vec![Key::Val128(fixed.numerator().to_be_bytes())],
-            Price::Oracle(deviation) => vec![Key::Val8(deviation.to_cw_bytes())],
-        }
-    }
-}
-
 impl KeyDeserialize for Price {
     type Output = Self;
     const KEY_ELEMS: u16 = 1;
 
     fn from_vec(value: Vec<u8>) -> cosmwasm_std::StdResult<Self::Output> {
-        match value.first() {
-            Some(0u8) => Ok(Self::Fixed(todo!())),
-            Some(1u8) => Ok(Self::Oracle(todo!())),
-            _ => Err(StdError::generic_err("invalid PoolType key")),
+        match value.len() {
+            16 => Ok(Self::Fixed(Decimal::new(Uint128::from(
+                u128::from_be_bytes(value.try_into().unwrap()),
+            )))),
+            1 => Ok(Self::Oracle(i8::from_cw_bytes([value[0]]))),
+            _ => Err(StdError::generic_err("invalid Price key")),
         }
     }
 }
