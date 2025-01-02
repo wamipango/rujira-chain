@@ -189,7 +189,6 @@ impl<'a> PrimaryKey<'a> for PoolKey {
                 key.extend(vec![Key::Val8(deviation.to_cw_bytes())])
             }
         };
-
         key
     }
 }
@@ -205,8 +204,10 @@ impl KeyDeserialize for PoolKey {
     const KEY_ELEMS: u16 = 3;
 
     fn from_vec(value: Vec<u8>) -> cosmwasm_std::StdResult<Self::Output> {
-        let side = <Side>::from_vec(value[..1].to_vec())?;
-        let price = <Price>::from_vec(value[2..].to_vec())?;
+        // 2 bytes namespace length
+        let side = <Side>::from_vec(value[2..3].to_vec())?;
+        // 2 more
+        let price = <Price>::from_vec(value[6..].to_vec())?;
         Ok(Self { side, price })
     }
 }
@@ -253,34 +254,21 @@ mod tests {
         assert_eq!(key_bytes[1].as_ref(), &[1]);
         assert_eq!(key_bytes[2].as_ref(), &[128]);
 
-        assert_eq!(
-            <PoolKey>::from_slice(&[1, 1, 128]).unwrap(),
-            PoolKey::new(Side::Bid, Price::Oracle(0))
-        );
-        assert_eq!(
-            <PoolKey>::from_slice(&[0, 1, 128]).unwrap(),
-            PoolKey::new(Side::Ask, Price::Oracle(0))
-        );
+        let key = PoolKey::new(Side::Bid, Price::Oracle(0));
+        assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
 
-        assert_eq!(
-            <PoolKey>::from_slice(&[
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 224, 182, 179, 167, 100, 0, 0
-            ])
-            .unwrap(),
-            PoolKey::new(Side::Ask, Price::Fixed(Decimal::one()))
-        );
+        let key = PoolKey::new(Side::Ask, Price::Oracle(0));
+        assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
 
-        assert_eq!(
-            <PoolKey>::from_slice(&[
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 224, 182, 179, 167, 100, 0, 0
-            ])
-            .unwrap(),
-            PoolKey::new(Side::Bid, Price::Fixed(Decimal::one()))
-        );
+        let key = PoolKey::new(Side::Ask, Price::Fixed(Decimal::one()));
+        assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
+
+        let key = PoolKey::new(Side::Bid, Price::Fixed(Decimal::one()));
+        assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
     }
 
     #[test]
-    fn pool_key_iter() {
+    fn pools_map() {
         let mut store = MockStorage::new();
         let timestamp = Timestamp::default();
         let owner = Addr::unchecked("owner");
@@ -309,11 +297,68 @@ mod tests {
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
+        Pool::load(
+            &store,
+            &Price::Fixed(Decimal::from_ratio(10u128, 9u128)),
+            &Side::Bid,
+        )
+        .create_order(&mut store, timestamp, &owner, offer)
+        .unwrap();
+
+        let pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
+        assert_eq!(pool.price, Price::Oracle(0));
+        assert_eq!(pool.side, Side::Bid);
+
         let iter = POOLS.range(&store, None, None, cosmwasm_std::Order::Ascending);
 
-        let ordered: Vec<StdResult<(PoolKey, Pool)>> = iter.collect();
-        assert_eq!(ordered.len(), 6);
-        dbg!(ordered);
+        let ordered = iter.collect::<StdResult<Vec<(PoolKey, Pool)>>>().unwrap();
+        assert_eq!(ordered.len(), 7);
+
+        // Result should be ordered by Side, then Price Type, then Price Value
+        let (key, pool) = ordered[0].clone();
+        assert_eq!(key.side, Side::Ask);
+        assert_eq!(key.price, Price::Fixed(Decimal::one()));
+        assert_eq!(key.side, pool.side);
+        assert_eq!(key.price, pool.price);
+
+        let (key, pool) = ordered[1].clone();
+        assert_eq!(key.side, Side::Ask);
+        assert_eq!(key.price, Price::Oracle(2));
+        assert_eq!(key.side, pool.side);
+        assert_eq!(key.price, pool.price);
+
+        let (key, pool) = ordered[2].clone();
+        assert_eq!(key.side, Side::Bid);
+        assert_eq!(
+            key.price,
+            Price::Fixed(Decimal::from_str("1.111111111111111111").unwrap())
+        );
+        assert_eq!(key.side, pool.side);
+        assert_eq!(key.price, pool.price);
+
+        let (key, pool) = ordered[3].clone();
+        assert_eq!(key.side, Side::Bid);
+        assert_eq!(key.price, Price::Oracle(-1));
+        assert_eq!(key.side, pool.side);
+        assert_eq!(key.price, pool.price);
+
+        let (key, pool) = ordered[4].clone();
+        assert_eq!(key.side, Side::Bid);
+        assert_eq!(key.price, Price::Oracle(0));
+        assert_eq!(key.side, pool.side);
+        assert_eq!(key.price, pool.price);
+
+        let (key, pool) = ordered[5].clone();
+        assert_eq!(key.side, Side::Bid);
+        assert_eq!(key.price, Price::Oracle(1));
+        assert_eq!(key.side, pool.side);
+        assert_eq!(key.price, pool.price);
+
+        let (key, pool) = ordered[6].clone();
+        assert_eq!(key.side, Side::Bid);
+        assert_eq!(key.price, Price::Oracle(2));
+        assert_eq!(key.side, pool.side);
+        assert_eq!(key.price, pool.price);
 
         // assert_eq!(key_bytes.len(), 2);
     }
