@@ -49,9 +49,15 @@ pub fn execute(
     match msg {
         ExecuteMsg::Swap { .. } => todo!(),
         ExecuteMsg::Order(vec) => {
-            let e = OrderManager::new(config.denoms, info.sender.clone(), env.block.time, oracle);
+            let mut e = OrderManager::new(
+                config.denoms,
+                info.sender.clone(),
+                env.block.time,
+                oracle,
+                NativeBalance(info.funds),
+            );
 
-            let res = e.execute_orders(deps.storage, &NativeBalance(info.funds), vec)?;
+            let res = e.execute_orders(deps.storage, vec)?;
 
             let withdraw_message = CosmosMsg::Bank(BankMsg::Send {
                 to_address: info.sender.to_string(),
