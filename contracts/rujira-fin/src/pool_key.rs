@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn pool_key() {
-        let key = PoolKey::new(Side::Ask, Price::Fixed(Decimal::from_str("1.0").unwrap()));
+        let key = PoolKey::new(Side::Base, Price::Fixed(Decimal::from_str("1.0").unwrap()));
         let key_bytes = key.key();
 
         assert_eq!(key_bytes.len(), 3);
@@ -116,37 +116,37 @@ mod tests {
             &[0, 0, 0, 0, 0, 0, 0, 0, 13, 224, 182, 179, 167, 100, 0, 0]
         );
 
-        let key = PoolKey::new(Side::Bid, Price::Oracle(-15));
+        let key = PoolKey::new(Side::Quote, Price::Oracle(-15));
         let key_bytes = key.key();
 
         assert_eq!(key_bytes[0].as_ref(), &[1]);
         assert_eq!(key_bytes[1].as_ref(), &[1]);
         assert_eq!(key_bytes[2].as_ref(), &[127, 241]);
 
-        let key = PoolKey::new(Side::Bid, Price::Oracle(21));
+        let key = PoolKey::new(Side::Quote, Price::Oracle(21));
         let key_bytes = key.key();
 
         assert_eq!(key_bytes[0].as_ref(), &[1]);
         assert_eq!(key_bytes[1].as_ref(), &[1]);
         assert_eq!(key_bytes[2].as_ref(), &[128, 21]);
 
-        let key = PoolKey::new(Side::Bid, Price::Oracle(0));
+        let key = PoolKey::new(Side::Quote, Price::Oracle(0));
         let key_bytes = key.key();
 
         assert_eq!(key_bytes[0].as_ref(), &[1]);
         assert_eq!(key_bytes[1].as_ref(), &[1]);
         assert_eq!(key_bytes[2].as_ref(), &[128, 0]);
 
-        let key = PoolKey::new(Side::Bid, Price::Oracle(0));
+        let key = PoolKey::new(Side::Quote, Price::Oracle(0));
         assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
 
-        let key = PoolKey::new(Side::Ask, Price::Oracle(0));
+        let key = PoolKey::new(Side::Base, Price::Oracle(0));
         assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
 
-        let key = PoolKey::new(Side::Ask, Price::Fixed(Decimal::one()));
+        let key = PoolKey::new(Side::Base, Price::Fixed(Decimal::one()));
         assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
 
-        let key = PoolKey::new(Side::Bid, Price::Fixed(Decimal::one()));
+        let key = PoolKey::new(Side::Quote, Price::Fixed(Decimal::one()));
         assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);
     }
 }

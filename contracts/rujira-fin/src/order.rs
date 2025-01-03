@@ -116,14 +116,14 @@ mod tests {
         let timestamp = Timestamp::default();
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
-        let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid, &Decimal::one());
-        let k = PoolKey::new(Side::Bid, Price::Oracle(0));
+        let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &Decimal::one());
+        let k = PoolKey::new(Side::Quote, Price::Oracle(0));
         pool.create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         pool.save(&mut store).unwrap();
 
-        let order = Order::load(&store, &owner, &Side::Bid, &Price::Oracle(0)).unwrap();
+        let order = Order::load(&store, &owner, &Side::Quote, &Price::Oracle(0)).unwrap();
         assert_eq!(order.owner, owner);
         assert_eq!(order.offer, offer);
     }
@@ -136,9 +136,9 @@ mod tests {
         let owner2 = Addr::unchecked("owner2");
         let offer = Uint128::from(100u128);
         let oracle = Decimal::one();
-        let mut pool1 = Pool::load(&store, &Price::Oracle(0), &Side::Bid, &oracle);
-        let mut pool2 = Pool::load(&store, &Price::Oracle(1), &Side::Bid, &oracle);
-        let mut pool3 = Pool::load(&store, &Price::Oracle(2), &Side::Bid, &oracle);
+        let mut pool1 = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle);
+        let mut pool2 = Pool::load(&store, &Price::Oracle(1), &Side::Quote, &oracle);
+        let mut pool3 = Pool::load(&store, &Price::Oracle(2), &Side::Quote, &oracle);
         pool1
             .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();

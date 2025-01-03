@@ -2,7 +2,7 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, Decimal, StdResult, Storage};
 use cw_storage_plus::Item;
 use rujira_rs::{
-    fin::{ConfigResponse, InstantiateMsg},
+    fin::{ConfigResponse, Denoms, InstantiateMsg},
     Layer1Asset, Tick,
 };
 
@@ -10,7 +10,7 @@ pub static CONFIG: Item<Config> = Item::new("config");
 
 #[cw_serde]
 pub struct Config {
-    pub denoms: [String; 2],
+    pub denoms: Denoms,
     pub oracles: [Layer1Asset; 2],
     pub tick: Tick,
     pub fee_maker: Decimal,

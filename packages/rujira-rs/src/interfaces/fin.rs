@@ -9,7 +9,7 @@ use crate::{tick::Tick, CallbackData, Layer1Asset};
 #[cw_serde]
 pub struct InstantiateMsg {
     /// The denoms of the pair. The second denom is the quote denom
-    pub denoms: [String; 2],
+    pub denoms: Denoms,
 
     pub oracles: [Layer1Asset; 2],
 
@@ -54,6 +54,37 @@ pub enum ExecuteMsg {
     /// Funds sent must be equal to the net change of balances. Funds withdrawn in step 0 and retracted in 1's,
     /// can be reused to fund orders in 1 and 3  
     Order(Vec<(Side, Price, Uint128)>),
+}
+
+#[cw_serde]
+pub struct Denoms([String; 2]);
+
+impl Denoms {
+    pub fn new(base: &str, quote: &str) -> Self {
+        Self([base.to_string(), quote.to_string()])
+    }
+
+    pub fn base(&self) -> &str {
+        &self.0[0]
+    }
+
+    pub fn quote(&self) -> &str {
+        &self.0[1]
+    }
+
+    pub fn ask(&self, side: Side) -> &str {
+        match side {
+            Side::Base => &self.quote(),
+            Side::Quote => &self.base(),
+        }
+    }
+
+    pub fn bid(&self, side: Side) -> &str {
+        match side {
+            Side::Base => &self.base(),
+            Side::Quote => &self.quote(),
+        }
+    }
 }
 
 #[cw_serde]
@@ -119,14 +150,15 @@ impl KeyDeserialize for Price {
 
 #[cw_serde]
 pub enum Side {
-    Ask,
-    Bid,
+    Base,
+    Quote,
 }
+
 impl Display for Side {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Side::Ask => write!(f, "Ask"),
-            Side::Bid => write!(f, "Bid"),
+            Side::Base => write!(f, "Base"),
+            Side::Quote => write!(f, "Bid"),
         }
     }
 }
@@ -139,8 +171,8 @@ impl PrimaryKey<'_> for Side {
 
     fn key(&self) -> std::vec::Vec<Key<'_>> {
         match self {
-            Side::Ask => vec![Key::Val8([0])],
-            Side::Bid => vec![Key::Val8([1])],
+            Side::Base => vec![Key::Val8([0])],
+            Side::Quote => vec![Key::Val8([1])],
         }
     }
 }
@@ -157,8 +189,8 @@ impl KeyDeserialize for Side {
 
     fn from_vec(value: Vec<u8>) -> cosmwasm_std::StdResult<Self::Output> {
         match value.first() {
-            Some(0u8) => Ok(Self::Ask),
-            Some(1u8) => Ok(Self::Bid),
+            Some(0u8) => Ok(Self::Base),
+            Some(1u8) => Ok(Self::Quote),
             _ => Err(StdError::generic_err("invalid Side key")),
         }
     }
@@ -210,7 +242,7 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct ConfigResponse {
     /// See [InstantiateMsg::denoms]
-    pub denoms: [String; 2],
+    pub denoms: Denoms,
 
     /// See [InstantiateMsg::oracles]
     pub oracles: [Layer1Asset; 2],

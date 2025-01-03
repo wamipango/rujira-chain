@@ -51,6 +51,7 @@ pub fn execute(
         ExecuteMsg::Order(vec) => {
             let res = execute_orders(
                 deps.storage,
+                &config.denoms,
                 &info.sender,
                 &env.block.time,
                 &oracle,
@@ -145,7 +146,7 @@ mod tests {
     use super::*;
     use cosmwasm_std::Decimal;
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
-    use rujira_rs::{Layer1Asset, Tick};
+    use rujira_rs::{fin::Denoms, Layer1Asset, Tick};
     use rujira_rs_testing::mock_rujira_app;
 
     #[test]
@@ -159,7 +160,7 @@ mod tests {
             code_id,
             owner,
             &InstantiateMsg {
-                denoms: ["ruji".to_string(), "eth-usdc".to_string()],
+                denoms: Denoms::new("ruji", "eth-usdc"),
                 oracles: [
                     Layer1Asset::try_from("THOR.RUJI").unwrap(),
                     Layer1Asset::try_from("ETH.USDC").unwrap(),
@@ -188,7 +189,7 @@ mod tests {
                 code_id,
                 owner,
                 &InstantiateMsg {
-                    denoms: ["btc-btc".to_string(), "eth-usdc".to_string()],
+                    denoms: Denoms::new("btc-btc", "eth-usdc"),
                     oracles: [
                         Layer1Asset::try_from("BTC.BTC").unwrap(),
                         Layer1Asset::try_from(

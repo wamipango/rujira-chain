@@ -5,7 +5,6 @@ mod callback;
 mod chain;
 mod coin;
 mod coins;
-mod events;
 mod fraction;
 mod interfaces;
 mod memoed;
@@ -21,7 +20,6 @@ pub use asset::{Asset, Layer1Asset, NativeAsset, SecuredAsset};
 
 pub use callback::{CallbackData, CallbackMsg};
 pub use chain::Chain;
-pub use events::new_event;
 pub use fraction::Frac;
 pub use interfaces::*;
 pub use share_pool::{SharePool, SharePoolError};
