@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, Decimal256, StdResult, Storage, Timestamp, Uint128};
+use cosmwasm_std::{Addr, Decimal, Decimal256, StdResult, Storage, Timestamp, Uint128, Uint256};
 use cw_storage_plus::Map;
 use itertools::{Itertools, MergeJoinBy};
 use rujira_rs::{
@@ -105,14 +105,14 @@ impl Pool {
     pub fn create_order(
         &mut self,
         storage: &mut dyn Storage,
-        timestamp: Timestamp,
+        timestamp: &Timestamp,
         owner: &Addr,
         offer: Uint128,
     ) -> StdResult<Order> {
         let order = Order {
             owner: owner.clone(),
             offer: offer.clone(),
-            updated_at: timestamp,
+            updated_at: *timestamp,
             bid: self.pool.new_bid(offer.into()),
         };
         self.save(storage)?;
@@ -126,13 +126,32 @@ impl Pool {
         Ok(order)
     }
 
+    pub fn increase_order(
+        &mut self,
+        storage: &mut dyn Storage,
+        order: &mut Order,
+        timestamp: &Timestamp,
+        amount: Uint128,
+    ) -> Result<Uint128, ContractError> {
+        order.bid.increase(&mut self.pool, amount.into())?;
+        order.offer = order.amount();
+        order.updated_at = *timestamp;
+        order.save(storage, self)?;
+        self.save(storage)?;
+        Ok(amount)
+    }
+
     pub fn retract_order(
         &mut self,
         storage: &mut dyn Storage,
-        owner: &Addr,
+        order: &mut Order,
+        timestamp: &Timestamp,
+        amount: Option<Uint128>,
     ) -> Result<Uint128, ContractError> {
-        let mut order = self.load_order(storage, owner)?;
-        let refund_amount = order.bid.retract(&mut self.pool, None)?;
+        let amount256 = amount.map(Uint256::from);
+        let refund_amount = order.bid.retract(&mut self.pool, amount256)?;
+        order.offer = order.amount();
+        order.updated_at = *timestamp;
         order.save(storage, self)?;
         self.save(storage)?;
         Ok(Uint128::try_from(refund_amount)?)
@@ -141,9 +160,8 @@ impl Pool {
     pub fn claim_order(
         &mut self,
         storage: &mut dyn Storage,
-        owner: &Addr,
+        order: &mut Order,
     ) -> Result<Uint128, ContractError> {
-        let mut order = self.load_order(storage, owner)?;
         let claimed = order.bid.claim_filled();
         order.save(storage, self)?;
         Ok(Uint128::try_from(claimed)?)
@@ -214,7 +232,7 @@ mod tests {
         let oracle = Decimal::one();
         let mut pool = Pool::load(&store, &price, &Side::Bid, &oracle);
         let k = PoolKey::new(Side::Bid, price.clone());
-        pool.create_order(&mut store, timestamp, &owner, offer)
+        pool.create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         pool.save(&mut store).unwrap();
@@ -245,27 +263,27 @@ mod tests {
         let offer = Uint128::from(100u128);
         let oracle = Decimal::one();
         Pool::load(&store, &Price::Oracle(0), &Side::Bid, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(-1), &Side::Bid, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(1), &Side::Bid, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(2), &Side::Bid, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(2), &Side::Ask, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Fixed(Decimal::one()), &Side::Ask, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(
@@ -274,7 +292,7 @@ mod tests {
             &Side::Bid,
             &oracle,
         )
-        .create_order(&mut store, timestamp, &owner, offer)
+        .create_order(&mut store, &timestamp, &owner, offer)
         .unwrap();
 
         let pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid, &oracle);
@@ -388,43 +406,43 @@ mod tests {
         let offer = Uint128::from(100u128);
         let oracle = Decimal::one();
         Pool::load(&store, &Price::Oracle(0), &Side::Bid, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(-1), &Side::Bid, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(1), &Side::Bid, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(2), &Side::Bid, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(2), &Side::Ask, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Fixed(Decimal::one()), &Side::Ask, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Fixed(Decimal::one()), &Side::Bid, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(-1), &Side::Ask, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(1), &Side::Ask, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(&store, &Price::Oracle(2), &Side::Ask, &oracle)
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         Pool::load(
@@ -433,7 +451,7 @@ mod tests {
             &Side::Bid,
             &oracle,
         )
-        .create_order(&mut store, timestamp, &owner, offer)
+        .create_order(&mut store, &timestamp, &owner, offer)
         .unwrap();
 
         Pool::load(
@@ -442,7 +460,7 @@ mod tests {
             &Side::Bid,
             &oracle,
         )
-        .create_order(&mut store, timestamp, &owner, offer)
+        .create_order(&mut store, &timestamp, &owner, offer)
         .unwrap();
 
         Pool::load(
@@ -451,7 +469,7 @@ mod tests {
             &Side::Bid,
             &oracle,
         )
-        .create_order(&mut store, timestamp, &owner, offer)
+        .create_order(&mut store, &timestamp, &owner, offer)
         .unwrap();
 
         let iter = Pool::side(&store, &Side::Bid, &oracle);

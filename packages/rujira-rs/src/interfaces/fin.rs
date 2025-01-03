@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Fraction, StdError, Timestamp, Uint128};
 use cw_storage_plus::{IntKey, Key, KeyDeserialize, Prefixer, PrimaryKey};
@@ -60,6 +62,15 @@ pub enum Price {
     Oracle(i16),
 }
 
+impl Display for Price {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Price::Fixed(fixed) => write!(f, "fixed:{}", fixed),
+            Price::Oracle(deviation) => write!(f, "oracle:{}", deviation),
+        }
+    }
+}
+
 impl Price {
     pub fn to_rate(&self, oracle: &Decimal) -> Decimal {
         match self {
@@ -110,6 +121,14 @@ impl KeyDeserialize for Price {
 pub enum Side {
     Ask,
     Bid,
+}
+impl Display for Side {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Side::Ask => write!(f, "Ask"),
+            Side::Bid => write!(f, "Bid"),
+        }
+    }
 }
 
 impl PrimaryKey<'_> for Side {

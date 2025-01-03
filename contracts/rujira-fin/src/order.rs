@@ -17,6 +17,7 @@ const DEFAULT_LIMIT: u8 = 10;
 pub struct Order {
     pub owner: Addr,
     pub updated_at: Timestamp,
+    /// Original offer amount, as it was at `updated_at` time
     pub offer: Uint128,
     pub bid: bid_pool::Bid,
 }
@@ -70,6 +71,10 @@ impl Order {
             .collect()
     }
 
+    pub fn amount(&self) -> Uint128 {
+        self.bid.amount().try_into().unwrap()
+    }
+
     pub fn save(&self, storage: &mut dyn Storage, pool: &Pool) -> StdResult<()> {
         if self.bid.is_empty() {
             self.remove(storage, pool);
@@ -113,7 +118,7 @@ mod tests {
         let offer = Uint128::from(100u128);
         let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid, &Decimal::one());
         let k = PoolKey::new(Side::Bid, Price::Oracle(0));
-        pool.create_order(&mut store, timestamp, &owner, offer)
+        pool.create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
         pool.save(&mut store).unwrap();
@@ -135,16 +140,16 @@ mod tests {
         let mut pool2 = Pool::load(&store, &Price::Oracle(1), &Side::Bid, &oracle);
         let mut pool3 = Pool::load(&store, &Price::Oracle(2), &Side::Bid, &oracle);
         pool1
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
         pool2
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
         pool3
-            .create_order(&mut store, timestamp, &owner, offer)
+            .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
         pool1
-            .create_order(&mut store, timestamp, &owner2, offer)
+            .create_order(&mut store, &timestamp, &owner2, offer)
             .unwrap();
 
         pool1.save(&mut store).unwrap();

@@ -52,6 +52,12 @@ impl Bid {
         Ok(withdraw_amount)
     }
 
+    pub fn increase(&mut self, pool: &mut Pool, amount: Uint256) -> Result<Uint256, BidPoolError> {
+        self.amount += amount;
+        pool.total = pool.total.checked_add(amount)?;
+        Ok(amount)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.amount <= Uint256::from(1u128) && self.filled.is_zero()
     }

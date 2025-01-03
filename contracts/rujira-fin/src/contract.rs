@@ -1,9 +1,11 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Response,
+    to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
+    QuerierWrapper, Response,
 };
 use cw2::set_contract_version;
+use cw_utils::NativeBalance;
 use rujira_rs::fin::{
     BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, Price,
     QueryMsg, Side, StatusResponse, SudoMsg,
@@ -13,10 +15,11 @@ use rujira_rs::query;
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
 use crate::order::Order;
+use crate::orders::execute_orders;
 use crate::pool::Pool;
 
 // version info for migration info
-const CONTRACT_NAME: &str = "crates.io:rujira-fin";
+const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -35,12 +38,34 @@ pub fn instantiate(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
-    _deps: DepsMut,
-    _env: Env,
-    _info: MessageInfo,
-    _msg: ExecuteMsg,
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    Ok(Response::default())
+    let config = CONFIG.load(deps.storage)?;
+    let oracle = load_oracle_price(deps.querier, &config)?;
+
+    match msg {
+        ExecuteMsg::Swap { .. } => todo!(),
+        ExecuteMsg::Order(vec) => {
+            let res = execute_orders(
+                deps.storage,
+                &info.sender,
+                &env.block.time,
+                &oracle,
+                &NativeBalance(info.funds),
+                vec,
+            )?;
+            let withdraw_message = CosmosMsg::Bank(BankMsg::Send {
+                to_address: info.sender.to_string(),
+                amount: res.withdraw.into_vec(),
+            });
+            Ok(Response::default()
+                .add_message(withdraw_message)
+                .add_events(res.events))
+        }
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
