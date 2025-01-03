@@ -1,4 +1,4 @@
-use cosmwasm_std::{coin, Addr, Coin, Decimal, Event, Storage, Timestamp, Uint128};
+use cosmwasm_std::{coin, Addr, Decimal, Event, Storage, Timestamp, Uint128};
 use cw_utils::NativeBalance;
 use rujira_rs::fin::{Denoms, Price, Side};
 use std::cmp::Ordering;
