@@ -14,7 +14,7 @@ use cw_storage_plus::Map;
 use serde::de::DeserializeOwned;
 use std::str::FromStr;
 
-use crate::fixtures::mock_pool_btc;
+use crate::fixtures::mock_pool;
 
 pub type RujiraApp = App<
     BankKeeper,
@@ -211,7 +211,7 @@ impl Stargate for RujiraStargate {
         request: GrpcQuery,
     ) -> AnyResult<Binary> {
         match request.path.as_str() {
-            "/types.Query/Pool" => Ok(mock_pool_btc()),
+            "/types.Query/Pool" => mock_pool(request.data),
             _ => {
                 anyhow::bail!("Unexpected grpc query: request={:?}", request)
             }

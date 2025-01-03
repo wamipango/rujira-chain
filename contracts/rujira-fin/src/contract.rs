@@ -1,11 +1,14 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{
+    to_json_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Response,
+};
 use cw2::set_contract_version;
 use rujira_rs::fin::{
     BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, Price,
     QueryMsg, Side, StatusResponse, SudoMsg,
 };
+use rujira_rs::query;
 
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
@@ -24,9 +27,9 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::new(deps.api, msg);
-    // config.validate()?;
-    // config.save(deps.storage)?;
+    let config = Config::new(deps.api, msg)?;
+    config.validate()?;
+    config.save(deps.storage)?;
     Ok(Response::default())
 }
 
@@ -48,16 +51,16 @@ pub fn sudo(_deps: DepsMut, _env: Env, _msg: SudoMsg) -> Result<Response, Contra
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let config = CONFIG.load(deps.storage)?;
+    let oracle = load_oracle_price(deps.querier, &config)?;
     // let rate = Rate::load(&deps.querier, &config)?;
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
-        QueryMsg::Status {} => to_json_binary(&StatusResponse::Active),
+        QueryMsg::Status {} => to_json_binary(&StatusResponse::Active { price: oracle }),
         QueryMsg::Order((owner, side, price)) => {
             let addr = deps.api.addr_validate(&owner)?;
-            let oracle = todo!();
             let pool = Pool::load(deps.storage, &price, &side, &oracle);
             let order = pool.load_order(deps.storage, &addr)?;
-            to_json_binary(&order_response(&order, &pool.side, &pool.price))
+            to_json_binary(&order_response(&order, &pool.side, &pool.price, &oracle))
         }
         QueryMsg::Orders {
             owner,
@@ -75,7 +78,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                         let oracle = todo!();
                         let pool = Pool::load(deps.storage, &price, &side, &oracle);
                         pool.sync_order(deps.storage, &mut order)?;
-                        Ok(order_response(order, &side, &price))
+                        Ok(order_response(order, &side, &price, &oracle))
                     })
                     .collect();
 
@@ -95,11 +98,18 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     .map_err(ContractError::Std)
 }
 
-fn order_response(order: &Order, side: &Side, price: &Price) -> OrderResponse {
+fn load_oracle_price(q: QuerierWrapper, config: &Config) -> Result<Decimal, ContractError> {
+    let a = query::Pool::load(q, &config.oracles[0])?.asset_tor_price;
+    let b = query::Pool::load(q, &config.oracles[1])?.asset_tor_price;
+    Ok(a * b)
+}
+
+fn order_response(order: &Order, side: &Side, price: &Price, oracle: &Decimal) -> OrderResponse {
     OrderResponse {
         owner: order.owner.to_string(),
         side: side.clone(),
         price: price.clone(),
+        rate: price.to_rate(oracle),
         updated_at: order.updated_at,
         offer: order.offer,
         remaining: order.bid.amount().try_into().unwrap(),
@@ -110,10 +120,13 @@ fn order_response(order: &Order, side: &Side, price: &Price) -> OrderResponse {
 #[cfg(test)]
 mod tests {
 
+    use std::str::FromStr;
+
     use super::*;
     use cosmwasm_std::Decimal;
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
-    use rujira_rs::Tick;
+    use rujira_rs::{Layer1Asset, Tick};
+    use rujira_rs_testing::mock_rujira_app;
 
     #[test]
     fn instantiation() {
@@ -127,6 +140,10 @@ mod tests {
             owner,
             &InstantiateMsg {
                 denoms: ["ruji".to_string(), "eth-usdc".to_string()],
+                oracles: [
+                    Layer1Asset::try_from("THOR.RUJI").unwrap(),
+                    Layer1Asset::try_from("ETH.USDC").unwrap(),
+                ],
                 tick: Tick::new(4u8),
                 fee_taker: Decimal::zero(),
                 fee_maker: Decimal::zero(),
@@ -137,5 +154,49 @@ mod tests {
             None,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn oracle_price() {
+        let mut app = mock_rujira_app();
+        let owner = app.api().addr_make("owner");
+
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+        let code_id = app.store_code(code);
+        let contract = app
+            .instantiate_contract(
+                code_id,
+                owner,
+                &InstantiateMsg {
+                    denoms: ["btc-btc".to_string(), "eth-usdc".to_string()],
+                    oracles: [
+                        Layer1Asset::try_from("BTC.BTC").unwrap(),
+                        Layer1Asset::try_from(
+                            "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
+                        )
+                        .unwrap(),
+                    ],
+                    tick: Tick::new(4u8),
+                    fee_taker: Decimal::zero(),
+                    fee_maker: Decimal::zero(),
+                    fee_address: app.api().addr_make("fee").to_string(),
+                },
+                &[],
+                "template",
+                None,
+            )
+            .unwrap();
+
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract, &QueryMsg::Status {})
+            .unwrap();
+
+        assert_eq!(
+            status,
+            StatusResponse::Active {
+                price: Decimal::from_str("93319.1524675569444582").unwrap()
+            }
+        );
     }
 }

@@ -2,12 +2,14 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Fraction, StdError, Timestamp, Uint128};
 use cw_storage_plus::{IntKey, Key, KeyDeserialize, Prefixer, PrimaryKey};
 
-use crate::{tick::Tick, CallbackData};
+use crate::{tick::Tick, CallbackData, Layer1Asset};
 
 #[cw_serde]
 pub struct InstantiateMsg {
     /// The denoms of the pair. The second denom is the quote denom
     pub denoms: [String; 2],
+
+    pub oracles: [Layer1Asset; 2],
 
     /// Ticked truncates Decimal to significant figures.
     /// This accommodates prices decreasing and adding zeroes,
@@ -191,6 +193,9 @@ pub struct ConfigResponse {
     /// See [InstantiateMsg::denoms]
     pub denoms: [String; 2],
 
+    /// See [InstantiateMsg::oracles]
+    pub oracles: [Layer1Asset; 2],
+
     /// See [InstantiateMsg::tick]
     pub tick: Tick,
 
@@ -206,7 +211,7 @@ pub struct ConfigResponse {
 
 #[cw_serde]
 pub enum StatusResponse {
-    Active,
+    Active { price: Decimal },
     Paused,
 }
 
@@ -220,6 +225,9 @@ pub struct OrderResponse {
 
     /// The quote price of this order
     pub price: Price,
+
+    /// The rate at which this order would execute at the current moment in time
+    pub rate: Decimal,
 
     /// The last time this order was touched (created, incremented or reduced) in an Order execution
     pub updated_at: Timestamp,
