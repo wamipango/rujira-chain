@@ -111,7 +111,7 @@ impl Pool {
         Ok((value, amount, snapshots))
     }
 
-    pub fn sync_bid(&self, bid: &mut Bid, sum_snapshot: Option<SumSnapshot>) -> StdResult<()> {
+    pub fn sync_bid(&self, bid: &mut Bid, sum_snapshot: Option<Frac>) -> StdResult<()> {
         bid.filled += self.bid_filled_amount(bid, sum_snapshot)?;
         bid.amount = self.bid_remaining_amount(bid)?;
         bid.product_snapshot = self.product;
@@ -121,16 +121,12 @@ impl Pool {
         Ok(())
     }
 
-    fn bid_filled_amount(
-        &self,
-        bid: &Bid,
-        sum_snapshot: Option<SumSnapshot>,
-    ) -> StdResult<Uint256> {
+    fn bid_filled_amount(&self, bid: &Bid, sum_snapshot: Option<Frac>) -> StdResult<Uint256> {
         if bid.product_snapshot.is_zero() {
             return Ok(Uint256::zero());
         }
         let inv = bid.product_snapshot.inv().unwrap();
-        let reference_ss = sum_snapshot.map(|x| x.sum).unwrap_or(bid.sum_snapshot);
+        let reference_ss = sum_snapshot.unwrap_or(bid.sum_snapshot);
         let res = (reference_ss - bid.sum_snapshot).mul(inv).mul(bid.amount);
         Ok(res)
     }

@@ -192,21 +192,12 @@ impl Pool {
         Ok(self.pool.sync_bid(&mut order.bid, sum_snapshot)?)
     }
 
-    fn sum_snapshot(
-        &self,
-        storage: &dyn Storage,
-        bid: &bid_pool::Bid,
-    ) -> StdResult<bid_pool::SumSnapshot> {
+    fn sum_snapshot(&self, storage: &dyn Storage, bid: &bid_pool::Bid) -> StdResult<Frac> {
         let key = (
             PoolKey::new(self.side.clone(), self.price.clone()),
             bid.sum_snapshot_key(),
         );
-        let sum = SNAPSHOTS.load(storage, key)?;
-        Ok(bid_pool::SumSnapshot {
-            epoch: todo!(),
-            scale: todo!(),
-            sum,
-        })
+        SNAPSHOTS.load(storage, key)
     }
 }
 
