@@ -95,7 +95,7 @@ impl Order {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::{testing::MockStorage, Addr, Timestamp, Uint128};
+    use cosmwasm_std::{testing::MockStorage, Addr, Decimal, Timestamp, Uint128};
     use rujira_rs::fin::{Price, Side};
 
     use crate::{pool::Pool, pool_key::PoolKey};
@@ -106,7 +106,7 @@ mod tests {
         let timestamp = Timestamp::default();
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
-        let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
+        let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid, &Decimal::one());
         let k = PoolKey::new(Side::Bid, Price::Oracle(0));
         pool.create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
@@ -125,9 +125,10 @@ mod tests {
         let owner = Addr::unchecked("owner");
         let owner2 = Addr::unchecked("owner2");
         let offer = Uint128::from(100u128);
-        let mut pool1 = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
-        let mut pool2 = Pool::load(&store, &Price::Oracle(1), &Side::Bid);
-        let mut pool3 = Pool::load(&store, &Price::Oracle(2), &Side::Bid);
+        let oracle = Decimal::one();
+        let mut pool1 = Pool::load(&store, &Price::Oracle(0), &Side::Bid, &oracle);
+        let mut pool2 = Pool::load(&store, &Price::Oracle(1), &Side::Bid, &oracle);
+        let mut pool3 = Pool::load(&store, &Price::Oracle(2), &Side::Bid, &oracle);
         pool1
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();

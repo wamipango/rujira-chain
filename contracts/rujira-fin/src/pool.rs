@@ -34,51 +34,55 @@ impl Pool {
     pub fn side<'a>(
         storage: &'a dyn Storage,
         side: &'a Side,
+        oracle: &'a Decimal,
     ) -> MergeJoinBy<
-        impl Iterator<Item = StdResult<Self>> + 'a,
-        impl Iterator<Item = StdResult<Self>> + 'a,
-        impl FnMut(&StdResult<Self>, &StdResult<Self>) -> Ordering + 'a,
+        impl Iterator<Item = Self> + 'a,
+        impl Iterator<Item = Self> + 'a,
+        impl FnMut(&Self, &Self) -> Ordering + 'a,
     > {
         let order = match side {
             Side::Ask => cosmwasm_std::Order::Ascending,
             Side::Bid => cosmwasm_std::Order::Descending,
         };
 
-        let populate = |x: StdResult<(Price, ())>| -> StdResult<Self> {
-            x.and_then(|(price, _)| {
-                Ok(Self {
+        let populate = |x: StdResult<(Price, ())>| -> Option<Self> {
+            match x {
+                Ok((price, _)) => Some(Self {
                     price: price.clone(),
                     side: side.clone(),
-                    rate: Decimal::zero(),
+                    rate: price.to_rate(oracle),
                     // The presence of the key indicates a BidPool should be present,
-                    // so we should abort if this is incorrect
-                    pool: BID_POOLS.load(storage, PoolKey::new(side.clone(), price))?,
-                })
-            })
+                    // so we should panic if this is incorrect
+                    pool: BID_POOLS
+                        .load(storage, PoolKey::new(side.clone(), price))
+                        .unwrap(),
+                }),
+                Err(_) => None,
+            }
         };
 
         let fixed = POOLS
             .prefix((side.clone(), PoolType::Fixed))
             .range(storage, None, None, order)
-            .map(populate);
+            .filter_map(populate);
 
         let oracle = POOLS
             .prefix((side.clone(), PoolType::Oracle))
             .range(storage, None, None, order)
-            .map(populate);
+            .filter_map(populate);
 
         fixed.merge_join_by(oracle, move |f, o| match side {
-            Side::Ask => compare(f, o),
-            Side::Bid => Ordering::reverse(compare(f, o)),
+            Side::Ask => f.rate.cmp(&o.rate),
+            Side::Bid => o.rate.cmp(&f.rate),
         })
     }
 
-    pub fn load(storage: &dyn Storage, price: &Price, side: &Side) -> Self {
+    pub fn load(storage: &dyn Storage, price: &Price, side: &Side, oracle: &Decimal) -> Self {
         let key = PoolKey::new(side.clone(), price.clone());
         Self {
             price: price.clone(),
             side: side.clone(),
-            rate: Decimal::zero(),
+            rate: price.to_rate(oracle),
             pool: BID_POOLS.load(storage, key).unwrap_or_default(),
         }
     }
@@ -188,15 +192,6 @@ impl Pool {
     }
 }
 
-fn compare(f: &StdResult<Pool>, o: &StdResult<Pool>) -> Ordering {
-    match (f, o) {
-        (Ok(f), Ok(o)) => f.rate.cmp(&o.rate),
-        (Err(_), Ok(_)) => Ordering::Less,
-        (Ok(_), Err(_)) => Ordering::Greater,
-        (Err(_), Err(_)) => Ordering::Equal,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::pool_key::PoolType;
@@ -204,6 +199,7 @@ mod tests {
     use super::*;
     use cosmwasm_std::{testing::MockStorage, Decimal};
     use cw_storage_plus::Bound;
+    use itertools::EitherOrBoth;
     use rujira_rs::fin::{Price, Side};
     use std::str::FromStr;
 
@@ -215,7 +211,8 @@ mod tests {
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
         let price = Price::Fixed(Decimal::one());
-        let mut pool = Pool::load(&store, &price, &Side::Bid);
+        let oracle = Decimal::one();
+        let mut pool = Pool::load(&store, &price, &Side::Bid, &oracle);
         let k = PoolKey::new(Side::Bid, price.clone());
         pool.create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
@@ -235,7 +232,7 @@ mod tests {
         assert_ne!(bp, bid_pool::Pool::default());
 
         // Now check it's restored to the pool correctly
-        let pool = Pool::load(&store, &price, &Side::Bid);
+        let pool = Pool::load(&store, &price, &Side::Bid, &oracle);
         assert_eq!(pool.pool, bp);
         dbg!(&store);
     }
@@ -246,27 +243,28 @@ mod tests {
         let timestamp = Timestamp::default();
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
-        Pool::load(&store, &Price::Oracle(0), &Side::Bid)
+        let oracle = Decimal::one();
+        Pool::load(&store, &Price::Oracle(0), &Side::Bid, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
-        Pool::load(&store, &Price::Oracle(-1), &Side::Bid)
+        Pool::load(&store, &Price::Oracle(-1), &Side::Bid, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
-        Pool::load(&store, &Price::Oracle(1), &Side::Bid)
+        Pool::load(&store, &Price::Oracle(1), &Side::Bid, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
-        Pool::load(&store, &Price::Oracle(2), &Side::Bid)
+        Pool::load(&store, &Price::Oracle(2), &Side::Bid, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
-        Pool::load(&store, &Price::Oracle(2), &Side::Ask)
+        Pool::load(&store, &Price::Oracle(2), &Side::Ask, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
-        Pool::load(&store, &Price::Fixed(Decimal::one()), &Side::Ask)
+        Pool::load(&store, &Price::Fixed(Decimal::one()), &Side::Ask, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
@@ -274,11 +272,12 @@ mod tests {
             &store,
             &Price::Fixed(Decimal::from_ratio(10u128, 9u128)),
             &Side::Bid,
+            &oracle,
         )
         .create_order(&mut store, timestamp, &owner, offer)
         .unwrap();
 
-        let pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid);
+        let pool = Pool::load(&store, &Price::Oracle(0), &Side::Bid, &oracle);
         assert_eq!(pool.price, Price::Oracle(0));
         assert_eq!(pool.side, Side::Bid);
 
@@ -387,27 +386,44 @@ mod tests {
         let timestamp = Timestamp::default();
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
-        Pool::load(&store, &Price::Oracle(0), &Side::Bid)
+        let oracle = Decimal::one();
+        Pool::load(&store, &Price::Oracle(0), &Side::Bid, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
-        Pool::load(&store, &Price::Oracle(-1), &Side::Bid)
+        Pool::load(&store, &Price::Oracle(-1), &Side::Bid, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
-        Pool::load(&store, &Price::Oracle(1), &Side::Bid)
+        Pool::load(&store, &Price::Oracle(1), &Side::Bid, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
-        Pool::load(&store, &Price::Oracle(2), &Side::Bid)
+        Pool::load(&store, &Price::Oracle(2), &Side::Bid, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
-        Pool::load(&store, &Price::Oracle(2), &Side::Ask)
+        Pool::load(&store, &Price::Oracle(2), &Side::Ask, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
-        Pool::load(&store, &Price::Fixed(Decimal::one()), &Side::Ask)
+        Pool::load(&store, &Price::Fixed(Decimal::one()), &Side::Ask, &oracle)
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        Pool::load(&store, &Price::Fixed(Decimal::one()), &Side::Bid, &oracle)
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        Pool::load(&store, &Price::Oracle(-1), &Side::Ask, &oracle)
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        Pool::load(&store, &Price::Oracle(1), &Side::Ask, &oracle)
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        Pool::load(&store, &Price::Oracle(2), &Side::Ask, &oracle)
             .create_order(&mut store, timestamp, &owner, offer)
             .unwrap();
 
@@ -415,6 +431,7 @@ mod tests {
             &store,
             &Price::Fixed(Decimal::from_ratio(10u128, 9u128)),
             &Side::Bid,
+            &oracle,
         )
         .create_order(&mut store, timestamp, &owner, offer)
         .unwrap();
@@ -423,6 +440,7 @@ mod tests {
             &store,
             &Price::Fixed(Decimal::from_ratio(15u128, 9u128)),
             &Side::Bid,
+            &oracle,
         )
         .create_order(&mut store, timestamp, &owner, offer)
         .unwrap();
@@ -431,13 +449,92 @@ mod tests {
             &store,
             &Price::Fixed(Decimal::from_ratio(21u128, 9u128)),
             &Side::Bid,
+            &oracle,
         )
         .create_order(&mut store, timestamp, &owner, offer)
         .unwrap();
 
-        let iter = Pool::side(&store, &Side::Bid);
-        for x in iter {
-            dbg!(x);
-        }
+        let iter = Pool::side(&store, &Side::Bid, &oracle);
+        let ordered: Vec<EitherOrBoth<Pool>> = iter.collect();
+        assert_eq!(ordered.len(), 7);
+
+        let x = ordered[0].clone();
+        assert_eq!(
+            x.clone().left().unwrap().rate,
+            Decimal::from_ratio(21u128, 9u128)
+        );
+        assert_eq!(x.right(), None);
+
+        let x = ordered[1].clone();
+        assert_eq!(
+            x.clone().left().unwrap().rate,
+            Decimal::from_ratio(15u128, 9u128)
+        );
+        assert_eq!(x.right(), None);
+
+        let x = ordered[2].clone();
+        assert_eq!(
+            x.clone().left().unwrap().rate,
+            Decimal::from_ratio(10u128, 9u128)
+        );
+        assert_eq!(x.right(), None);
+
+        let x = ordered[3].clone();
+        assert_eq!(x.clone().left(), None);
+        assert_eq!(
+            x.right().unwrap().rate,
+            Decimal::from_ratio(10002u128, 10000u128)
+        );
+
+        let x = ordered[4].clone();
+        assert_eq!(x.clone().left(), None);
+        assert_eq!(
+            x.right().unwrap().rate,
+            Decimal::from_ratio(10001u128, 10000u128)
+        );
+
+        let x = ordered[5].clone();
+        assert_eq!(x.clone().left().unwrap().rate, Decimal::one());
+        assert_eq!(
+            x.clone().right().unwrap().rate,
+            x.clone().left().unwrap().rate,
+        );
+
+        let x = ordered[6].clone();
+        assert_eq!(x.clone().left(), None);
+        assert_eq!(
+            x.right().unwrap().rate,
+            Decimal::from_ratio(9999u128, 10000u128)
+        );
+
+        let iter = Pool::side(&store, &Side::Ask, &oracle);
+        let ordered: Vec<EitherOrBoth<Pool>> = iter.collect();
+
+        assert_eq!(ordered.len(), 4);
+
+        let x = ordered[0].clone();
+        assert_eq!(x.clone().left(), None);
+        assert_eq!(
+            x.right().unwrap().rate,
+            Decimal::from_ratio(9999u128, 10000u128)
+        );
+
+        let x = ordered[1].clone();
+        assert_eq!(x.clone().left().unwrap().rate, Decimal::one());
+        assert_eq!(x.right(), None);
+
+        let x = ordered[2].clone();
+        assert_eq!(x.clone().left(), None);
+        assert_eq!(
+            x.right().unwrap().rate,
+            Decimal::from_ratio(10001u128, 10000u128)
+        );
+
+        let x = ordered[3].clone();
+        assert_eq!(x.clone().left(), None);
+        assert_eq!(
+            x.right().unwrap().rate,
+            Decimal::from_ratio(10002u128, 10000u128)
+        );
     }
 }

@@ -59,14 +59,14 @@ pub enum Price {
 }
 
 impl Price {
-    pub fn to_rate(&self, oracle: Decimal) -> Decimal {
+    pub fn to_rate(&self, oracle: &Decimal) -> Decimal {
         match self {
             Price::Fixed(fixed) => *fixed,
             Price::Oracle(deviation) => match deviation {
                 i16::MIN..=-1 => {
                     oracle * Decimal::from_ratio(10000u16 - deviation.unsigned_abs(), 10000u16)
                 }
-                0 => oracle,
+                0 => oracle.clone(),
                 1..=i16::MAX => {
                     oracle * Decimal::from_ratio(deviation.unsigned_abs() + 10000u16, 10000u16)
                 }

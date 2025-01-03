@@ -54,7 +54,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
         QueryMsg::Status {} => to_json_binary(&StatusResponse::Active),
         QueryMsg::Order((owner, side, price)) => {
             let addr = deps.api.addr_validate(&owner)?;
-            let pool = Pool::load(deps.storage, &price, &side);
+            let oracle = todo!();
+            let pool = Pool::load(deps.storage, &price, &side, &oracle);
             let order = pool.load_order(deps.storage, &addr)?;
             to_json_binary(&order_response(&order, &pool.side, &pool.price))
         }
@@ -71,7 +72,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                         // TODO: Decode from key in by_owner
                         let side = todo!();
                         let price = todo!();
-                        let pool = Pool::load(deps.storage, &price, &side);
+                        let oracle = todo!();
+                        let pool = Pool::load(deps.storage, &price, &side, &oracle);
                         pool.sync_order(deps.storage, &mut order)?;
                         Ok(order_response(order, &side, &price))
                     })
