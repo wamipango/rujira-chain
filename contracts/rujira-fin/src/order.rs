@@ -47,7 +47,7 @@ impl Order {
         owner: &Addr,
         offset: Option<u8>,
         limit: Option<u8>,
-    ) -> StdResult<Vec<Self>> {
+    ) -> StdResult<Vec<(PoolKey, Self)>> {
         let limit: u8 = min(limit.unwrap_or(DEFAULT_LIMIT), MAX_LIMIT);
         ORDERS
             .prefix(owner.clone())
@@ -55,11 +55,16 @@ impl Order {
             .skip(offset.unwrap_or(0) as usize)
             .take(limit as usize)
             .map(|x| {
-                x.map(|(_, (updated_at, offer, bid))| Self {
-                    owner: owner.clone(),
-                    updated_at,
-                    offer,
-                    bid,
+                x.map(|(k, (updated_at, offer, bid))| {
+                    (
+                        k,
+                        Self {
+                            owner: owner.clone(),
+                            updated_at,
+                            offer,
+                            bid,
+                        },
+                    )
                 })
             })
             .collect()
@@ -146,7 +151,7 @@ mod tests {
 
         let orders = Order::by_owner(&store, &owner, None, None).unwrap();
         assert_eq!(orders.len(), 3);
-        assert_eq!(orders[0].owner, owner);
-        assert_eq!(orders[0].offer, offer);
+        assert_eq!(orders[0].1.owner, owner);
+        assert_eq!(orders[0].1.offer, offer);
     }
 }

@@ -52,7 +52,6 @@ pub fn sudo(_deps: DepsMut, _env: Env, _msg: SudoMsg) -> Result<Response, Contra
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let oracle = load_oracle_price(deps.querier, &config)?;
-    // let rate = Rate::load(&deps.querier, &config)?;
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
         QueryMsg::Status {} => to_json_binary(&StatusResponse::Active { price: oracle }),
@@ -71,14 +70,10 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
             let orders: Result<Vec<OrderResponse>, ContractError> =
                 Order::by_owner(deps.storage, &addr, offset, limit)?
                     .iter_mut()
-                    .map(|order| {
-                        // TODO: Decode from key in by_owner
-                        let side = todo!();
-                        let price = todo!();
-                        let oracle = todo!();
-                        let pool = Pool::load(deps.storage, &price, &side, &oracle);
-                        pool.sync_order(deps.storage, &mut order)?;
-                        Ok(order_response(order, &side, &price, &oracle))
+                    .map(|(k, order)| {
+                        let pool = Pool::load(deps.storage, &k.price, &k.side, &oracle);
+                        pool.sync_order(deps.storage, order)?;
+                        Ok(order_response(&order, &k.side, &k.price, &oracle))
                     })
                     .collect();
 
