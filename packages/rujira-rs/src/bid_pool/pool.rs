@@ -72,6 +72,10 @@ impl Pool {
         self.distribute_partial(value, amount)
     }
 
+    pub fn total(&self) -> Uint256 {
+        self.total
+    }
+
     fn distribute_full(
         &mut self,
         rate: &Decimal256,

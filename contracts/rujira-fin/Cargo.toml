@@ -23,6 +23,7 @@ cw2 = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+itertools = { workspace = true }
 
 [dev-dependencies]
 cw-multi-test = { workspace = true }

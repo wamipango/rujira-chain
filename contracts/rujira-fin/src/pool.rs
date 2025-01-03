@@ -1,13 +1,19 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal256, StdResult, Storage, Timestamp, Uint128};
+use cosmwasm_std::{Addr, Decimal, Decimal256, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Map;
+use itertools::{Itertools, MergeJoinBy};
 use rujira_rs::{
     bid_pool,
     fin::{Price, Side},
     Frac,
 };
+use std::cmp::Ordering;
 
-use crate::{order::Order, pool_key::PoolKey, ContractError};
+use crate::{
+    order::Order,
+    pool_key::{PoolKey, PoolType},
+    ContractError,
+};
 const SNAPSHOTS: Map<(PoolKey, bid_pool::SumSnapshotKey), Frac> = Map::new("snapshots");
 // The POOLS Map is used simply as an indicator that there is a non-zero BidPool at this key
 // The BID_POOLS Map is used to store the BidPool itself, and the Key is used to populate the Pool values
@@ -20,15 +26,59 @@ const BID_POOLS: Map<PoolKey, bid_pool::Pool> = Map::new("bid-pools");
 pub struct Pool {
     pub price: Price,
     pub side: Side,
+    pub rate: Decimal,
     pub pool: bid_pool::Pool,
 }
 
 impl Pool {
+    pub fn side<'a>(
+        storage: &'a dyn Storage,
+        side: &'a Side,
+    ) -> MergeJoinBy<
+        impl Iterator<Item = StdResult<Self>> + 'a,
+        impl Iterator<Item = StdResult<Self>> + 'a,
+        impl FnMut(&StdResult<Self>, &StdResult<Self>) -> Ordering + 'a,
+    > {
+        let order = match side {
+            Side::Ask => cosmwasm_std::Order::Ascending,
+            Side::Bid => cosmwasm_std::Order::Descending,
+        };
+
+        let populate = |x: StdResult<(Price, ())>| -> StdResult<Self> {
+            x.and_then(|(price, _)| {
+                Ok(Self {
+                    price: price.clone(),
+                    side: side.clone(),
+                    rate: Decimal::zero(),
+                    // The presence of the key indicates a BidPool should be present,
+                    // so we should abort if this is incorrect
+                    pool: BID_POOLS.load(storage, PoolKey::new(side.clone(), price))?,
+                })
+            })
+        };
+
+        let fixed = POOLS
+            .prefix((side.clone(), PoolType::Fixed))
+            .range(storage, None, None, order)
+            .map(populate);
+
+        let oracle = POOLS
+            .prefix((side.clone(), PoolType::Oracle))
+            .range(storage, None, None, order)
+            .map(populate);
+
+        fixed.merge_join_by(oracle, move |f, o| match side {
+            Side::Ask => compare(f, o),
+            Side::Bid => Ordering::reverse(compare(f, o)),
+        })
+    }
+
     pub fn load(storage: &dyn Storage, price: &Price, side: &Side) -> Self {
         let key = PoolKey::new(side.clone(), price.clone());
         Self {
             price: price.clone(),
             side: side.clone(),
+            rate: Decimal::zero(),
             pool: BID_POOLS.load(storage, key).unwrap_or_default(),
         }
     }
@@ -135,6 +185,15 @@ impl Pool {
             scale: todo!(),
             sum,
         })
+    }
+}
+
+fn compare(f: &StdResult<Pool>, o: &StdResult<Pool>) -> Ordering {
+    match (f, o) {
+        (Ok(f), Ok(o)) => f.rate.cmp(&o.rate),
+        (Err(_), Ok(_)) => Ordering::Less,
+        (Ok(_), Err(_)) => Ordering::Greater,
+        (Err(_), Err(_)) => Ordering::Equal,
     }
 }
 

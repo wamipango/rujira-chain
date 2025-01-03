@@ -25,6 +25,7 @@ rujira-rs-testing = { path = "./packages/rujira-rs-testing" }
 anyhow = "1"
 prost = "0.13"
 regex = "1.11.1"
+itertools = "0.14.0"
 
 [profile.release]
 rpath = false
