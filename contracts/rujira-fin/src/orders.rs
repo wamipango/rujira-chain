@@ -4,7 +4,6 @@ use rujira_rs::fin::{Denoms, Price, Side};
 use std::cmp::Ordering;
 
 use crate::{
-    config::Config,
     events::{event_create_order, event_increase_order, event_retract_order, event_withdraw_order},
     order::Order,
     pool::Pool,
@@ -44,22 +43,21 @@ pub fn execute_orders(
 
                 match amount.cmp(&target) {
                     Ordering::Less => {
+                        let diff = target - amount;
+
                         let amount =
-                            pool.increase_order(storage, &mut order, timestamp, amount.clone())?;
+                            pool.increase_order(storage, &mut order, timestamp, diff.clone())?;
                         let coins = coin(amount.u128(), denoms.bid(side));
                         send += coins;
-                        events.push(event_increase_order(&pool, &mut order, &amount));
+                        events.push(event_increase_order(&pool, &mut order, &diff));
                     }
                     Ordering::Greater => {
-                        let amount = pool.retract_order(
-                            storage,
-                            &mut order,
-                            timestamp,
-                            Some(amount.clone()),
-                        )?;
+                        let diff = amount - target;
+                        let amount =
+                            pool.retract_order(storage, &mut order, timestamp, Some(diff.clone()))?;
                         let coins = coin(amount.u128(), denoms.bid(side));
                         receive += coins;
-                        events.push(event_retract_order(&pool, &mut order, &amount));
+                        events.push(event_retract_order(&pool, &mut order, &diff));
                     }
                     Ordering::Equal => {}
                 }
@@ -124,7 +122,7 @@ mod tests {
 
         let res = execute_orders(
             &mut deps.storage,
-            &Denoms::new("ruji", "uusd"),
+            &Denoms::new("ruji", "usdc"),
             &info.sender,
             &env.block.time,
             &oracle,
@@ -138,8 +136,16 @@ mod tests {
         .unwrap();
 
         assert_eq!(res.withdraw, NativeBalance::default());
-
-        dbg!(res);
+        let event = res.events[0].clone();
+        assert_eq!(event.ty, "rujira-fin/order.create");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Quote");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "fixed:1");
+        assert_eq!(event.attributes[3].key, "offer");
+        assert_eq!(event.attributes[3].value, "1000");
     }
 
     #[test]
@@ -176,6 +182,185 @@ mod tests {
             ],
         )
         .unwrap();
-        dbg!(res);
+        let returned = NativeBalance(vec![coin(7500, "ruji"), coin(7000, "usdc")]);
+        assert_eq!(res.withdraw, returned);
+        let event = res.events[0].clone();
+        assert_eq!(event.ty, "rujira-fin/order.create");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Quote");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "fixed:1");
+        assert_eq!(event.attributes[3].key, "offer");
+        assert_eq!(event.attributes[3].value, "1000");
+
+        let event = res.events[1].clone();
+        assert_eq!(event.ty, "rujira-fin/order.create");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Quote");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "oracle:0");
+        assert_eq!(event.attributes[3].key, "offer");
+        assert_eq!(event.attributes[3].value, "2000");
+
+        let event = res.events[2].clone();
+        assert_eq!(event.ty, "rujira-fin/order.create");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "oracle:0");
+        assert_eq!(event.attributes[3].key, "offer");
+        assert_eq!(event.attributes[3].value, "1200");
+
+        let event = res.events[3].clone();
+        assert_eq!(event.ty, "rujira-fin/order.create");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "fixed:1.3");
+        assert_eq!(event.attributes[3].key, "offer");
+        assert_eq!(event.attributes[3].value, "1300");
+    }
+
+    #[test]
+    fn test_out_of_funds() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = message_info(&Addr::unchecked("addr0000"), &[]);
+
+        let oracle = Decimal::from_str("1.0").unwrap();
+        let funds = NativeBalance::default();
+
+        execute_orders(
+            &mut deps.storage,
+            &Denoms::new("ruji", "usdc"),
+            &info.sender,
+            &env.block.time,
+            &oracle,
+            &funds,
+            vec![(
+                Side::Quote,
+                Price::Fixed(Decimal::from_str("1.0").unwrap()),
+                Uint128::from(1000u128),
+            )],
+        )
+        .unwrap_err();
+    }
+
+    #[test]
+    fn test_moving_orders() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = message_info(&Addr::unchecked("addr0000"), &[]);
+
+        let oracle = Decimal::from_str("1.0").unwrap();
+        let mut funds = NativeBalance::default();
+        funds += coin(10000, "usdc");
+        funds += coin(10000, "ruji");
+
+        // Same as above
+        execute_orders(
+            &mut deps.storage,
+            &Denoms::new("ruji", "usdc"),
+            &info.sender,
+            &env.block.time,
+            &oracle,
+            &funds,
+            vec![
+                (
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("1.0").unwrap()),
+                    Uint128::from(1000u128),
+                ),
+                (Side::Quote, Price::Oracle(0), Uint128::from(2000u128)),
+                (Side::Base, Price::Oracle(0), Uint128::from(1200u128)),
+                (
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("1.3").unwrap()),
+                    Uint128::from(1300u128),
+                ),
+            ],
+        )
+        .unwrap();
+
+        let res = execute_orders(
+            &mut deps.storage,
+            &Denoms::new("ruji", "usdc"),
+            &info.sender,
+            &env.block.time,
+            &oracle,
+            &NativeBalance::default(),
+            vec![
+                (
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("0.99").unwrap()),
+                    Uint128::from(1000u128),
+                ),
+                (
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("1.0").unwrap()),
+                    Uint128::zero(),
+                ),
+                // Split 1200 ito 2 x 600
+                (Side::Base, Price::Oracle(0), Uint128::from(600u128)),
+                (Side::Base, Price::Oracle(10), Uint128::from(600u128)),
+            ],
+        )
+        .unwrap();
+
+        let returned = NativeBalance::default();
+        assert_eq!(res.withdraw, returned);
+        assert_eq!(res.events.len(), 4);
+
+        let event = res.events[0].clone();
+        assert_eq!(event.ty, "rujira-fin/order.create");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Quote");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "fixed:0.99");
+        assert_eq!(event.attributes[3].key, "offer");
+        assert_eq!(event.attributes[3].value, "1000");
+
+        let event = res.events[1].clone();
+        assert_eq!(event.ty, "rujira-fin/order.retract");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Quote");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "fixed:1");
+        assert_eq!(event.attributes[3].key, "amount");
+        assert_eq!(event.attributes[3].value, "1000");
+
+        let event = res.events[2].clone();
+        assert_eq!(event.ty, "rujira-fin/order.retract");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "oracle:0");
+        assert_eq!(event.attributes[3].key, "amount");
+        assert_eq!(event.attributes[3].value, "600");
+
+        let event = res.events[3].clone();
+        assert_eq!(event.ty, "rujira-fin/order.create");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "oracle:10");
+        assert_eq!(event.attributes[3].key, "offer");
+        assert_eq!(event.attributes[3].value, "600");
     }
 }

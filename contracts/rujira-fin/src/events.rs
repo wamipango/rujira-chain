@@ -27,7 +27,7 @@ pub fn event_increase_order(pool: &Pool, order: &Order, amount: &Uint128) -> Eve
 }
 
 pub fn event_retract_order(pool: &Pool, order: &Order, amount: &Uint128) -> Event {
-    Event::new("rujira-fin/order.decrease")
+    Event::new("rujira-fin/order.retract")
         .add_attribute("owner", order.owner.clone())
         .add_attribute("side", pool.side.to_string())
         .add_attribute("price", pool.price.to_string())
