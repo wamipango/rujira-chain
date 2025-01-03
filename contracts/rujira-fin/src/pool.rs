@@ -380,4 +380,64 @@ mod tests {
 
         // assert_eq!(key_bytes.len(), 2);
     }
+
+    #[test]
+    fn side_iter() {
+        let mut store = MockStorage::new();
+        let timestamp = Timestamp::default();
+        let owner = Addr::unchecked("owner");
+        let offer = Uint128::from(100u128);
+        Pool::load(&store, &Price::Oracle(0), &Side::Bid)
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        Pool::load(&store, &Price::Oracle(-1), &Side::Bid)
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        Pool::load(&store, &Price::Oracle(1), &Side::Bid)
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        Pool::load(&store, &Price::Oracle(2), &Side::Bid)
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        Pool::load(&store, &Price::Oracle(2), &Side::Ask)
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        Pool::load(&store, &Price::Fixed(Decimal::one()), &Side::Ask)
+            .create_order(&mut store, timestamp, &owner, offer)
+            .unwrap();
+
+        Pool::load(
+            &store,
+            &Price::Fixed(Decimal::from_ratio(10u128, 9u128)),
+            &Side::Bid,
+        )
+        .create_order(&mut store, timestamp, &owner, offer)
+        .unwrap();
+
+        Pool::load(
+            &store,
+            &Price::Fixed(Decimal::from_ratio(15u128, 9u128)),
+            &Side::Bid,
+        )
+        .create_order(&mut store, timestamp, &owner, offer)
+        .unwrap();
+
+        Pool::load(
+            &store,
+            &Price::Fixed(Decimal::from_ratio(21u128, 9u128)),
+            &Side::Bid,
+        )
+        .create_order(&mut store, timestamp, &owner, offer)
+        .unwrap();
+
+        let iter = Pool::side(&store, &Side::Bid);
+        for x in iter {
+            dbg!(x);
+        }
+    }
 }

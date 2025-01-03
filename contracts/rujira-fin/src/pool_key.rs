@@ -121,21 +121,21 @@ mod tests {
 
         assert_eq!(key_bytes[0].as_ref(), &[1]);
         assert_eq!(key_bytes[1].as_ref(), &[1]);
-        assert_eq!(key_bytes[2].as_ref(), &[113]);
+        assert_eq!(key_bytes[2].as_ref(), &[127, 241]);
 
         let key = PoolKey::new(Side::Bid, Price::Oracle(21));
         let key_bytes = key.key();
 
         assert_eq!(key_bytes[0].as_ref(), &[1]);
         assert_eq!(key_bytes[1].as_ref(), &[1]);
-        assert_eq!(key_bytes[2].as_ref(), &[149]);
+        assert_eq!(key_bytes[2].as_ref(), &[128, 21]);
 
         let key = PoolKey::new(Side::Bid, Price::Oracle(0));
         let key_bytes = key.key();
 
         assert_eq!(key_bytes[0].as_ref(), &[1]);
         assert_eq!(key_bytes[1].as_ref(), &[1]);
-        assert_eq!(key_bytes[2].as_ref(), &[128]);
+        assert_eq!(key_bytes[2].as_ref(), &[128, 0]);
 
         let key = PoolKey::new(Side::Bid, Price::Oracle(0));
         assert_eq!(<PoolKey>::from_slice(&key.joined_key()).unwrap(), key);

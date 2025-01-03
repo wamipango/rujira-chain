@@ -55,7 +55,24 @@ pub enum ExecuteMsg {
 #[cw_serde]
 pub enum Price {
     Fixed(Decimal),
-    Oracle(i8),
+    Oracle(i16),
+}
+
+impl Price {
+    pub fn to_rate(&self, oracle: Decimal) -> Decimal {
+        match self {
+            Price::Fixed(fixed) => *fixed,
+            Price::Oracle(deviation) => match deviation {
+                i16::MIN..=-1 => {
+                    oracle * Decimal::from_ratio(10000u16 - deviation.unsigned_abs(), 10000u16)
+                }
+                0 => oracle,
+                1..=i16::MAX => {
+                    oracle * Decimal::from_ratio(deviation.unsigned_abs() + 10000u16, 10000u16)
+                }
+            },
+        }
+    }
 }
 
 impl PrimaryKey<'_> for Price {
@@ -67,7 +84,7 @@ impl PrimaryKey<'_> for Price {
     fn key(&self) -> std::vec::Vec<Key<'_>> {
         match self {
             Price::Fixed(fixed) => vec![Key::Val128(fixed.numerator().to_be_bytes())],
-            Price::Oracle(deviation) => vec![Key::Val8(deviation.to_cw_bytes())],
+            Price::Oracle(deviation) => vec![Key::Val16(deviation.to_cw_bytes())],
         }
     }
 }
@@ -81,7 +98,7 @@ impl KeyDeserialize for Price {
             16 => Ok(Self::Fixed(Decimal::new(Uint128::from(
                 u128::from_be_bytes(value.try_into().unwrap()),
             )))),
-            1 => Ok(Self::Oracle(i8::from_cw_bytes([value[0]]))),
+            2 => Ok(Self::Oracle(i16::from_cw_bytes(value.try_into().unwrap()))),
             _ => Err(StdError::generic_err("invalid Price key")),
         }
     }
