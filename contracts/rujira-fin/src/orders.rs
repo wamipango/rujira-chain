@@ -107,7 +107,10 @@ fn maybe_withdraw(
 
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
+    use cosmwasm_std::{
+        coins,
+        testing::{message_info, mock_dependencies, mock_env},
+    };
     use rujira_rs::fin::Price;
     use std::str::FromStr;
 
@@ -361,6 +364,47 @@ mod tests {
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "oracle:10");
         assert_eq!(event.attributes[3].key, "offer");
+        assert_eq!(event.attributes[3].value, "600");
+
+        // Move 300 over and increase by 300 more with fresh funds
+        let res = execute_orders(
+            &mut deps.storage,
+            &Denoms::new("ruji", "usdc"),
+            &info.sender,
+            &env.block.time,
+            &oracle,
+            &NativeBalance(coins(300, "ruji")),
+            vec![
+                (Side::Base, Price::Oracle(0), Uint128::from(300u128)),
+                (Side::Base, Price::Oracle(10), Uint128::from(1200u128)),
+            ],
+        )
+        .unwrap();
+
+        let returned = NativeBalance::default();
+        assert_eq!(res.withdraw, returned);
+        assert_eq!(res.events.len(), 2);
+
+        let event = res.events[0].clone();
+        assert_eq!(event.ty, "rujira-fin/order.retract");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "oracle:0");
+        assert_eq!(event.attributes[3].key, "amount");
+        assert_eq!(event.attributes[3].value, "300");
+
+        let event = res.events[1].clone();
+        assert_eq!(event.ty, "rujira-fin/order.increase");
+        assert_eq!(event.attributes[0].key, "owner");
+        assert_eq!(event.attributes[0].value, "addr0000");
+        assert_eq!(event.attributes[1].key, "side");
+        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[2].key, "price");
+        assert_eq!(event.attributes[2].value, "oracle:10");
+        assert_eq!(event.attributes[3].key, "amount");
         assert_eq!(event.attributes[3].value, "600");
     }
 }
