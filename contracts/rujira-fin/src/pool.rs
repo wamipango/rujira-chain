@@ -1,10 +1,10 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, Decimal256, StdResult, Storage, Timestamp, Uint128, Uint256};
 use cw_storage_plus::Map;
-use itertools::{Itertools, MergeJoinBy};
+use itertools::{EitherOrBoth, Itertools, MergeJoinBy};
 use rujira_rs::{
     bid_pool,
-    fin::{Price, Side},
+    fin::{BookItemResponse, Price, Side},
     Frac,
 };
 use std::cmp::Ordering;
@@ -198,6 +198,27 @@ impl Pool {
             bid.sum_snapshot_key(),
         );
         SNAPSHOTS.load(storage, key)
+    }
+
+    pub fn total(&self) -> Uint128 {
+        self.pool.total().try_into().unwrap()
+    }
+
+    pub fn combine(v: EitherOrBoth<Self>) -> BookItemResponse {
+        match v {
+            EitherOrBoth::Both(a, b) => BookItemResponse {
+                price: a.rate,
+                total: a.total() + b.total(),
+            },
+            EitherOrBoth::Left(a) => BookItemResponse {
+                price: a.rate,
+                total: a.total(),
+            },
+            EitherOrBoth::Right(b) => BookItemResponse {
+                price: b.rate,
+                total: b.total(),
+            },
+        }
     }
 }
 

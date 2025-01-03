@@ -8,7 +8,8 @@ use cosmwasm_std::{Decimal256, Fraction as _, StdResult, Uint256};
 
 /// Pooled bidding to distribute tokens between bidders at a specific exchange rate,
 /// consuming their bids, in O(1) time
-/// CRITICAL: When loading a Bid, you *must* call sync_bid to update the Bid with the latest pool state
+///
+/// CRITICAL: When loading a Bid, you **must** call sync_bid to update the Bid with the latest pool state
 #[cw_serde]
 #[derive(Copy)]
 pub struct Pool {

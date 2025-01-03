@@ -7,8 +7,8 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::NativeBalance;
 use rujira_rs::fin::{
-    BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, Price,
-    QueryMsg, Side, StatusResponse, SudoMsg,
+    BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse,
+    OrdersResponse, Price, QueryMsg, Side, StatusResponse, SudoMsg,
 };
 use rujira_rs::query;
 
@@ -109,12 +109,21 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
             let limit = limit.unwrap_or(100);
             let offset = offset.unwrap_or(0);
 
-            to_json_binary(&BookResponse {
-                base: todo!(),
-                quote: todo!(),
-            })
+            let base = Pool::side(deps.storage, &Side::Base, &oracle)
+                .skip(offset as usize)
+                .take(limit as usize)
+                .map(Pool::combine)
+                .collect();
+
+            let quote = Pool::side(deps.storage, &Side::Quote, &oracle)
+                .skip(offset as usize)
+                .take(limit as usize)
+                .map(Pool::combine)
+                .collect();
+
+            to_json_binary(&BookResponse { base, quote })
         }
-        QueryMsg::Simulate(offer) => todo!(),
+        QueryMsg::Simulate(_offer) => todo!(),
     }
     .map_err(ContractError::Std)
 }
@@ -144,10 +153,44 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use cosmwasm_std::Decimal;
+    use cosmwasm_std::{coin, coins, Addr, Decimal, Uint128};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
     use rujira_rs::{fin::Denoms, Layer1Asset, Tick};
-    use rujira_rs_testing::mock_rujira_app;
+    use rujira_rs_testing::{mock_rujira_app, RujiraApp};
+
+    fn setup() -> (RujiraApp, Addr) {
+        let mut app = mock_rujira_app();
+
+        let owner = app.api().addr_make("owner");
+
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+        let code_id = app.store_code(code);
+        let contract = app
+            .instantiate_contract(
+                code_id,
+                owner,
+                &InstantiateMsg {
+                    denoms: Denoms::new("btc-btc", "eth-usdc"),
+                    oracles: [
+                        Layer1Asset::try_from("BTC.BTC").unwrap(),
+                        Layer1Asset::try_from(
+                            "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
+                        )
+                        .unwrap(),
+                    ],
+                    tick: Tick::new(4u8),
+                    fee_taker: Decimal::zero(),
+                    fee_maker: Decimal::zero(),
+                    fee_address: app.api().addr_make("fee").to_string(),
+                },
+                &[],
+                "template",
+                None,
+            )
+            .unwrap();
+
+        (app, contract)
+    }
 
     #[test]
     fn instantiation() {
@@ -216,8 +259,106 @@ mod tests {
         assert_eq!(
             status,
             StatusResponse::Active {
-                price: Decimal::from_str("93319.1524675569444582").unwrap()
+                price: Decimal::from_str("93393.3").unwrap()
             }
+        );
+    }
+
+    #[test]
+    fn query_book() {
+        let (mut app, contract) = setup();
+        let owner = app.api().addr_make("owner");
+        let funds = vec![coin(500_000_000, "btc-btc"), coin(500_000_000, "eth-usdc")];
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &owner, funds.clone())
+                .unwrap();
+        });
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Order(vec![
+                (Side::Base, Price::Oracle(0), Uint128::from(10000u128)),
+                (
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("93393.3").unwrap()),
+                    Uint128::from(10000u128),
+                ),
+                (
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("93317").unwrap()),
+                    Uint128::from(10000u128),
+                ),
+                (
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("93219").unwrap()),
+                    Uint128::from(21000u128),
+                ),
+                (
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("91219").unwrap()),
+                    Uint128::from(51000u128),
+                ),
+                (Side::Quote, Price::Oracle(1), Uint128::from(10000u128)),
+                (
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("93402.63933").unwrap()),
+                    Uint128::from(12500u128),
+                ),
+                (
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("87900").unwrap()),
+                    Uint128::from(51000u128),
+                ),
+            ]),
+            &funds,
+        )
+        .unwrap();
+
+        let book: BookResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract,
+                &QueryMsg::Book {
+                    limit: None,
+                    offset: None,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(book.base.len(), 4);
+        let entry = book.base[0].clone();
+        assert_eq!(entry.price, Decimal::from_str("91219").unwrap());
+        assert_eq!(entry.total, Uint128::from(51000u128));
+        let entry = book.base[1].clone();
+        assert_eq!(entry.price, Decimal::from_str("93219").unwrap());
+        assert_eq!(entry.total, Uint128::from(21000u128));
+        let entry = book.base[2].clone();
+        assert_eq!(entry.price, Decimal::from_str("93317").unwrap());
+        assert_eq!(entry.total, Uint128::from(10000u128));
+        let entry = book.base[3].clone();
+        assert_eq!(entry.price, Decimal::from_str("93393.3").unwrap());
+        assert_eq!(entry.total, Uint128::from(20000u128));
+
+        assert_eq!(book.quote.len(), 2);
+        let entry = book.quote[0].clone();
+        assert_eq!(entry.price, Decimal::from_str("93402.63933").unwrap());
+        assert_eq!(entry.total, Uint128::from(22500u128));
+        let entry = book.quote[1].clone();
+        assert_eq!(entry.price, Decimal::from_str("87900").unwrap());
+        assert_eq!(entry.total, Uint128::from(51000u128));
+
+        let balance = app.wrap().query_all_balances(owner.to_string()).unwrap();
+        // Total 102000 btc submitted on base side
+        // Total 73500 usdc submitted on quote side
+        assert_eq!(
+            balance,
+            vec![
+                coin(500_000_000 - 102000, "btc-btc"),
+                coin(500_000_000 - 73500, "eth-usdc")
+            ]
         );
     }
 }
