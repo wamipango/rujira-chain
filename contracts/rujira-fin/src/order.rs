@@ -108,7 +108,7 @@ mod tests {
     use cosmwasm_std::{testing::MockStorage, Addr, Decimal, Timestamp, Uint128};
     use rujira_rs::fin::{Price, Side};
 
-    use crate::{pool::Pool, pool_key::PoolKey};
+    use crate::pool::Pool;
 
     #[test]
     fn query_order() {
@@ -117,7 +117,6 @@ mod tests {
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
         let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &Decimal::one());
-        let k = PoolKey::new(Side::Quote, Price::Oracle(0));
         pool.create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
