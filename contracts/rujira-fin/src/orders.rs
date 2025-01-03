@@ -76,13 +76,8 @@ impl OrderManager {
         side: &Side,
         target: Uint128,
     ) -> Result<(), ContractError> {
-        let res = maybe_withdraw(storage, &self.denoms, pool, order)?;
-        if let Some((event, amount)) = res {
-            self.receive += amount;
-            self.events.push(event);
-        }
+        self.maybe_withdraw(storage, pool, order)?;
         let amount = Uint128::try_from(order.bid.amount()).unwrap();
-
         match amount.cmp(&target) {
             Ordering::Less => {
                 let diff = target - amount;
@@ -117,6 +112,22 @@ impl OrderManager {
         self.events.push(event_create_order(&pool, &order));
         Ok(())
     }
+
+    fn maybe_withdraw(
+        &mut self,
+        storage: &mut dyn Storage,
+        pool: &mut Pool,
+        order: &mut Order,
+    ) -> Result<(), ContractError> {
+        if order.bid.filled().is_zero() {
+            return Ok(());
+        }
+        let amount = pool.claim_order(storage, order)?;
+        let coins = coin(amount.u128(), self.denoms.ask(pool.side.clone()));
+        self.receive += coins;
+        self.events.push(event_withdraw_order(pool, order, &amount));
+        Ok(())
+    }
 }
 
 impl From<&mut OrderManager> for ExecutionResult {
@@ -132,21 +143,6 @@ impl From<&mut OrderManager> for ExecutionResult {
 pub struct ExecutionResult {
     pub withdraw: NativeBalance,
     pub events: Vec<Event>,
-}
-
-fn maybe_withdraw(
-    storage: &mut dyn Storage,
-    denoms: &Denoms,
-    pool: &mut Pool,
-    order: &mut Order,
-) -> Result<Option<(Event, Coin)>, ContractError> {
-    if order.bid.filled().is_zero() {
-        return Ok(None);
-    }
-    let amount = pool.claim_order(storage, order)?;
-    let coins = coin(amount.u128(), denoms.ask(pool.side.clone()));
-
-    Ok(Some((event_withdraw_order(pool, order, &amount), coins)))
 }
 
 #[cfg(test)]
