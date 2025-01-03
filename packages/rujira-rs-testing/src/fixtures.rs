@@ -1,5 +1,5 @@
 use anyhow::Error;
-use cosmwasm_std::{Binary, StdError, StdResult};
+use cosmwasm_std::{Binary, StdError};
 use prost::Message;
 use rujira_rs::proto;
 

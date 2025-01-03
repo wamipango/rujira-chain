@@ -7,7 +7,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::NativeBalance;
 use rujira_rs::fin::{
-    BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse,
+    BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse,
     OrdersResponse, Price, QueryMsg, Side, StatusResponse, SudoMsg,
 };
 use rujira_rs::query;
@@ -153,7 +153,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use cosmwasm_std::{coin, coins, Addr, Decimal, Uint128};
+    use cosmwasm_std::{coin, Addr, Decimal, Uint128};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
     use rujira_rs::{fin::Denoms, Layer1Asset, Tick};
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};

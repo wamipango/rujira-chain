@@ -42,11 +42,10 @@ pub fn execute_orders(
                     Ordering::Less => {
                         let diff = target - amount;
 
-                        let amount =
-                            pool.increase_order(storage, &mut order, timestamp, diff)?;
+                        let amount = pool.increase_order(storage, &mut order, timestamp, diff)?;
                         let coins = coin(amount.u128(), denoms.bid(side));
                         send += coins;
-                        events.push(event_increase_order(&pool, &mut order, &diff));
+                        events.push(event_increase_order(&pool, &order, &diff));
                     }
                     Ordering::Greater => {
                         let diff = amount - target;
@@ -54,7 +53,7 @@ pub fn execute_orders(
                             pool.retract_order(storage, &mut order, timestamp, Some(diff))?;
                         let coins = coin(amount.u128(), denoms.bid(side));
                         receive += coins;
-                        events.push(event_retract_order(&pool, &mut order, &diff));
+                        events.push(event_retract_order(&pool, &order, &diff));
                     }
                     Ordering::Equal => {}
                 }

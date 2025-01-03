@@ -19,7 +19,7 @@ impl Tick {
         if v == v.truncate(self) {
             return Ok(());
         }
-        return Err(TickError::Invalid {});
+        Err(TickError::Invalid {})
     }
 }
 

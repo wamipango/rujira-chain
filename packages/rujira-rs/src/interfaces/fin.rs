@@ -74,15 +74,15 @@ impl Denoms {
 
     pub fn ask(&self, side: Side) -> &str {
         match side {
-            Side::Base => &self.quote(),
-            Side::Quote => &self.base(),
+            Side::Base => self.quote(),
+            Side::Quote => self.base(),
         }
     }
 
     pub fn bid(&self, side: Side) -> &str {
         match side {
-            Side::Base => &self.base(),
-            Side::Quote => &self.quote(),
+            Side::Base => self.base(),
+            Side::Quote => self.quote(),
         }
     }
 }
@@ -110,7 +110,7 @@ impl Price {
                 i16::MIN..=-1 => {
                     oracle * Decimal::from_ratio(10000u16 - deviation.unsigned_abs(), 10000u16)
                 }
-                0 => oracle.clone(),
+                0 => *oracle,
                 1..=i16::MAX => {
                     oracle * Decimal::from_ratio(deviation.unsigned_abs() + 10000u16, 10000u16)
                 }
