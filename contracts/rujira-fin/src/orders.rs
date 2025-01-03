@@ -10,74 +10,93 @@ use crate::{
     ContractError,
 };
 
-pub fn execute_orders(
-    storage: &mut dyn Storage,
-    denoms: &Denoms,
-    owner: &Addr,
-    timestamp: &Timestamp,
-    oracle: &Decimal,
-    funds: &NativeBalance,
-    o: Vec<(Side, Price, Uint128)>,
-) -> Result<ExecutionResult, ContractError> {
-    // NativeBalance can't be negative. Store in and out separately and we'll validate
-    // no negative balances at the end
-    // What we receive from the user and withdrawn and retracted orders
-    let mut receive = funds.clone();
-    // What we spend creating and increasing orders
-    let mut send = NativeBalance::default();
-    let mut events: Vec<Event> = vec![];
+pub struct OrderManager {
+    denoms: Denoms,
+    owner: Addr,
+    timestamp: Timestamp,
+    oracle: Decimal,
+}
 
-    for (side, price, target) in o {
-        let mut pool = Pool::load(storage, &price, &side, oracle);
-        match pool.load_order(storage, owner) {
-            Ok(mut order) => {
-                let res = maybe_withdraw(storage, denoms, &mut pool, &mut order)?;
-                if let Some((event, amount)) = res {
-                    receive += amount;
-                    events.push(event);
-                }
-                let amount = Uint128::try_from(order.bid.amount()).unwrap();
-
-                match amount.cmp(&target) {
-                    Ordering::Less => {
-                        let diff = target - amount;
-
-                        let amount = pool.increase_order(storage, &mut order, timestamp, diff)?;
-                        let coins = coin(amount.u128(), denoms.bid(side));
-                        send += coins;
-                        events.push(event_increase_order(&pool, &order, &diff));
-                    }
-                    Ordering::Greater => {
-                        let diff = amount - target;
-                        let amount =
-                            pool.retract_order(storage, &mut order, timestamp, Some(diff))?;
-                        let coins = coin(amount.u128(), denoms.bid(side));
-                        receive += coins;
-                        events.push(event_retract_order(&pool, &order, &diff));
-                    }
-                    Ordering::Equal => {}
-                }
-            }
-            Err(ContractError::NotFound {}) => {
-                let order = pool.create_order(storage, timestamp, owner, target)?;
-                let coins = coin(order.amount().u128(), denoms.bid(side));
-                send += coins;
-                events.push(event_create_order(&pool, &order));
-            }
-            Err(_) => {}
+impl OrderManager {
+    pub fn new(denoms: Denoms, owner: Addr, timestamp: Timestamp, oracle: Decimal) -> Self {
+        Self {
+            denoms,
+            owner,
+            timestamp,
+            oracle,
         }
     }
 
-    for x in send.into_vec() {
-        receive = (receive - x)?;
+    pub fn execute_orders(
+        &self,
+        storage: &mut dyn Storage,
+        funds: &NativeBalance,
+        o: Vec<(Side, Price, Uint128)>,
+    ) -> Result<ExecutionResult, ContractError> {
+        // NativeBalance can't be negative. Store in and out separately and we'll validate
+        // no negative balances at the end
+        // What we receive from the user and withdrawn and retracted orders
+        let mut receive = funds.clone();
+        // What we spend creating and increasing orders
+        let mut send = NativeBalance::default();
+        let mut events: Vec<Event> = vec![];
+
+        for (side, price, target) in o {
+            let mut pool = Pool::load(storage, &price, &side, &self.oracle);
+            match pool.load_order(storage, &self.owner) {
+                Ok(mut order) => {
+                    let res = maybe_withdraw(storage, &self.denoms, &mut pool, &mut order)?;
+                    if let Some((event, amount)) = res {
+                        receive += amount;
+                        events.push(event);
+                    }
+                    let amount = Uint128::try_from(order.bid.amount()).unwrap();
+
+                    match amount.cmp(&target) {
+                        Ordering::Less => {
+                            let diff = target - amount;
+
+                            let amount =
+                                pool.increase_order(storage, &mut order, &self.timestamp, diff)?;
+                            let coins = coin(amount.u128(), self.denoms.bid(side));
+                            send += coins;
+                            events.push(event_increase_order(&pool, &order, &diff));
+                        }
+                        Ordering::Greater => {
+                            let diff = amount - target;
+                            let amount = pool.retract_order(
+                                storage,
+                                &mut order,
+                                &self.timestamp,
+                                Some(diff),
+                            )?;
+                            let coins = coin(amount.u128(), self.denoms.bid(side));
+                            receive += coins;
+                            events.push(event_retract_order(&pool, &order, &diff));
+                        }
+                        Ordering::Equal => {}
+                    }
+                }
+                Err(ContractError::NotFound {}) => {
+                    let order = pool.create_order(storage, &self.timestamp, &self.owner, target)?;
+                    let coins = coin(order.amount().u128(), self.denoms.bid(side));
+                    send += coins;
+                    events.push(event_create_order(&pool, &order));
+                }
+                Err(_) => {}
+            }
+        }
+
+        for x in send.into_vec() {
+            receive = (receive - x)?;
+        }
+
+        Ok(ExecutionResult {
+            events,
+            withdraw: receive.clone(),
+        })
     }
-
-    Ok(ExecutionResult {
-        events,
-        withdraw: receive.clone(),
-    })
 }
-
 #[derive(Debug)]
 pub struct ExecutionResult {
     pub withdraw: NativeBalance,
@@ -119,20 +138,24 @@ mod tests {
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
 
-        let res = execute_orders(
-            &mut deps.storage,
-            &Denoms::new("ruji", "usdc"),
-            &info.sender,
-            &env.block.time,
-            &oracle,
-            &funds,
-            vec![(
-                Side::Quote,
-                Price::Fixed(Decimal::from_str("1.0").unwrap()),
-                Uint128::from(1000u128),
-            )],
-        )
-        .unwrap();
+        let e = OrderManager::new(
+            Denoms::new("ruji", "usdc"),
+            info.sender,
+            env.block.time,
+            oracle,
+        );
+
+        let res = e
+            .execute_orders(
+                &mut deps.storage,
+                &funds,
+                vec![(
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("1.0").unwrap()),
+                    Uint128::from(1000u128),
+                )],
+            )
+            .unwrap();
 
         assert_eq!(res.withdraw, NativeBalance::default());
         let event = res.events[0].clone();
@@ -158,29 +181,33 @@ mod tests {
         funds += coin(10000, "usdc");
         funds += coin(10000, "ruji");
 
-        let res = execute_orders(
-            &mut deps.storage,
-            &Denoms::new("ruji", "usdc"),
-            &info.sender,
-            &env.block.time,
-            &oracle,
-            &funds,
-            vec![
-                (
-                    Side::Quote,
-                    Price::Fixed(Decimal::from_str("1.0").unwrap()),
-                    Uint128::from(1000u128),
-                ),
-                (Side::Quote, Price::Oracle(0), Uint128::from(2000u128)),
-                (Side::Base, Price::Oracle(0), Uint128::from(1200u128)),
-                (
-                    Side::Base,
-                    Price::Fixed(Decimal::from_str("1.3").unwrap()),
-                    Uint128::from(1300u128),
-                ),
-            ],
-        )
-        .unwrap();
+        let e = OrderManager::new(
+            Denoms::new("ruji", "usdc"),
+            info.sender,
+            env.block.time,
+            oracle,
+        );
+
+        let res = e
+            .execute_orders(
+                &mut deps.storage,
+                &funds,
+                vec![
+                    (
+                        Side::Quote,
+                        Price::Fixed(Decimal::from_str("1.0").unwrap()),
+                        Uint128::from(1000u128),
+                    ),
+                    (Side::Quote, Price::Oracle(0), Uint128::from(2000u128)),
+                    (Side::Base, Price::Oracle(0), Uint128::from(1200u128)),
+                    (
+                        Side::Base,
+                        Price::Fixed(Decimal::from_str("1.3").unwrap()),
+                        Uint128::from(1300u128),
+                    ),
+                ],
+            )
+            .unwrap();
         let returned = NativeBalance(vec![coin(7500, "ruji"), coin(7000, "usdc")]);
         assert_eq!(res.withdraw, returned);
         let event = res.events[0].clone();
@@ -236,13 +263,15 @@ mod tests {
 
         let oracle = Decimal::from_str("1.0").unwrap();
         let funds = NativeBalance::default();
+        let e = OrderManager::new(
+            Denoms::new("ruji", "usdc"),
+            info.sender,
+            env.block.time,
+            oracle,
+        );
 
-        execute_orders(
+        e.execute_orders(
             &mut deps.storage,
-            &Denoms::new("ruji", "usdc"),
-            &info.sender,
-            &env.block.time,
-            &oracle,
             &funds,
             vec![(
                 Side::Quote,
@@ -263,14 +292,16 @@ mod tests {
         let mut funds = NativeBalance::default();
         funds += coin(10000, "usdc");
         funds += coin(10000, "ruji");
+        let e = OrderManager::new(
+            Denoms::new("ruji", "usdc"),
+            info.sender,
+            env.block.time,
+            oracle,
+        );
 
         // Same as above
-        execute_orders(
+        e.execute_orders(
             &mut deps.storage,
-            &Denoms::new("ruji", "usdc"),
-            &info.sender,
-            &env.block.time,
-            &oracle,
             &funds,
             vec![
                 (
@@ -289,30 +320,27 @@ mod tests {
         )
         .unwrap();
 
-        let res = execute_orders(
-            &mut deps.storage,
-            &Denoms::new("ruji", "usdc"),
-            &info.sender,
-            &env.block.time,
-            &oracle,
-            &NativeBalance::default(),
-            vec![
-                (
-                    Side::Quote,
-                    Price::Fixed(Decimal::from_str("0.99").unwrap()),
-                    Uint128::from(1000u128),
-                ),
-                (
-                    Side::Quote,
-                    Price::Fixed(Decimal::from_str("1.0").unwrap()),
-                    Uint128::zero(),
-                ),
-                // Split 1200 ito 2 x 600
-                (Side::Base, Price::Oracle(0), Uint128::from(600u128)),
-                (Side::Base, Price::Oracle(10), Uint128::from(600u128)),
-            ],
-        )
-        .unwrap();
+        let res = e
+            .execute_orders(
+                &mut deps.storage,
+                &NativeBalance::default(),
+                vec![
+                    (
+                        Side::Quote,
+                        Price::Fixed(Decimal::from_str("0.99").unwrap()),
+                        Uint128::from(1000u128),
+                    ),
+                    (
+                        Side::Quote,
+                        Price::Fixed(Decimal::from_str("1.0").unwrap()),
+                        Uint128::zero(),
+                    ),
+                    // Split 1200 ito 2 x 600
+                    (Side::Base, Price::Oracle(0), Uint128::from(600u128)),
+                    (Side::Base, Price::Oracle(10), Uint128::from(600u128)),
+                ],
+            )
+            .unwrap();
 
         let returned = NativeBalance::default();
         assert_eq!(res.withdraw, returned);
@@ -363,19 +391,16 @@ mod tests {
         assert_eq!(event.attributes[3].value, "600");
 
         // Move 300 over and increase by 300 more with fresh funds
-        let res = execute_orders(
-            &mut deps.storage,
-            &Denoms::new("ruji", "usdc"),
-            &info.sender,
-            &env.block.time,
-            &oracle,
-            &NativeBalance(coins(300, "ruji")),
-            vec![
-                (Side::Base, Price::Oracle(0), Uint128::from(300u128)),
-                (Side::Base, Price::Oracle(10), Uint128::from(1200u128)),
-            ],
-        )
-        .unwrap();
+        let res = e
+            .execute_orders(
+                &mut deps.storage,
+                &NativeBalance(coins(300, "ruji")),
+                vec![
+                    (Side::Base, Price::Oracle(0), Uint128::from(300u128)),
+                    (Side::Base, Price::Oracle(10), Uint128::from(1200u128)),
+                ],
+            )
+            .unwrap();
 
         let returned = NativeBalance::default();
         assert_eq!(res.withdraw, returned);

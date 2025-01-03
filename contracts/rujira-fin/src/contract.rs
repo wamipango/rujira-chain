@@ -7,15 +7,15 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::NativeBalance;
 use rujira_rs::fin::{
-    BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse,
-    OrdersResponse, Price, QueryMsg, Side, StatusResponse, SudoMsg,
+    BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, Price,
+    QueryMsg, Side, StatusResponse, SudoMsg,
 };
 use rujira_rs::query;
 
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
 use crate::order::Order;
-use crate::orders::execute_orders;
+use crate::orders::OrderManager;
 use crate::pool::Pool;
 
 // version info for migration info
@@ -49,15 +49,10 @@ pub fn execute(
     match msg {
         ExecuteMsg::Swap { .. } => todo!(),
         ExecuteMsg::Order(vec) => {
-            let res = execute_orders(
-                deps.storage,
-                &config.denoms,
-                &info.sender,
-                &env.block.time,
-                &oracle,
-                &NativeBalance(info.funds),
-                vec,
-            )?;
+            let e = OrderManager::new(config.denoms, info.sender.clone(), env.block.time, oracle);
+
+            let res = e.execute_orders(deps.storage, &NativeBalance(info.funds), vec)?;
+
             let withdraw_message = CosmosMsg::Bank(BankMsg::Send {
                 to_address: info.sender.to_string(),
                 amount: res.withdraw.into_vec(),
