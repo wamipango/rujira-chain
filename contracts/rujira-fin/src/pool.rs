@@ -111,12 +111,12 @@ impl Pool {
     ) -> StdResult<Order> {
         let order = Order {
             owner: owner.clone(),
-            offer: offer.clone(),
+            offer,
             updated_at: *timestamp,
             bid: self.pool.new_bid(offer.into()),
         };
         self.save(storage)?;
-        order.save(storage, &self)?;
+        order.save(storage, self)?;
         Ok(order)
     }
 

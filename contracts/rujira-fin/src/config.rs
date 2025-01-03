@@ -35,7 +35,7 @@ impl Config {
     }
 
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
-        CONFIG.save(storage, &self)
+        CONFIG.save(storage, self)
     }
 }
 
@@ -45,8 +45,8 @@ impl From<Config> for ConfigResponse {
             denoms: value.denoms,
             oracles: value.oracles,
             tick: value.tick,
-            fee_maker: value.fee_maker.into(),
-            fee_taker: value.fee_taker.into(),
+            fee_maker: value.fee_maker,
+            fee_taker: value.fee_taker,
             fee_address: value.fee_address.to_string(),
         }
     }

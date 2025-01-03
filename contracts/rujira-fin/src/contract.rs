@@ -99,7 +99,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                     .map(|(k, order)| {
                         let pool = Pool::load(deps.storage, &k.price, &k.side, &oracle);
                         pool.sync_order(deps.storage, order)?;
-                        Ok(order_response(&order, &k.side, &k.price, &oracle))
+                        Ok(order_response(order, &k.side, &k.price, &oracle))
                     })
                     .collect();
 

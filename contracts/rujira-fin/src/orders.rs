@@ -32,12 +32,9 @@ pub fn execute_orders(
         match pool.load_order(storage, owner) {
             Ok(mut order) => {
                 let res = maybe_withdraw(storage, denoms, &mut pool, &mut order)?;
-                match res {
-                    Some((event, amount)) => {
-                        receive += amount;
-                        events.push(event);
-                    }
-                    None => {}
+                if let Some((event, amount)) = res {
+                    receive += amount;
+                    events.push(event);
                 }
                 let amount = Uint128::try_from(order.bid.amount()).unwrap();
 
@@ -46,7 +43,7 @@ pub fn execute_orders(
                         let diff = target - amount;
 
                         let amount =
-                            pool.increase_order(storage, &mut order, timestamp, diff.clone())?;
+                            pool.increase_order(storage, &mut order, timestamp, diff)?;
                         let coins = coin(amount.u128(), denoms.bid(side));
                         send += coins;
                         events.push(event_increase_order(&pool, &mut order, &diff));
@@ -54,7 +51,7 @@ pub fn execute_orders(
                     Ordering::Greater => {
                         let diff = amount - target;
                         let amount =
-                            pool.retract_order(storage, &mut order, timestamp, Some(diff.clone()))?;
+                            pool.retract_order(storage, &mut order, timestamp, Some(diff))?;
                         let coins = coin(amount.u128(), denoms.bid(side));
                         receive += coins;
                         events.push(event_retract_order(&pool, &mut order, &diff));
