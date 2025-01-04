@@ -83,16 +83,16 @@ impl OrderManager {
                 let diff = target - amount;
 
                 let amount = pool.increase_order(storage, order, &self.timestamp, diff)?;
-                let coins = coin(amount.u128(), self.denoms.bid(&side));
+                let coins = coin(amount.u128(), self.denoms.bid(side));
                 self.send += coins;
-                self.events.push(event_increase_order(&pool, &order, &diff));
+                self.events.push(event_increase_order(pool, order, &diff));
             }
             Ordering::Greater => {
                 let diff = amount - target;
                 let amount = pool.retract_order(storage, order, &self.timestamp, Some(diff))?;
-                let coins = coin(amount.u128(), self.denoms.bid(&side));
+                let coins = coin(amount.u128(), self.denoms.bid(side));
                 self.receive += coins;
-                self.events.push(event_retract_order(&pool, &order, &diff));
+                self.events.push(event_retract_order(pool, order, &diff));
             }
             Ordering::Equal => {}
         }
@@ -107,9 +107,9 @@ impl OrderManager {
         target: Uint128,
     ) -> Result<(), ContractError> {
         let order = pool.create_order(storage, &self.timestamp, &self.owner, target)?;
-        let coins = coin(order.amount().u128(), self.denoms.bid(&side));
+        let coins = coin(order.amount().u128(), self.denoms.bid(side));
         self.send += coins;
-        self.events.push(event_create_order(&pool, &order));
+        self.events.push(event_create_order(pool, &order));
         Ok(())
     }
 

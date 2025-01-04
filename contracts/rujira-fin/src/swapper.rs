@@ -3,7 +3,7 @@ use cw_utils::NativeBalance;
 use itertools::EitherOrBoth;
 use rujira_rs::fin::{Denoms, Side};
 
-use crate::{pool::Pool, ContractError};
+use crate::{events::event_trade, pool::Pool, ContractError};
 
 pub struct Swapper {
     denoms: Denoms,
@@ -42,8 +42,13 @@ impl Swapper {
             if self.offer.is_zero() {
                 break;
             }
+            let mut offer = Uint128::zero();
+            let mut returned = Uint128::zero();
+            let price: Decimal;
             match v {
                 EitherOrBoth::Both(mut a, mut b) => {
+                    price = a.rate;
+
                     let offer_a =
                         Decimal::from_ratio(a.total() * self.offer, b.total() + a.total())
                             .to_uint_floor();
@@ -51,27 +56,33 @@ impl Swapper {
 
                     let (consumed_offer, consumed_bids) = a.distribute(offer_a)?;
                     self.pending_pools.push(a);
-                    self.offer -= consumed_offer;
-                    self.returned += consumed_bids;
+                    offer -= consumed_offer;
+                    returned += consumed_bids;
 
                     let (consumed_offer, consumed_bids) = b.distribute(offer_b)?;
                     self.pending_pools.push(b);
-                    self.offer -= consumed_offer;
-                    self.returned += consumed_bids;
+                    offer -= consumed_offer;
+                    returned += consumed_bids;
                 }
                 EitherOrBoth::Left(mut x) => {
+                    price = x.rate;
                     let (consumed_offer, consumed_bids) = x.distribute(self.offer)?;
                     self.pending_pools.push(x);
-                    self.offer -= consumed_offer;
-                    self.returned += consumed_bids;
+                    offer -= consumed_offer;
+                    returned += consumed_bids;
                 }
                 EitherOrBoth::Right(mut x) => {
+                    price = x.rate;
                     let (consumed_offer, consumed_bids) = x.distribute(self.offer)?;
                     self.pending_pools.push(x);
-                    self.offer -= consumed_offer;
-                    self.returned += consumed_bids;
+                    offer -= consumed_offer;
+                    returned += consumed_bids;
                 }
             }
+            self.offer -= offer;
+            self.returned += returned;
+            self.events
+                .push(event_trade(&self.side, &price, offer, returned));
         }
 
         if let Some(min_return) = self.min_return {
