@@ -154,7 +154,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 fn load_oracle_price(q: QuerierWrapper, config: &Config) -> Result<Decimal, ContractError> {
     let a = query::Pool::load(q, &config.oracles[0])?.asset_tor_price;
     let b = query::Pool::load(q, &config.oracles[1])?.asset_tor_price;
-    Ok(a * b)
+    Ok(a / b)
 }
 
 fn order_response(order: &Order, side: &Side, price: &Price, oracle: &Decimal) -> OrderResponse {
@@ -282,7 +282,7 @@ mod tests {
         assert_eq!(
             status,
             StatusResponse::Active {
-                price: Decimal::from_str("93393.3").unwrap()
+                price: Decimal::from_str("100000").unwrap()
             }
         );
     }
@@ -306,7 +306,7 @@ mod tests {
                 (Side::Base, Price::Oracle(0), Uint128::from(10000u128)),
                 (
                     Side::Base,
-                    Price::Fixed(Decimal::from_str("93393.3").unwrap()),
+                    Price::Fixed(Decimal::from_str("100000").unwrap()),
                     Uint128::from(10000u128),
                 ),
                 (
@@ -327,7 +327,7 @@ mod tests {
                 (Side::Quote, Price::Oracle(1), Uint128::from(10000u128)),
                 (
                     Side::Quote,
-                    Price::Fixed(Decimal::from_str("93402.63933").unwrap()),
+                    Price::Fixed(Decimal::from_str("100010").unwrap()),
                     Uint128::from(12500u128),
                 ),
                 (
@@ -350,7 +350,6 @@ mod tests {
                 },
             )
             .unwrap();
-
         assert_eq!(book.base.len(), 4);
         let entry = book.base[0].clone();
         assert_eq!(entry.price, Decimal::from_str("91219").unwrap());
@@ -362,12 +361,12 @@ mod tests {
         assert_eq!(entry.price, Decimal::from_str("93317").unwrap());
         assert_eq!(entry.total, Uint128::from(10000u128));
         let entry = book.base[3].clone();
-        assert_eq!(entry.price, Decimal::from_str("93393.3").unwrap());
+        assert_eq!(entry.price, Decimal::from_str("100000").unwrap());
         assert_eq!(entry.total, Uint128::from(20000u128));
 
         assert_eq!(book.quote.len(), 2);
         let entry = book.quote[0].clone();
-        assert_eq!(entry.price, Decimal::from_str("93402.63933").unwrap());
+        assert_eq!(entry.price, Decimal::from_str("100010").unwrap());
         assert_eq!(entry.total, Uint128::from(22500u128));
         let entry = book.quote[1].clone();
         assert_eq!(entry.price, Decimal::from_str("87900").unwrap());

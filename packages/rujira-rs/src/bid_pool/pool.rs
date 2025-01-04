@@ -171,8 +171,6 @@ pub struct DistributionResult {
 mod tests {
     use std::str::FromStr;
 
-    use crate::bid_pool::bid;
-
     use super::*;
 
     #[test]

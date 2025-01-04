@@ -13,7 +13,7 @@ fn mock_pool_btc() -> Binary {
         pending_inbound_rune: "0".to_string(),
         balance_asset: "68602648901".to_string(),
         balance_rune: "1172427071332399".to_string(),
-        asset_tor_price: "9330000000000".to_string(),
+        asset_tor_price: "10010000000000".to_string(),
         pool_units: "613518358320559".to_string(),
         lp_units: "347866097255926".to_string(),
         synth_units: "265652261064633".to_string(),
