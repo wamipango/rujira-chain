@@ -6,5 +6,6 @@ pub mod order;
 pub mod orders;
 pub mod pool;
 pub mod pool_key;
+pub mod swapper;
 
 pub use crate::error::ContractError;

@@ -3,7 +3,7 @@ use cosmwasm_std::{Addr, Decimal, Decimal256, StdResult, Storage, Timestamp, Uin
 use cw_storage_plus::Map;
 use itertools::{EitherOrBoth, Itertools, MergeJoinBy};
 use rujira_rs::{
-    bid_pool,
+    bid_pool::{self, SumSnapshot},
     fin::{BookItemResponse, Price, Side},
     Frac,
 };
@@ -28,6 +28,8 @@ pub struct Pool {
     pub side: Side,
     pub rate: Decimal,
     pub pool: bid_pool::Pool,
+    #[serde(skip)]
+    pending_sum_snapshots: Vec<SumSnapshot>,
 }
 
 impl Pool {
@@ -56,6 +58,7 @@ impl Pool {
                     pool: BID_POOLS
                         .load(storage, PoolKey::new(side.clone(), price))
                         .unwrap(),
+                    pending_sum_snapshots: vec![],
                 }),
                 Err(_) => None,
             }
@@ -84,10 +87,16 @@ impl Pool {
             side: side.clone(),
             rate: price.to_rate(oracle),
             pool: BID_POOLS.load(storage, key).unwrap_or_default(),
+            pending_sum_snapshots: vec![],
         }
     }
 
-    pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
+    pub fn save(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
+        for s in self.pending_sum_snapshots.clone() {
+            SNAPSHOTS.save(storage, (self.key(), s.key()), &s.sum)?;
+        }
+        self.pending_sum_snapshots = vec![];
+
         BID_POOLS.save(storage, self.key(), &self.pool)?;
         // Clear empty pools so they're not iterated over during a swap
         if self.pool.is_zero() {
@@ -167,20 +176,21 @@ impl Pool {
         Ok(Uint128::try_from(claimed)?)
     }
 
-    pub fn distribute(&mut self, storage: &mut dyn Storage, amount: Uint128) -> StdResult<Uint128> {
+    pub fn distribute(&mut self, offer: Uint128) -> StdResult<(Uint128, Uint128)> {
         let price = match self.price {
             Price::Fixed(decimal) => decimal,
             Price::Oracle(_) => todo!(),
         };
-        let (amount, _, snapshots) = self
+        let res = self
             .pool
-            .distribute(amount.into(), &Decimal256::from(price))?;
+            .distribute(offer.into(), &Decimal256::from(price))?;
 
-        for s in snapshots {
-            SNAPSHOTS.save(storage, (self.key(), s.key()), &s.sum)?;
-        }
+        self.pending_sum_snapshots = res.snapshots;
 
-        Ok(amount.try_into()?)
+        Ok((
+            res.consumed_offer.try_into()?,
+            res.consumed_bids.try_into()?,
+        ))
     }
 
     pub fn sync_order(
@@ -252,7 +262,7 @@ mod tests {
         POOLS.load(&store, k.clone()).unwrap();
         BID_POOLS.load(&store, k.clone()).unwrap();
 
-        pool.distribute(&mut store, Uint128::from(100u128)).unwrap();
+        pool.distribute(Uint128::from(100u128)).unwrap();
 
         // Bid Pool should have been emptied, so the container Pool shold be cleared, but the BidPool should remain
         pool.save(&mut store).unwrap();

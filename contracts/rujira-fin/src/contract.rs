@@ -5,7 +5,7 @@ use cosmwasm_std::{
     QuerierWrapper, Response,
 };
 use cw2::set_contract_version;
-use cw_utils::NativeBalance;
+use cw_utils::{one_coin, NativeBalance};
 use rujira_rs::fin::{
     BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, Price,
     QueryMsg, Side, StatusResponse, SudoMsg,
@@ -17,6 +17,7 @@ use crate::error::ContractError;
 use crate::order::Order;
 use crate::orders::OrderManager;
 use crate::pool::Pool;
+use crate::swapper::Swapper;
 
 // version info for migration info
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -47,7 +48,21 @@ pub fn execute(
     let oracle = load_oracle_price(deps.querier, &config)?;
 
     match msg {
-        ExecuteMsg::Swap { .. } => todo!(),
+        ExecuteMsg::Swap { min_return, to, .. } => {
+            let to = to.map(|x| deps.api.addr_validate(&x)).transpose()?;
+            let funds = one_coin(&info)?;
+            let side = config.denoms.validate(&funds)?;
+            let res = Swapper::new(side, config.denoms, funds.amount, min_return, oracle)
+                .swap(deps.storage)?;
+            let send_message = CosmosMsg::Bank(BankMsg::Send {
+                to_address: to.unwrap_or(info.sender).to_string(),
+                amount: res.funds.into_vec(),
+            });
+
+            Ok(Response::default()
+                .add_message(send_message)
+                .add_events(res.events))
+        }
         ExecuteMsg::Order(vec) => {
             let mut e = OrderManager::new(
                 config.denoms,

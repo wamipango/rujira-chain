@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, Decimal, Fraction, StdError, Timestamp, Uint128};
+use cosmwasm_std::{Coin, Decimal, Fraction, StdError, StdResult, Timestamp, Uint128};
 use cw_storage_plus::{IntKey, Key, KeyDeserialize, Prefixer, PrimaryKey};
 
 use crate::{tick::Tick, CallbackData, Layer1Asset};
@@ -72,18 +72,30 @@ impl Denoms {
         &self.0[1]
     }
 
-    pub fn ask(&self, side: Side) -> &str {
+    pub fn ask(&self, side: &Side) -> &str {
         match side {
             Side::Base => self.quote(),
             Side::Quote => self.base(),
         }
     }
 
-    pub fn bid(&self, side: Side) -> &str {
+    pub fn bid(&self, side: &Side) -> &str {
         match side {
             Side::Base => self.base(),
             Side::Quote => self.quote(),
         }
+    }
+
+    pub fn validate(&self, coin: &Coin) -> StdResult<Side> {
+        if coin.denom == self.base() {
+            return Ok(Side::Base);
+        }
+
+        if coin.denom == self.quote() {
+            return Ok(Side::Quote);
+        }
+
+        Err(StdError::generic_err("invalid denom"))
     }
 }
 

@@ -1,4 +1,4 @@
-use cosmwasm_std::{CheckedFromRatioError, ConversionOverflowError, StdError};
+use cosmwasm_std::{CheckedFromRatioError, ConversionOverflowError, StdError, Uint128};
 use cw_utils::PaymentError;
 use rujira_rs::{bid_pool::BidPoolError, query::PoolError};
 use thiserror::Error;
@@ -22,6 +22,12 @@ pub enum ContractError {
 
     #[error("{0}")]
     Pool(#[from] PoolError),
+
+    #[error("InsufficientReturn expected {expected} got {returned}")]
+    InsufficientReturn {
+        expected: Uint128,
+        returned: Uint128,
+    },
 
     #[error("Unauthorized")]
     Unauthorized {},

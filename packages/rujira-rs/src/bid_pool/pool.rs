@@ -51,40 +51,36 @@ impl Pool {
     }
 
     /// Distribute the given amount at the given rate, consuming the total amount of the pool,
-    /// Returns a Vec<SumSnapshot> which should be stored against the SumSnapshot::key()
     pub fn distribute(
         &mut self,
-        amount: Uint256,
+        offer: Uint256,
         rate: &Decimal256,
-    ) -> StdResult<(Uint256, Uint256, Vec<SumSnapshot>)> {
-        if amount.is_zero() || self.total.is_zero() {
-            return Ok((Uint256::zero(), Uint256::zero(), vec![]));
+    ) -> StdResult<DistributionResult> {
+        if offer.is_zero() || self.total.is_zero() {
+            return Ok(DistributionResult::default());
         }
-        let value = amount.mul_floor(*rate);
+        let bids_value = offer.mul_floor(*rate);
 
         // Switch between entirely consuming either the pool or the offer.
         // This effectively carries the rounding truncation from the distribute_full,
         // until we get to distribute_partial, where it's fully consumed and we have
         // symmetry via the fair distro algo
-        if value >= self.total {
+        if bids_value >= self.total {
             // Offer is worth more than pool. Empty the pool an increase the epoch
             return self.distribute_full(rate);
         }
         // Pool is worth more than the offer. Consume the rest of the offer
-        self.distribute_partial(value, amount)
+        self.distribute_partial(bids_value, offer)
     }
 
     pub fn total(&self) -> Uint256 {
         self.total
     }
 
-    fn distribute_full(
-        &mut self,
-        rate: &Decimal256,
-    ) -> StdResult<(Uint256, Uint256, Vec<SumSnapshot>)> {
+    fn distribute_full(&mut self, rate: &Decimal256) -> StdResult<DistributionResult> {
         let inv = rate.inv().unwrap();
         let consumed_offer = Decimal256::from_atomics(self.total, 0).unwrap() * inv;
-        let consumed_amount = self.total;
+        let consumed_bids = self.total;
 
         self.sum += self.product.mul(inv);
 
@@ -92,24 +88,32 @@ impl Pool {
         self.increment_epoch();
         snapshots.push(SumSnapshot::from(*self));
 
-        Ok((consumed_amount, consumed_offer.to_uint_ceil(), snapshots))
+        Ok(DistributionResult {
+            consumed_offer: consumed_offer.to_uint_ceil(),
+            consumed_bids,
+            snapshots,
+        })
     }
 
     fn distribute_partial(
         &mut self,
-        value: Uint256,
-        amount: Uint256,
-    ) -> StdResult<(Uint256, Uint256, Vec<SumSnapshot>)> {
+        bids_value: Uint256,
+        offer: Uint256,
+    ) -> StdResult<DistributionResult> {
         // S + E / D * P
-        self.sum += self.product * Frac::from_ratio(amount, self.total);
+        self.sum += self.product * Frac::from_ratio(offer, self.total);
 
         // 1 - Q / D
-        self.product = self.product * (Frac::one() - Frac::from_ratio(value, self.total));
+        self.product = self.product * (Frac::one() - Frac::from_ratio(bids_value, self.total));
 
-        self.total -= value;
+        self.total -= bids_value;
         let snapshots = vec![SumSnapshot::from(*self)];
 
-        Ok((value, amount, snapshots))
+        Ok(DistributionResult {
+            consumed_offer: offer,
+            consumed_bids: bids_value,
+            snapshots,
+        })
     }
 
     pub fn sync_bid(&self, bid: &mut Bid, sum_snapshot: Option<Frac>) -> StdResult<()> {
@@ -155,4 +159,11 @@ impl Pool {
         self.scale = 0;
         self.epoch += 1;
     }
+}
+
+#[derive(Default)]
+pub struct DistributionResult {
+    pub consumed_offer: Uint256,
+    pub consumed_bids: Uint256,
+    pub snapshots: Vec<SumSnapshot>,
 }
