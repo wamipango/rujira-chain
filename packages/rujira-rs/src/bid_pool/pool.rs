@@ -156,9 +156,56 @@ impl Pool {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct DistributionResult {
     pub consumed_offer: Uint256,
     pub consumed_bids: Uint256,
     pub snapshots: Vec<SumSnapshot>,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn test_distribution_and_scaling() {
+        let mut pool = Pool::default();
+        let mut bid_a = pool.new_bid(Uint256::from(100u128));
+        let mut bid_b = pool.new_bid(Uint256::from(200u128));
+        let mut bid_c = pool.new_bid(Uint256::from(250u128));
+        let mut bid_d = pool.new_bid(Uint256::from(1000u128));
+
+        assert_eq!(pool.total(), Uint256::from(1550u128));
+        assert_eq!(pool.sum, Frac::zero());
+        assert_eq!(pool.epoch, 0);
+        assert_eq!(pool.product, Frac::one());
+
+        let res = pool
+            .distribute(
+                Uint256::from(7750u128),
+                &Decimal256::from_str("0.05").unwrap(),
+            )
+            .unwrap();
+        dbg!(&res);
+        dbg!(&pool);
+
+        let s = res.snapshots.first().map(|s| s.sum);
+
+        pool.sync_bid(&mut bid_a, s).unwrap();
+        pool.sync_bid(&mut bid_b, s).unwrap();
+        pool.sync_bid(&mut bid_c, s).unwrap();
+        pool.sync_bid(&mut bid_d, s).unwrap();
+
+        // 7750 * 0.05 = 387, 25% fills
+        assert_eq!(bid_a.amount, Uint256::from(75u128));
+        assert_eq!(bid_a.filled, Uint256::from(500u128));
+        assert_eq!(bid_b.amount, Uint256::from(150u128));
+        assert_eq!(bid_b.filled, Uint256::from(1000u128));
+        assert_eq!(bid_c.amount, Uint256::from(187u128));
+        assert_eq!(bid_c.filled, Uint256::from(1250u128));
+        assert_eq!(bid_d.amount, Uint256::from(750u128));
+        assert_eq!(bid_d.filled, Uint256::from(5000u128));
+    }
 }

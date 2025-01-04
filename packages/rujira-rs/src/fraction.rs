@@ -169,7 +169,7 @@ impl Fraction<Uint256> for Frac {
         if self.is_zero() {
             None
         } else {
-            Some(Self(Self::DECIMAL_FRACTIONAL / self.0))
+            Some(Self::from_ratio(Self::DECIMAL_FRACTIONAL, self.0))
         }
     }
 }
