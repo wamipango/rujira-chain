@@ -190,7 +190,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Quote");
+        assert_eq!(event.attributes[1].value, "quote");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "fixed:1");
         assert_eq!(event.attributes[3].key, "offer");
@@ -242,7 +242,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Quote");
+        assert_eq!(event.attributes[1].value, "quote");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "fixed:1");
         assert_eq!(event.attributes[3].key, "offer");
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Quote");
+        assert_eq!(event.attributes[1].value, "quote");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "oracle:0");
         assert_eq!(event.attributes[3].key, "offer");
@@ -264,7 +264,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[1].value, "base");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "oracle:0");
         assert_eq!(event.attributes[3].key, "offer");
@@ -275,7 +275,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[1].value, "base");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "fixed:1.3");
         assert_eq!(event.attributes[3].key, "offer");
@@ -385,7 +385,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Quote");
+        assert_eq!(event.attributes[1].value, "quote");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "fixed:0.99");
         assert_eq!(event.attributes[3].key, "offer");
@@ -396,7 +396,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Quote");
+        assert_eq!(event.attributes[1].value, "quote");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "fixed:1");
         assert_eq!(event.attributes[3].key, "amount");
@@ -407,7 +407,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[1].value, "base");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "oracle:0");
         assert_eq!(event.attributes[3].key, "amount");
@@ -418,7 +418,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[1].value, "base");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "oracle:10");
         assert_eq!(event.attributes[3].key, "offer");
@@ -452,7 +452,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[1].value, "base");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "oracle:0");
         assert_eq!(event.attributes[3].key, "amount");
@@ -463,7 +463,7 @@ mod tests {
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
         assert_eq!(event.attributes[1].key, "side");
-        assert_eq!(event.attributes[1].value, "Base");
+        assert_eq!(event.attributes[1].value, "base");
         assert_eq!(event.attributes[2].key, "price");
         assert_eq!(event.attributes[2].value, "oracle:10");
         assert_eq!(event.attributes[3].key, "amount");

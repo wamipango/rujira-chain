@@ -177,13 +177,9 @@ impl Pool {
     }
 
     pub fn distribute(&mut self, offer: Uint128) -> StdResult<(Uint128, Uint128)> {
-        let price = match self.price {
-            Price::Fixed(decimal) => decimal,
-            Price::Oracle(_) => todo!(),
-        };
         let res = self
             .pool
-            .distribute(offer.into(), &Decimal256::from(price))?;
+            .distribute(offer.into(), &Decimal256::from(self.rate))?;
 
         self.pending_sum_snapshots = res.snapshots;
 

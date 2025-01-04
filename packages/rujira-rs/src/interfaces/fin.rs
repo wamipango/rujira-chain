@@ -86,13 +86,14 @@ impl Denoms {
         }
     }
 
-    pub fn validate(&self, coin: &Coin) -> StdResult<Side> {
+    /// Gets the side of the book that this coin is the offer token for
+    pub fn offer_side(&self, coin: &Coin) -> StdResult<Side> {
         if coin.denom == self.base() {
-            return Ok(Side::Base);
+            return Ok(Side::Quote);
         }
 
         if coin.denom == self.quote() {
-            return Ok(Side::Quote);
+            return Ok(Side::Base);
         }
 
         Err(StdError::generic_err("invalid denom"))
@@ -169,8 +170,8 @@ pub enum Side {
 impl Display for Side {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Side::Base => write!(f, "Base"),
-            Side::Quote => write!(f, "Quote"),
+            Side::Base => write!(f, "base"),
+            Side::Quote => write!(f, "quote"),
         }
     }
 }

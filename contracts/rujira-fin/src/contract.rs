@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
+    coin, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
     QuerierWrapper, Response,
 };
 use cw2::set_contract_version;
@@ -51,12 +51,19 @@ pub fn execute(
         ExecuteMsg::Swap { min_return, to, .. } => {
             let to = to.map(|x| deps.api.addr_validate(&x)).transpose()?;
             let funds = one_coin(&info)?;
-            let side = config.denoms.validate(&funds)?;
-            let res = Swapper::new(side, config.denoms, funds.amount, min_return, oracle)
-                .swap(deps.storage)?;
+            let side = config.denoms.offer_side(&funds)?;
+            let res =
+                Swapper::new(side.clone(), funds.amount, min_return, oracle).swap(deps.storage)?;
+            let mut funds = NativeBalance(vec![
+                coin(res.return_amount.u128(), config.denoms.ask(&side)),
+                coin(res.remaining_offer.u128(), config.denoms.bid(&side)),
+            ]);
+
+            funds.normalize();
+
             let send_message = CosmosMsg::Bank(BankMsg::Send {
                 to_address: to.unwrap_or(info.sender).to_string(),
-                amount: res.funds.into_vec(),
+                amount: funds.into_vec(),
             });
 
             Ok(Response::default()

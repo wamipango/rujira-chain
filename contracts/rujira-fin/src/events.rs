@@ -38,7 +38,7 @@ pub fn event_retract_order(pool: &Pool, order: &Order, amount: &Uint128) -> Even
 pub fn event_trade(side: &Side, price: &Decimal, offer: Uint128, bid: Uint128) -> Event {
     Event::new("rujira-fin/trade")
         .add_attribute("side", side.to_string())
-        .add_attribute("price", price.to_string())
+        .add_attribute("rate", price.to_string())
         .add_attribute("offer", offer.to_string())
         .add_attribute("bid", bid.to_string())
 }
