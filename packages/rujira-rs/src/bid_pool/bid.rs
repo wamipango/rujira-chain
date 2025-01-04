@@ -17,14 +17,11 @@ pub struct Bid {
     // Epoch Snapshot
     #[serde(alias = "c")]
     pub(crate) epoch_snapshot: u32,
-    // Scale Snapshot
-    #[serde(alias = "d")]
-    pub(crate) scale_snapshot: u16,
 }
 
 impl Bid {
     pub fn sum_snapshot_key(&self) -> SumSnapshotKey {
-        SumSnapshotKey::new(self.epoch_snapshot, self.scale_snapshot)
+        SumSnapshotKey::new(self.epoch_snapshot)
     }
 
     pub fn amount(&self) -> Uint256 {

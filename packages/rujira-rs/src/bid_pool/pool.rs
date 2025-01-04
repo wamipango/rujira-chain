@@ -2,7 +2,7 @@ use std::ops::Mul;
 
 use crate::Frac;
 
-use super::{bid::Bid, sum_snapshot::SumSnapshot};
+use super::{bid::Bid, SumSnapshot};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal256, Fraction as _, StdResult, Uint256};
 
@@ -17,7 +17,6 @@ pub struct Pool {
     pub(crate) sum: Frac,
     pub(crate) product: Frac,
     pub(crate) epoch: u32,
-    pub(crate) scale: u16,
 }
 
 impl Default for Pool {
@@ -27,7 +26,6 @@ impl Default for Pool {
             product: Frac::one(),
             sum: Frac::zero(),
             epoch: 0,
-            scale: 0,
         }
     }
 }
@@ -42,7 +40,6 @@ impl Pool {
             product_snapshot: self.product,
             sum_snapshot: self.sum,
             epoch_snapshot: self.epoch,
-            scale_snapshot: self.scale,
         }
     }
 
@@ -121,7 +118,6 @@ impl Pool {
         bid.amount = self.bid_remaining_amount(bid)?;
         bid.product_snapshot = self.product;
         bid.sum_snapshot = self.sum;
-        bid.scale_snapshot = self.scale;
 
         Ok(())
     }
@@ -156,7 +152,6 @@ impl Pool {
         self.total = Uint256::zero();
         self.sum = Frac::zero();
         self.product = Frac::one();
-        self.scale = 0;
         self.epoch += 1;
     }
 }
