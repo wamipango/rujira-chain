@@ -2,7 +2,7 @@ use std::ops::Mul;
 
 use crate::Frac;
 
-use super::{bid::Bid, SumSnapshot};
+use super::{bid::Bid, BidPoolError, SumSnapshot};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal256, Fraction as _, StdResult, Uint256};
 
@@ -52,7 +52,7 @@ impl Pool {
         &mut self,
         offer: Uint256,
         rate: &Decimal256,
-    ) -> StdResult<DistributionResult> {
+    ) -> Result<DistributionResult, BidPoolError> {
         if offer.is_zero() || self.total.is_zero() {
             return Ok(DistributionResult::default());
         }
@@ -74,7 +74,7 @@ impl Pool {
         self.total
     }
 
-    fn distribute_full(&mut self, rate: &Decimal256) -> StdResult<DistributionResult> {
+    fn distribute_full(&mut self, rate: &Decimal256) -> Result<DistributionResult, BidPoolError> {
         let inv = rate.inv().unwrap();
         let consumed_offer = Decimal256::from_atomics(self.total, 0).unwrap() * inv;
         let consumed_bids = self.total;
@@ -96,12 +96,16 @@ impl Pool {
         &mut self,
         bids_value: Uint256,
         offer: Uint256,
-    ) -> StdResult<DistributionResult> {
+    ) -> Result<DistributionResult, BidPoolError> {
         // S + E / D * P
         self.sum += self.product * Frac::from_ratio(offer, self.total);
 
         // 1 - Q / D
         self.product = self.product * (Frac::one() - Frac::from_ratio(bids_value, self.total));
+
+        if self.product == Frac::zero() {
+            return Err(BidPoolError::DistributionError {});
+        }
 
         self.total -= bids_value;
         let snapshots = vec![SumSnapshot::from(*self)];
@@ -166,6 +170,8 @@ pub struct DistributionResult {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+
+    use crate::bid_pool::bid;
 
     use super::*;
 
@@ -272,5 +278,35 @@ mod tests {
         assert_eq!(bid_e.filled, Uint256::from(1755u128));
         assert_eq!(bid_f.amount, Uint256::from(764u128));
         assert_eq!(bid_f.filled, Uint256::from(3706u128));
+    }
+
+    #[test]
+    fn test_scaling() {
+        // When a pool is almost entirely consumed, the pool.product becomes very small, eventually truncating to zero
+        // When at 0, distributions should fail, bids are not marked as filled, despite a successful distribution
+        // TODO: Use a data type that can handle this better
+        let mut pool = Pool::default();
+        let mut bids: Vec<Bid> = vec![];
+
+        for _ in 0..5 {
+            let bid = pool.new_bid(Uint256::from(10000000u128));
+
+            let res = pool
+                .distribute(Uint256::from(9999999u128), &Decimal256::one())
+                .unwrap();
+
+            let s = res.snapshots.first().map(|s| s.sum);
+            bids.push(bid);
+            for bid in bids.iter_mut() {
+                pool.sync_bid(bid, s).unwrap();
+                // Rounding errors at high precision cause slight offsets
+                assert!(bid.amount < Uint256::from(5u128));
+                assert!(bid.filled > Uint256::from(9999990u128));
+                assert!(bid.amount + bid.filled <= Uint256::from(10000000u128));
+            }
+        }
+        pool.new_bid(Uint256::from(10000000u128));
+        pool.distribute(Uint256::from(9999999u128), &Decimal256::one())
+            .unwrap_err();
     }
 }

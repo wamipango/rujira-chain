@@ -6,6 +6,9 @@ pub enum BidPoolError {
     #[error("WithdrawError {available}")]
     WithdrawError { available: Uint256 },
 
+    #[error("DistributionError")]
+    DistributionError {},
+
     #[error("{0}")]
     Overflow(#[from] OverflowError),
 }

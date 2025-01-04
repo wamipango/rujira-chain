@@ -176,7 +176,7 @@ impl Pool {
         Ok(Uint128::try_from(claimed)?)
     }
 
-    pub fn distribute(&mut self, offer: Uint128) -> StdResult<(Uint128, Uint128)> {
+    pub fn distribute(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
         let res = self
             .pool
             .distribute(offer.into(), &Decimal256::from(self.rate))?;
