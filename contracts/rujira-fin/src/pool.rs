@@ -1,5 +1,7 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, Decimal256, StdResult, Storage, Timestamp, Uint128, Uint256};
+use cosmwasm_std::{
+    Addr, Decimal, Decimal256, Fraction, StdResult, Storage, Timestamp, Uint128, Uint256,
+};
 use cw_storage_plus::Map;
 use itertools::{EitherOrBoth, Itertools, MergeJoinBy};
 use rujira_rs::{
@@ -177,9 +179,13 @@ impl Pool {
     }
 
     pub fn distribute(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
+        let rate = match self.side {
+            Side::Base => self.rate.inv().unwrap(),
+            Side::Quote => self.rate,
+        };
         let res = self
             .pool
-            .distribute(offer.into(), &Decimal256::from(self.rate))?;
+            .distribute(offer.into(), &Decimal256::from(rate))?;
 
         self.pending_sum_snapshots = res.snapshots;
 

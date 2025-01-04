@@ -51,16 +51,15 @@ pub fn execute(
         ExecuteMsg::Swap { min_return, to, .. } => {
             let to = to.map(|x| deps.api.addr_validate(&x)).transpose()?;
             let funds = one_coin(&info)?;
-            let side = config.denoms.offer_side(&funds)?;
+            let side = config.denoms.ask_side(&funds)?;
             let res =
                 Swapper::new(side.clone(), funds.amount, min_return, oracle).swap(deps.storage)?;
             let mut funds = NativeBalance(vec![
-                coin(res.return_amount.u128(), config.denoms.ask(&side)),
-                coin(res.remaining_offer.u128(), config.denoms.bid(&side)),
+                coin(res.return_amount.u128(), config.denoms.bid(&side)),
+                coin(res.remaining_offer.u128(), config.denoms.ask(&side)),
             ]);
 
             funds.normalize();
-
             let send_message = CosmosMsg::Bank(BankMsg::Send {
                 to_address: to.unwrap_or(info.sender).to_string(),
                 amount: funds.into_vec(),
@@ -176,7 +175,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use cosmwasm_std::{coin, Addr, Decimal, Uint128};
+    use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
     use rujira_rs::{fin::Denoms, Layer1Asset, Tick};
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};
@@ -382,5 +381,147 @@ mod tests {
                 coin(500_000_000 - 73500, "eth-usdc")
             ]
         );
+    }
+
+    #[test]
+    fn swap() {
+        let (mut app, contract) = setup();
+        let owner = app.api().addr_make("owner");
+        let funds = vec![
+            coin(500_000_000_000_000, "btc-btc"),
+            coin(500_000_000_000_000, "eth-usdc"),
+        ];
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &owner, funds.clone())
+                .unwrap();
+        });
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Order(vec![
+                (Side::Base, Price::Oracle(0), Uint128::from(10000u128)),
+                (
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("100000").unwrap()),
+                    Uint128::from(10000u128),
+                ),
+                (
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("93317").unwrap()),
+                    Uint128::from(10000u128),
+                ),
+                (
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("93219").unwrap()),
+                    Uint128::from(21000u128),
+                ),
+                (
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("91219").unwrap()),
+                    Uint128::from(51000u128),
+                ),
+                (Side::Quote, Price::Oracle(1), Uint128::from(10000000u128)),
+                (
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("100010").unwrap()),
+                    Uint128::from(12500000u128),
+                ),
+                (
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("87900").unwrap()),
+                    Uint128::from(51000000u128),
+                ),
+            ]),
+            &funds,
+        )
+        .unwrap();
+
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Swap {
+                    min_return: None,
+                    to: None,
+                    callback: None,
+                },
+                &coins(10_000_000, "eth-usdc"),
+            )
+            .unwrap();
+        // Buying 10m USDC-worth of BTC
+        // Best price = 91219
+        // 10_000_000 / 91219 = 109
+        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+            ("side", "base"),
+            ("rate", "91219"),
+            ("offer", "10000000"),
+            ("bid", "109"),
+        ]));
+        res.assert_event(&Event::new("transfer").add_attributes(vec![
+            ("recipient", owner.as_str()),
+            ("sender", contract.as_str()),
+            ("amount", "109btc-btc"),
+        ]));
+
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Swap {
+                    min_return: None,
+                    to: None,
+                    callback: None,
+                },
+                &coins(300, "btc-btc"),
+            )
+            .unwrap();
+        // Buying 10m USDC-worth of BTC
+        // Best price = 91219
+        // 10_000_000 / 91219 = 109
+        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+            ("side", "quote"),
+            ("rate", "100010"),
+            ("offer", "225"),
+            ("bid", "22500000"),
+        ]));
+        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+            ("side", "quote"),
+            ("rate", "87900"),
+            ("offer", "75"),
+            ("bid", "6592500"),
+        ]));
+        res.assert_event(&Event::new("transfer").add_attributes(vec![
+            ("recipient", owner.as_str()),
+            ("sender", contract.as_str()),
+            ("amount", "29092500eth-usdc"),
+        ]));
+
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Swap {
+                    min_return: None,
+                    to: None,
+                    callback: None,
+                },
+                &coins(1000, "btc-btc"),
+            )
+            .unwrap();
+        // Check that any unused funds are returned
+        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+            ("side", "quote"),
+            ("rate", "87900"),
+            ("offer", "506"),
+            ("bid", "44407500"),
+        ]));
+        res.assert_event(&Event::new("transfer").add_attributes(vec![
+            ("recipient", owner.as_str()),
+            ("sender", contract.as_str()),
+            ("amount", "494btc-btc,44407500eth-usdc"),
+        ]));
     }
 }

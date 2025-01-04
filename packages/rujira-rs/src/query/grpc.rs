@@ -31,7 +31,6 @@ where
     ) -> Result<Self, QueryError> {
         let mut buf = Vec::new();
         req.encode(&mut buf)?;
-        println!("{}", Binary::from(buf.clone()));
         let res = querier
             .query_grpc(Self::grpc_path().to_string(), Binary::from(buf))?
             .to_vec();

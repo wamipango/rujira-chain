@@ -86,8 +86,8 @@ impl Denoms {
         }
     }
 
-    /// Gets the side of the book that this coin is the offer token for
-    pub fn offer_side(&self, coin: &Coin) -> StdResult<Side> {
+    /// Gets the side of the book that this coin is the ask token for
+    pub fn ask_side(&self, coin: &Coin) -> StdResult<Side> {
         if coin.denom == self.base() {
             return Ok(Side::Quote);
         }
