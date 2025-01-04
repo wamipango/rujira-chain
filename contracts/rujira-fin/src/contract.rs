@@ -92,8 +92,25 @@ pub fn execute(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn sudo(_deps: DepsMut, _env: Env, _msg: SudoMsg) -> Result<Response, ContractError> {
-    Ok(Response::default())
+pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+    match msg {
+        SudoMsg::Pause {} => todo!(),
+        SudoMsg::Resume {} => todo!(),
+        SudoMsg::UpdateConfig {
+            tick,
+            fee_taker,
+            fee_maker,
+            fee_address,
+        } => {
+            let fee_address = fee_address
+                .map(|x| deps.api.addr_validate(&x))
+                .transpose()?;
+            let mut config = CONFIG.load(deps.storage)?;
+            config.update(tick, fee_taker, fee_maker, fee_address);
+            config.save(deps.storage)?;
+            Ok(Response::default())
+        }
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

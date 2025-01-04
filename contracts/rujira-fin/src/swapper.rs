@@ -96,11 +96,7 @@ impl Swapper {
             pool.save(storage)?;
         }
 
-        Ok(SwapResult {
-            events: self.events.clone(),
-            return_amount: self.returned,
-            remaining_offer: self.offer,
-        })
+        Ok(self.into())
     }
 }
 
@@ -109,6 +105,16 @@ pub struct SwapResult {
     pub events: Vec<Event>,
     pub return_amount: Uint128,
     pub remaining_offer: Uint128,
+}
+
+impl From<&mut Swapper> for SwapResult {
+    fn from(s: &mut Swapper) -> Self {
+        Self {
+            events: s.events.clone(),
+            return_amount: s.returned,
+            remaining_offer: s.offer,
+        }
+    }
 }
 
 #[cfg(test)]

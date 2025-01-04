@@ -37,6 +37,27 @@ impl Config {
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
         CONFIG.save(storage, self)
     }
+
+    pub fn update(
+        &mut self,
+        tick: Option<Tick>,
+        fee_taker: Option<Decimal>,
+        fee_maker: Option<Decimal>,
+        fee_address: Option<Addr>,
+    ) {
+        if let Some(tick) = tick {
+            self.tick = tick;
+        }
+        if let Some(fee_taker) = fee_taker {
+            self.fee_taker = fee_taker;
+        }
+        if let Some(fee_maker) = fee_maker {
+            self.fee_maker = fee_maker;
+        }
+        if let Some(fee_address) = fee_address {
+            self.fee_address = fee_address;
+        }
+    }
 }
 
 impl From<Config> for ConfigResponse {

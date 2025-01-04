@@ -214,9 +214,10 @@ pub enum SudoMsg {
     Pause {},
     Resume {},
     UpdateConfig {
-        tick: Option<u8>,
+        tick: Option<Tick>,
         fee_taker: Option<Decimal>,
         fee_maker: Option<Decimal>,
+        fee_address: Option<String>,
     },
 }
 
