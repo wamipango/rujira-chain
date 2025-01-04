@@ -4,6 +4,11 @@ use rujira_rs::fin::Side;
 
 use crate::{events::event_trade, pool::Pool, ContractError};
 
+/// Generic trait to manage iterating through local structs as well as external market making contracts
+pub trait Swappable {
+    fn distribute(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError>;
+}
+
 #[derive(Debug)]
 pub struct Swapper {
     events: Vec<Event>,

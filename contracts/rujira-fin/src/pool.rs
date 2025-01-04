@@ -14,6 +14,7 @@ use std::cmp::Ordering;
 use crate::{
     order::Order,
     pool_key::{PoolKey, PoolType},
+    swapper::Swappable,
     ContractError,
 };
 const SNAPSHOTS: Map<(PoolKey, bid_pool::SumSnapshotKey), Frac> = Map::new("snapshots");
@@ -178,23 +179,6 @@ impl Pool {
         Ok(Uint128::try_from(claimed)?)
     }
 
-    pub fn distribute(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
-        let rate = match self.side {
-            Side::Base => self.rate.inv().unwrap(),
-            Side::Quote => self.rate,
-        };
-        let res = self
-            .pool
-            .distribute(offer.into(), &Decimal256::from(rate))?;
-
-        self.pending_sum_snapshots = res.snapshots;
-
-        Ok((
-            res.consumed_offer.try_into()?,
-            res.consumed_bids.try_into()?,
-        ))
-    }
-
     pub fn sync_order(
         &self,
         storage: &dyn Storage,
@@ -231,6 +215,25 @@ impl Pool {
                 total: b.total(),
             },
         }
+    }
+}
+
+impl Swappable for Pool {
+    fn distribute(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
+        let rate = match self.side {
+            Side::Base => self.rate.inv().unwrap(),
+            Side::Quote => self.rate,
+        };
+        let res = self
+            .pool
+            .distribute(offer.into(), &Decimal256::from(rate))?;
+
+        self.pending_sum_snapshots = res.snapshots;
+
+        Ok((
+            res.consumed_offer.try_into()?,
+            res.consumed_bids.try_into()?,
+        ))
     }
 }
 
