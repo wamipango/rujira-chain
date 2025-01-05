@@ -15,7 +15,7 @@ use rujira_rs::query;
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
 use crate::order::Order;
-use crate::orders::OrderManager;
+use crate::order_manager::OrderManager;
 use crate::pool::Pool;
 use crate::swapper::Swapper;
 

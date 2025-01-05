@@ -131,7 +131,7 @@ pub struct SwapResult {
 #[cfg(test)]
 
 mod tests {
-    use crate::orders::OrderManager;
+    use crate::order_manager::OrderManager;
 
     use super::*;
     use cosmwasm_std::{
