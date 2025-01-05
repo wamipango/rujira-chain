@@ -1,4 +1,6 @@
-use cosmwasm_std::{CheckedFromRatioError, ConversionOverflowError, StdError, Uint128};
+use cosmwasm_std::{
+    CheckedFromRatioError, ConversionOverflowError, OverflowError, StdError, Uint128,
+};
 use cw_utils::PaymentError;
 use rujira_rs::{bid_pool::BidPoolError, fin::TickError, query::PoolError};
 use thiserror::Error;
@@ -25,6 +27,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     Tick(#[from] TickError),
+
+    #[error("{0}")]
+    Overflow(#[from] OverflowError),
 
     #[error("InsufficientReturn expected {expected} got {returned}")]
     InsufficientReturn {

@@ -48,7 +48,9 @@ pub fn execute(
     let config = CONFIG.load(deps.storage)?;
     let oracle = load_oracle_price(deps.querier, &config)?;
     let mut messages: Vec<CosmosMsg> = vec![];
-    let mut fees = Arb::new(&oracle).run(deps.storage)?;
+    let mut arb = Arb::new(&oracle, &config.denoms);
+    let mut fees = arb.run(deps.storage)?;
+    arb.commit(deps.storage)?;
 
     match msg {
         ExecuteMsg::Swap { min_return, to, .. } => {
@@ -93,7 +95,7 @@ pub fn execute(
         }
         ExecuteMsg::Order(vec) => {
             let mut e = OrderManager::new(
-                config.denoms,
+                config.denoms.clone(),
                 config.fee_maker,
                 config.tick,
                 info.sender.clone(),
@@ -104,7 +106,10 @@ pub fn execute(
 
             let res = e.execute_orders(deps.storage, vec)?;
             fees += res.fees;
-            fees += Arb::new(&oracle).run(deps.storage)?;
+
+            let mut arb = Arb::new(&oracle, &config.denoms);
+            fees += arb.run(deps.storage)?;
+            arb.commit(deps.storage)?;
 
             if !res.withdraw.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
