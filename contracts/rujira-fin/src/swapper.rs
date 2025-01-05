@@ -14,7 +14,7 @@ pub struct Swapper {
     oracle: Decimal,
     returned: Uint128,
     side: Side,
-    pending_pools: Vec<EitherOrBoth<Pool>>,
+    pending: Vec<EitherOrBoth<Pool>>,
 }
 
 impl Swapper {
@@ -34,7 +34,7 @@ impl Swapper {
             oracle,
             returned: Uint128::zero(),
             side,
-            pending_pools: vec![],
+            pending: vec![],
         }
     }
 
@@ -46,7 +46,7 @@ impl Swapper {
             }
             let price = v.rate();
             let (offer, bids) = v.swap(self.offer)?;
-            self.pending_pools.push(v);
+            self.pending.push(v);
             self.offer -= offer;
             self.returned += bids;
             self.events
@@ -68,7 +68,7 @@ impl Swapper {
             }
         }
 
-        for pool in self.pending_pools.iter_mut() {
+        for pool in self.pending.iter_mut() {
             pool.save(storage)?;
         }
 
