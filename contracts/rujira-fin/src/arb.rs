@@ -9,48 +9,51 @@ use crate::{pool::Pool, swappable::Swappable};
 /// Utility to capture arbitrage from overlapping orders
 pub struct Arb {
     oracle: Decimal,
+    pending: Vec<EitherOrBoth<Pool>>,
 }
 
 impl Arb {
     pub fn new(oracle: &Decimal) -> Self {
-        Self { oracle: *oracle }
+        Self {
+            oracle: *oracle,
+            pending: vec![],
+        }
     }
-    pub fn run(&self, storage: &mut dyn Storage) -> StdResult<NativeBalance> {
+    pub fn run(&mut self, storage: &mut dyn Storage) -> StdResult<NativeBalance> {
         let mut base_iter = Pool::side(storage, &Side::Base, &self.oracle);
         let mut quote_iter = Pool::side(storage, &Side::Quote, &self.oracle);
-        let mut base = base_iter.next();
-        let mut quote = quote_iter.next();
-        let mut profit = NativeBalance::default();
+        let mut base: Option<EitherOrBoth<Pool>> = base_iter.next();
+        let mut quote: Option<EitherOrBoth<Pool>> = quote_iter.next();
+        let mut profit: NativeBalance = NativeBalance::default();
         loop {
-            dbg!(&base, &quote);
-
             match (&mut base, &mut quote) {
-                // (Some(b), Some(q)) => match b.arbitrage(q)? {
-                //     (None, b) => {
-                //         profit += b;
-                //         base = base_iter.next();
-                //         quote = quote_iter.next();
-                //     }
-                //     (Some(EitherOrBoth::Left(x)), b) => {
-                //         profit += b;
-                //         base = Some(x);
-                //         quote = quote_iter.next();
-                //     }
-                //     (Some(EitherOrBoth::Right(x)), b) => {
-                //         profit += b;
-                //         base = base_iter.next();
-                //         quote = Some(x);
-                //     }
-                //     (Some(EitherOrBoth::Both(_, _)), b) => {
-                //         profit += b;
-                //         break;
-                //     }
-                // },
+                (Some(b), Some(q)) => {
+                    let res = b.arbitrage(q)?;
+                    if res.is_empty() {
+                        break;
+                    };
+                    profit += res;
+                    if b.total().is_zero() {
+                        base = base_iter.next()
+                    }
+
+                    if q.total().is_zero() {
+                        quote = quote_iter.next()
+                    }
+                }
                 _ => break,
             }
         }
 
         Ok(NativeBalance::default())
+    }
+
+    pub fn commit(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
+        for x in self.pending.iter_mut() {
+            x.save(storage)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -59,11 +62,11 @@ pub trait Arbitrage: Swappable + Sized {
     // Execute arbitrage between the two price points
     // Returns the pool(s) with remaining funds.
     // If both are returned, there was no arbitrage opportunity and the iterator should break
-    fn arbitrage(&mut self, other: &mut Self) -> StdResult<(Option<Self>, NativeBalance)>;
+    fn arbitrage(&mut self, other: &mut Self) -> StdResult<NativeBalance>;
 }
 
 impl Arbitrage for EitherOrBoth<Pool> {
-    fn arbitrage(&mut self, other: &mut Self) -> StdResult<(Option<Self>, NativeBalance)> {
+    fn arbitrage(&mut self, other: &mut Self) -> StdResult<NativeBalance> {
         if self.clone().into_left().side == Side::Quote {
             return Err(StdError::generic_err("wrong side"));
         }
@@ -71,7 +74,7 @@ impl Arbitrage for EitherOrBoth<Pool> {
         match self.rate().cmp(&other.rate()) {
             Ordering::Less => {
                 // ...execute
-                Ok((None, NativeBalance::default()))
+                todo!();
             }
             Ordering::Equal => {
                 match self.total().cmp(&other.total()) {
@@ -82,7 +85,7 @@ impl Arbitrage for EitherOrBoth<Pool> {
                     }
                     Ordering::Equal => {
                         // Fully consume both
-                        Ok((None, NativeBalance::default()))
+                        Ok(NativeBalance::default())
                     }
                     Ordering::Greater => {
                         // Fully consume other (quote)
@@ -92,7 +95,7 @@ impl Arbitrage for EitherOrBoth<Pool> {
                 // ...execute
             }
             // No opportunity
-            Ordering::Greater => todo!(),
+            Ordering::Greater => Ok(NativeBalance::default()),
         }
     }
 }
