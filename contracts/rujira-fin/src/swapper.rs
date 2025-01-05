@@ -1,13 +1,19 @@
-use cosmwasm_std::{Decimal, Event, Storage, Uint128};
+use cosmwasm_std::{Decimal, Event, StdResult, Storage, Uint128};
 use itertools::EitherOrBoth;
 use rujira_rs::fin::Side;
 use std::ops::{Add, Mul};
 
 use crate::{events::event_trade, pool::Pool, ContractError};
 
-/// Generic trait to manage iterating through local structs as well as external market making contracts
 pub trait Swappable {
-    fn distribute(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError>;
+    // Effective price
+    fn rate(&self) -> Decimal;
+    // Total amount of bids
+    fn total(&self) -> Uint128;
+
+    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError>;
+
+    fn save(&self, storage: &mut dyn Storage) -> StdResult<()>;
 }
 
 #[derive(Debug)]
@@ -19,7 +25,7 @@ pub struct Swapper {
     oracle: Decimal,
     returned: Uint128,
     side: Side,
-    pending_pools: Vec<Pool>,
+    pending_pools: Vec<EitherOrBoth<Pool>>,
 }
 
 impl Swapper {
@@ -50,8 +56,8 @@ impl Swapper {
                 break;
             }
             let price = v.rate();
-            let (offer, bids, mut pools) = v.swap(self.offer)?;
-            self.pending_pools.append(&mut pools);
+            let (offer, bids) = v.swap(self.offer)?;
+            self.pending_pools.push(v);
             self.offer -= offer;
             self.returned += bids;
             self.events
@@ -86,17 +92,7 @@ impl Swapper {
     }
 }
 
-// Utility trait to make handling EitherOrBoth<Pool>'s easier
-pub trait Swap: Sized {
-    // Effective price
-    fn rate(&self) -> Decimal;
-    // Total amount of bids
-    fn total(&self) -> Uint128;
-
-    fn swap(&mut self, amount: Uint128) -> Result<(Uint128, Uint128, Vec<Pool>), ContractError>;
-}
-
-impl Swap for EitherOrBoth<Pool> {
+impl Swappable for EitherOrBoth<Pool> {
     fn rate(&self) -> Decimal {
         self.clone().into_left().rate
     }
@@ -109,29 +105,39 @@ impl Swap for EitherOrBoth<Pool> {
         }
     }
 
-    fn swap(&mut self, amount: Uint128) -> Result<(Uint128, Uint128, Vec<Pool>), ContractError> {
-        match self.clone() {
-            EitherOrBoth::Both(mut a, mut b) => {
-                let offer_a =
-                    Decimal::from_ratio(a.total() * amount, b.total() + a.total()).to_uint_floor();
+    fn swap(&mut self, amount: Uint128) -> Result<(Uint128, Uint128), ContractError> {
+        match self {
+            EitherOrBoth::Both(a, b) => {
+                let offer_a = Decimal::from_ratio(a.total() * amount, a.total().add(b.total()))
+                    .to_uint_floor();
                 let offer_b = amount - offer_a;
-                let (consumed_offer_a, consumed_bids_a) = a.distribute(offer_a)?;
-                let (consumed_offer_b, consumed_bids_b) = b.distribute(offer_b)?;
+                let (consumed_offer_a, consumed_bids_a) = a.swap(offer_a)?;
+                let (consumed_offer_b, consumed_bids_b) = b.swap(offer_b)?;
 
                 Ok((
                     consumed_offer_a + consumed_offer_b,
                     consumed_bids_a + consumed_bids_b,
-                    vec![a, b],
                 ))
             }
-            EitherOrBoth::Left(mut x) => {
-                let (consumed_offer, consumed_bids) = x.distribute(amount)?;
-                Ok((consumed_offer, consumed_bids, vec![x]))
+            EitherOrBoth::Left(x) => {
+                let (consumed_offer, consumed_bids) = x.swap(amount)?;
+                Ok((consumed_offer, consumed_bids))
             }
-            EitherOrBoth::Right(mut x) => {
-                let (consumed_offer, consumed_bids) = x.distribute(amount)?;
-                Ok((consumed_offer, consumed_bids, vec![x]))
+            EitherOrBoth::Right(x) => {
+                let (consumed_offer, consumed_bids) = x.swap(amount)?;
+                Ok((consumed_offer, consumed_bids))
             }
+        }
+    }
+
+    fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
+        match self {
+            EitherOrBoth::Both(a, b) => {
+                a.save(storage)?;
+                b.save(storage)
+            }
+            EitherOrBoth::Left(a) => a.save(storage),
+            EitherOrBoth::Right(a) => a.save(storage),
         }
     }
 }

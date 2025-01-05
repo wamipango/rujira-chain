@@ -4,7 +4,7 @@ use itertools::EitherOrBoth;
 use rujira_rs::fin::Side;
 use std::cmp::Ordering;
 
-use crate::{pool::Pool, swapper::Swap};
+use crate::{pool::Pool, swapper::Swappable};
 
 /// Utility to capture arbitrage from overlapping orders
 pub struct Arb {
@@ -55,7 +55,7 @@ impl Arb {
 }
 
 // Utility trait to make handling EitherOrBoth<Pool>'s easier
-pub trait Arbitrage: Swap {
+pub trait Arbitrage: Swappable + Sized {
     // Execute arbitrage between the two price points
     // Returns the pool(s) with remaining funds.
     // If both are returned, there was no arbitrage opportunity and the iterator should break

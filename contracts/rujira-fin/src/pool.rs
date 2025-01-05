@@ -94,22 +94,6 @@ impl Pool {
         }
     }
 
-    pub fn save(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
-        for s in self.pending_sum_snapshots.clone() {
-            SNAPSHOTS.save(storage, (self.key(), s.key()), &s.sum)?;
-        }
-        self.pending_sum_snapshots = vec![];
-
-        BID_POOLS.save(storage, self.key(), &self.pool)?;
-        // Clear empty pools so they're not iterated over during a swap
-        if self.pool.is_zero() {
-            POOLS.remove(storage, self.key());
-            return Ok(());
-        }
-
-        POOLS.save(storage, self.key(), &())
-    }
-
     fn key(&self) -> PoolKey {
         PoolKey::new(self.side.clone(), self.price.clone())
     }
@@ -196,10 +180,6 @@ impl Pool {
         SNAPSHOTS.load(storage, key)
     }
 
-    pub fn total(&self) -> Uint128 {
-        self.pool.total().try_into().unwrap()
-    }
-
     pub fn combine(v: EitherOrBoth<Self>) -> BookItemResponse {
         match v {
             EitherOrBoth::Both(a, b) => BookItemResponse {
@@ -219,7 +199,7 @@ impl Pool {
 }
 
 impl Swappable for Pool {
-    fn distribute(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
+    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
         let rate = match self.side {
             Side::Base => self.rate.inv().unwrap(),
             Side::Quote => self.rate,
@@ -234,6 +214,29 @@ impl Swappable for Pool {
             res.consumed_offer.try_into()?,
             res.consumed_bids.try_into()?,
         ))
+    }
+
+    fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
+        for s in self.pending_sum_snapshots.clone() {
+            SNAPSHOTS.save(storage, (self.key(), s.key()), &s.sum)?;
+        }
+
+        BID_POOLS.save(storage, self.key(), &self.pool)?;
+        // Clear empty pools so they're not iterated over during a swap
+        if self.pool.is_zero() {
+            POOLS.remove(storage, self.key());
+            return Ok(());
+        }
+
+        POOLS.save(storage, self.key(), &())
+    }
+
+    fn rate(&self) -> Decimal {
+        self.rate
+    }
+
+    fn total(&self) -> Uint128 {
+        self.pool.total().try_into().unwrap()
     }
 }
 
@@ -267,7 +270,7 @@ mod tests {
         POOLS.load(&store, k.clone()).unwrap();
         BID_POOLS.load(&store, k.clone()).unwrap();
 
-        pool.distribute(Uint128::from(100u128)).unwrap();
+        pool.swap(Uint128::from(100u128)).unwrap();
 
         // Bid Pool should have been emptied, so the container Pool shold be cleared, but the BidPool should remain
         pool.save(&mut store).unwrap();
