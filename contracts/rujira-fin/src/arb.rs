@@ -8,13 +8,13 @@ use std::ops::Sub;
 use crate::{pool::Pool, swappable::Swappable, ContractError};
 
 /// Utility to capture arbitrage from overlapping orders
-pub struct Arb {
+pub struct Arber {
     oracle: Decimal,
     pending: Vec<EitherOrBoth<Pool>>,
     denoms: Denoms,
 }
 
-impl Arb {
+impl Arber {
     pub fn new(oracle: &Decimal, denoms: &Denoms) -> Self {
         Self {
             oracle: *oracle,
@@ -218,7 +218,7 @@ mod tests {
             ],
         )
         .unwrap();
-        let mut arb = Arb::new(&oracle, &denoms);
+        let mut arb = Arber::new(&oracle, &denoms);
         let res = arb.run(&mut storage).unwrap();
         arb.commit(&mut storage).unwrap();
         // 350 (349 with rounding) profit from arb 1

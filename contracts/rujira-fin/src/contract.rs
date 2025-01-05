@@ -12,7 +12,7 @@ use rujira_rs::fin::{
 };
 use rujira_rs::query;
 
-use crate::arb::Arb;
+use crate::arb::Arber;
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
 use crate::order::Order;
@@ -48,7 +48,7 @@ pub fn execute(
     let config = CONFIG.load(deps.storage)?;
     let oracle = load_oracle_price(deps.querier, &config)?;
     let mut messages: Vec<CosmosMsg> = vec![];
-    let mut arb = Arb::new(&oracle, &config.denoms);
+    let mut arb = Arber::new(&oracle, &config.denoms);
     let mut fees = arb.run(deps.storage)?;
     arb.commit(deps.storage)?;
 
@@ -82,6 +82,8 @@ pub fn execute(
 
             fees += coin(res.fee_amount.u128(), config.denoms.bid(&side));
 
+            fees.normalize();
+
             if !fees.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
                     to_address: config.fee_address.to_string(),
@@ -107,7 +109,7 @@ pub fn execute(
             let res = e.execute_orders(deps.storage, vec)?;
             fees += res.fees;
 
-            let mut arb = Arb::new(&oracle, &config.denoms);
+            let mut arb = Arber::new(&oracle, &config.denoms);
             fees += arb.run(deps.storage)?;
             arb.commit(deps.storage)?;
 
@@ -117,6 +119,8 @@ pub fn execute(
                     amount: res.withdraw.into_vec(),
                 }))
             }
+
+            fees.normalize();
 
             if !fees.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
