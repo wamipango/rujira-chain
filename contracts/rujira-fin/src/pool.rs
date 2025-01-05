@@ -181,19 +181,9 @@ impl Pool {
     }
 
     pub fn combine(v: EitherOrBoth<Self>) -> BookItemResponse {
-        match v {
-            EitherOrBoth::Both(a, b) => BookItemResponse {
-                price: a.rate,
-                total: a.total() + b.total(),
-            },
-            EitherOrBoth::Left(a) => BookItemResponse {
-                price: a.rate,
-                total: a.total(),
-            },
-            EitherOrBoth::Right(b) => BookItemResponse {
-                price: b.rate,
-                total: b.total(),
-            },
+        BookItemResponse {
+            price: v.rate(),
+            total: v.total(),
         }
     }
 }
