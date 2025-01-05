@@ -1,7 +1,7 @@
 use cosmwasm_std::{Decimal, Event, Storage, Uint128};
 use itertools::EitherOrBoth;
 use rujira_rs::fin::Side;
-use std::ops::Mul;
+use std::ops::{Add, Mul};
 
 use crate::{events::event_trade, pool::Pool, ContractError};
 
@@ -45,51 +45,17 @@ impl Swapper {
 
     pub fn swap(&mut self, storage: &mut dyn Storage) -> Result<SwapResult, ContractError> {
         let iter = Pool::side(storage, &self.side, &self.oracle);
-        for v in iter {
+        for mut v in iter {
             if self.offer.is_zero() {
                 break;
             }
-            let mut offer = Uint128::zero();
-            let mut returned = Uint128::zero();
-            let price: Decimal;
-            match v {
-                EitherOrBoth::Both(mut a, mut b) => {
-                    price = a.rate;
-
-                    let offer_a =
-                        Decimal::from_ratio(a.total() * self.offer, b.total() + a.total())
-                            .to_uint_floor();
-                    let offer_b = self.offer - offer_a;
-
-                    let (consumed_offer, consumed_bids) = a.distribute(offer_a)?;
-                    self.pending_pools.push(a);
-                    offer += consumed_offer;
-                    returned += consumed_bids;
-
-                    let (consumed_offer, consumed_bids) = b.distribute(offer_b)?;
-                    self.pending_pools.push(b);
-                    offer += consumed_offer;
-                    returned += consumed_bids;
-                }
-                EitherOrBoth::Left(mut x) => {
-                    price = x.rate;
-                    let (consumed_offer, consumed_bids) = x.distribute(self.offer)?;
-                    self.pending_pools.push(x);
-                    offer += consumed_offer;
-                    returned += consumed_bids;
-                }
-                EitherOrBoth::Right(mut x) => {
-                    price = x.rate;
-                    let (consumed_offer, consumed_bids) = x.distribute(self.offer)?;
-                    self.pending_pools.push(x);
-                    offer += consumed_offer;
-                    returned += consumed_bids;
-                }
-            }
+            let price = v.rate();
+            let (offer, bids, mut pools) = v.swap(self.offer)?;
+            self.pending_pools.append(&mut pools);
             self.offer -= offer;
-            self.returned += returned;
+            self.returned += bids;
             self.events
-                .push(event_trade(&self.side, &price, offer, returned));
+                .push(event_trade(&self.side, &price, offer, bids));
         }
 
         let fee = Decimal::from_ratio(self.returned, 1u128)
@@ -117,6 +83,56 @@ impl Swapper {
             return_amount: self.returned,
             remaining_offer: self.offer,
         })
+    }
+}
+
+// Utility trait to make handling EitherOrBoth<Pool>'s easier
+pub trait Swap: Sized {
+    // Effective price
+    fn rate(&self) -> Decimal;
+    // Total amount of bids
+    fn total(&self) -> Uint128;
+
+    fn swap(&mut self, amount: Uint128) -> Result<(Uint128, Uint128, Vec<Pool>), ContractError>;
+}
+
+impl Swap for EitherOrBoth<Pool> {
+    fn rate(&self) -> Decimal {
+        self.clone().into_left().rate
+    }
+
+    fn total(&self) -> Uint128 {
+        match self {
+            EitherOrBoth::Both(a, b) => a.total().add(b.total()),
+            EitherOrBoth::Left(a) => a.total(),
+            EitherOrBoth::Right(a) => a.total(),
+        }
+    }
+
+    fn swap(&mut self, amount: Uint128) -> Result<(Uint128, Uint128, Vec<Pool>), ContractError> {
+        match self.clone() {
+            EitherOrBoth::Both(mut a, mut b) => {
+                let offer_a =
+                    Decimal::from_ratio(a.total() * amount, b.total() + a.total()).to_uint_floor();
+                let offer_b = amount - offer_a;
+                let (consumed_offer_a, consumed_bids_a) = a.distribute(offer_a)?;
+                let (consumed_offer_b, consumed_bids_b) = b.distribute(offer_b)?;
+
+                Ok((
+                    consumed_offer_a + consumed_offer_b,
+                    consumed_bids_a + consumed_bids_b,
+                    vec![a, b],
+                ))
+            }
+            EitherOrBoth::Left(mut x) => {
+                let (consumed_offer, consumed_bids) = x.distribute(amount)?;
+                Ok((consumed_offer, consumed_bids, vec![x]))
+            }
+            EitherOrBoth::Right(mut x) => {
+                let (consumed_offer, consumed_bids) = x.distribute(amount)?;
+                Ok((consumed_offer, consumed_bids, vec![x]))
+            }
+        }
     }
 }
 

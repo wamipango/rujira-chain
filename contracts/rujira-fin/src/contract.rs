@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, QuerierWrapper, Response,
+    coin, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
+    QuerierWrapper, Response,
 };
 use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
@@ -12,6 +12,7 @@ use rujira_rs::fin::{
 };
 use rujira_rs::query;
 
+use crate::arb::Arb;
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
 use crate::order::Order;
@@ -46,6 +47,8 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let oracle = load_oracle_price(deps.querier, &config)?;
+    let mut messages: Vec<CosmosMsg> = vec![];
+    let mut fees = Arb::new(&oracle).run(deps.storage)?;
 
     match msg {
         ExecuteMsg::Swap { min_return, to, .. } => {
@@ -68,8 +71,6 @@ pub fn execute(
 
             funds.normalize();
 
-            let mut messages: Vec<CosmosMsg> = vec![];
-
             if !funds.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
                     to_address: to.unwrap_or(info.sender).to_string(),
@@ -77,10 +78,12 @@ pub fn execute(
                 }))
             }
 
-            if !res.fee_amount.is_zero() {
+            fees += coin(res.fee_amount.u128(), config.denoms.bid(&side));
+
+            if !fees.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
                     to_address: config.fee_address.to_string(),
-                    amount: coins(res.fee_amount.u128(), config.denoms.bid(&side)),
+                    amount: fees.into_vec(),
                 }))
             }
 
@@ -100,8 +103,8 @@ pub fn execute(
             );
 
             let res = e.execute_orders(deps.storage, vec)?;
-
-            let mut messages: Vec<CosmosMsg> = vec![];
+            fees += res.fees;
+            fees += Arb::new(&oracle).run(deps.storage)?;
 
             if !res.withdraw.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
@@ -110,10 +113,10 @@ pub fn execute(
                 }))
             }
 
-            if !res.fees.is_empty() {
+            if !fees.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
                     to_address: config.fee_address.to_string(),
-                    amount: res.fees.into_vec(),
+                    amount: fees.into_vec(),
                 }))
             }
 

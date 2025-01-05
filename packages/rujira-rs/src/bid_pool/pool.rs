@@ -280,9 +280,6 @@ mod tests {
 
     #[test]
     fn test_scaling() {
-        // When a pool is almost entirely consumed, the pool.product becomes very small, eventually truncating to zero
-        // When at 0, distributions should fail, bids are not marked as filled, despite a successful distribution
-        // TODO: Use a data type that can handle this better
         let mut pool = Pool::default();
         let mut bids: Vec<Bid> = vec![];
 
@@ -297,7 +294,6 @@ mod tests {
             bids.push(bid);
             for bid in bids.iter_mut() {
                 pool.sync_bid(bid, s).unwrap();
-                // Rounding errors at high precision cause slight offsets
                 assert!(bid.amount < Uint256::from(5u128));
                 assert!(bid.filled > Uint256::from(9999990u128));
                 assert!(bid.amount + bid.filled <= Uint256::from(10000000u128));
