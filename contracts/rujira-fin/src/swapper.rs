@@ -1,6 +1,7 @@
 use cosmwasm_std::{Decimal, Event, Storage, Uint128};
 use itertools::EitherOrBoth;
 use rujira_rs::fin::Side;
+use std::ops::Mul;
 
 use crate::{events::event_trade, pool::Pool, ContractError};
 
@@ -12,6 +13,7 @@ pub trait Swappable {
 #[derive(Debug)]
 pub struct Swapper {
     events: Vec<Event>,
+    fee: Decimal,
     min_return: Option<Uint128>,
     offer: Uint128,
     oracle: Decimal,
@@ -27,9 +29,11 @@ impl Swapper {
         offer: Uint128,
         min_return: Option<Uint128>,
         oracle: Decimal,
+        fee: Decimal,
     ) -> Self {
         Self {
             events: vec![],
+            fee,
             min_return,
             offer,
             oracle,
@@ -88,6 +92,12 @@ impl Swapper {
                 .push(event_trade(&self.side, &price, offer, returned));
         }
 
+        let fee = Decimal::from_ratio(self.returned, 1u128)
+            .mul(self.fee)
+            .to_uint_ceil();
+
+        self.returned -= fee;
+
         if let Some(min_return) = self.min_return {
             if self.returned < min_return {
                 return Err(ContractError::InsufficientReturn {
@@ -101,25 +111,21 @@ impl Swapper {
             pool.save(storage)?;
         }
 
-        Ok(self.into())
+        Ok(SwapResult {
+            events: self.events.clone(),
+            fee_amount: fee,
+            return_amount: self.returned,
+            remaining_offer: self.offer,
+        })
     }
 }
 
 #[derive(Debug)]
 pub struct SwapResult {
     pub events: Vec<Event>,
+    pub fee_amount: Uint128,
     pub return_amount: Uint128,
     pub remaining_offer: Uint128,
-}
-
-impl From<&mut Swapper> for SwapResult {
-    fn from(s: &mut Swapper) -> Self {
-        Self {
-            events: s.events.clone(),
-            return_amount: s.returned,
-            remaining_offer: s.offer,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -146,7 +152,16 @@ mod tests {
         let funds = NativeBalance(vec![coin(1_000_000, "ruji"), coin(1_000_000, "usdc")]);
         let denoms = Denoms::new("ruji", "usdc");
         let tick = Tick::new(4);
-        let mut e = OrderManager::new(denoms, tick, info.sender, env.block.time, oracle, funds);
+        let fee = Decimal::from_str("0.001").unwrap();
+        let mut e = OrderManager::new(
+            denoms,
+            fee,
+            tick,
+            info.sender,
+            env.block.time,
+            oracle,
+            funds,
+        );
 
         e.execute_orders(
             &mut storage,
@@ -205,9 +220,16 @@ mod tests {
         )
         .unwrap();
 
-        let mut s = Swapper::new(Side::Quote, Uint128::from(7500u128), None, oracle);
+        let mut s = Swapper::new(
+            Side::Quote,
+            Uint128::from(7500u128),
+            None,
+            oracle,
+            Decimal::from_str("0.001").unwrap(),
+        );
         let res = s.swap(&mut storage).unwrap();
-        assert_eq!(res.return_amount, Uint128::from(6252u128));
+        assert_eq!(res.return_amount, Uint128::from(6245u128));
+        assert_eq!(res.fee_amount, Uint128::from(7u128));
         assert_eq!(res.remaining_offer, Uint128::zero());
 
         let event = res.events[0].clone();

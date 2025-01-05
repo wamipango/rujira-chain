@@ -2,6 +2,7 @@ use cosmwasm_std::{coin, Addr, Decimal, Event, Storage, Timestamp, Uint128};
 use cw_utils::NativeBalance;
 use rujira_rs::fin::{Denoms, Price, Side, Tick};
 use std::cmp::Ordering;
+use std::ops::{Mul, Sub};
 
 use crate::{
     events::{event_create_order, event_increase_order, event_retract_order, event_withdraw_order},
@@ -12,6 +13,7 @@ use crate::{
 
 pub struct OrderManager {
     denoms: Denoms,
+    fee: Decimal,
     tick: Tick,
     owner: Addr,
     timestamp: Timestamp,
@@ -22,12 +24,14 @@ pub struct OrderManager {
     receive: NativeBalance,
     // What we spend creating and increasing orders
     send: NativeBalance,
+    fees: NativeBalance,
     events: Vec<Event>,
 }
 
 impl OrderManager {
     pub fn new(
         denoms: Denoms,
+        fee: Decimal,
         tick: Tick,
         owner: Addr,
         timestamp: Timestamp,
@@ -36,12 +40,14 @@ impl OrderManager {
     ) -> Self {
         Self {
             denoms,
+            fee,
             tick,
             owner,
             timestamp,
             oracle,
             receive: funds,
             send: NativeBalance::default(),
+            fees: NativeBalance::default(),
             events: vec![],
         }
     }
@@ -129,8 +135,15 @@ impl OrderManager {
             return Ok(());
         }
         let amount = pool.claim_order(storage, order)?;
-        let coins = coin(amount.u128(), self.denoms.ask(&pool.side));
-        self.receive += coins;
+        let fees = Decimal::from_ratio(amount, 1u128)
+            .mul(self.fee)
+            .to_uint_ceil();
+
+        let receive = coin(amount.sub(fees).u128(), self.denoms.ask(&pool.side));
+        let fees = coin(fees.u128(), self.denoms.ask(&pool.side));
+
+        self.receive += receive;
+        self.fees += fees;
         self.events.push(event_withdraw_order(pool, order, &amount));
         Ok(())
     }
@@ -138,8 +151,11 @@ impl OrderManager {
 
 impl From<&mut OrderManager> for ExecutionResult {
     fn from(e: &mut OrderManager) -> Self {
+        e.fees.normalize();
+        e.receive.normalize();
         Self {
             withdraw: e.receive.clone(),
+            fees: e.fees.clone(),
             events: e.events.clone(),
         }
     }
@@ -148,6 +164,7 @@ impl From<&mut OrderManager> for ExecutionResult {
 #[derive(Debug)]
 pub struct ExecutionResult {
     pub withdraw: NativeBalance,
+    pub fees: NativeBalance,
     pub events: Vec<Event>,
 }
 
@@ -171,9 +188,11 @@ mod tests {
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
         let tick = Tick::new(4);
+        let fee = Decimal::from_str("0.001").unwrap();
 
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            fee,
             tick,
             info.sender,
             env.block.time,
@@ -211,6 +230,7 @@ mod tests {
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
         let tick = Tick::new(4);
+        let fee = Decimal::from_str("0.001").unwrap();
 
         let oracle = Decimal::from_str("1.0").unwrap();
         let mut funds = NativeBalance::default();
@@ -219,6 +239,7 @@ mod tests {
 
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            fee,
             tick,
             info.sender,
             env.block.time,
@@ -298,11 +319,13 @@ mod tests {
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
         let tick = Tick::new(4);
+        let fee = Decimal::from_str("0.001").unwrap();
 
         let oracle = Decimal::from_str("1.0").unwrap();
         let funds = NativeBalance::default();
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            fee,
             tick,
             info.sender,
             env.block.time,
@@ -327,6 +350,7 @@ mod tests {
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
         let tick = Tick::new(4);
+        let fee = Decimal::from_str("0.001").unwrap();
 
         let oracle = Decimal::from_str("1.0").unwrap();
         let mut funds = NativeBalance::default();
@@ -334,6 +358,7 @@ mod tests {
         funds += coin(10000, "ruji");
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            fee.clone(),
             tick.clone(),
             info.sender.clone(),
             env.block.time,
@@ -363,6 +388,7 @@ mod tests {
 
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            fee.clone(),
             tick.clone(),
             info.sender.clone(),
             env.block.time,
@@ -441,6 +467,7 @@ mod tests {
 
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            fee,
             tick,
             info.sender.clone(),
             env.block.time,
@@ -495,9 +522,11 @@ mod tests {
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
         let tick = Tick::new(2);
+        let fee = Decimal::from_str("0.001").unwrap();
 
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            fee,
             tick,
             info.sender,
             env.block.time,

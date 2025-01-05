@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
-    QuerierWrapper, Response,
+    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
+    MessageInfo, QuerierWrapper, Response,
 };
 use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
@@ -52,26 +52,46 @@ pub fn execute(
             let to = to.map(|x| deps.api.addr_validate(&x)).transpose()?;
             let funds = one_coin(&info)?;
             let side = config.denoms.ask_side(&funds)?;
-            let res =
-                Swapper::new(side.clone(), funds.amount, min_return, oracle).swap(deps.storage)?;
+            let res = Swapper::new(
+                side.clone(),
+                funds.amount,
+                min_return,
+                oracle,
+                config.fee_taker,
+            )
+            .swap(deps.storage)?;
+
             let mut funds = NativeBalance(vec![
                 coin(res.return_amount.u128(), config.denoms.bid(&side)),
                 coin(res.remaining_offer.u128(), config.denoms.ask(&side)),
             ]);
 
             funds.normalize();
-            let send_message = CosmosMsg::Bank(BankMsg::Send {
-                to_address: to.unwrap_or(info.sender).to_string(),
-                amount: funds.into_vec(),
-            });
+
+            let mut messages: Vec<CosmosMsg> = vec![];
+
+            if !funds.is_empty() {
+                messages.push(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: to.unwrap_or(info.sender).to_string(),
+                    amount: funds.into_vec(),
+                }))
+            }
+
+            if !res.fee_amount.is_zero() {
+                messages.push(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: config.fee_address.to_string(),
+                    amount: coins(res.fee_amount.u128(), config.denoms.bid(&side)),
+                }))
+            }
 
             Ok(Response::default()
-                .add_message(send_message)
+                .add_messages(messages)
                 .add_events(res.events))
         }
         ExecuteMsg::Order(vec) => {
             let mut e = OrderManager::new(
                 config.denoms,
+                config.fee_maker,
                 config.tick,
                 info.sender.clone(),
                 env.block.time,
@@ -81,12 +101,24 @@ pub fn execute(
 
             let res = e.execute_orders(deps.storage, vec)?;
 
-            let withdraw_message = CosmosMsg::Bank(BankMsg::Send {
-                to_address: info.sender.to_string(),
-                amount: res.withdraw.into_vec(),
-            });
+            let mut messages: Vec<CosmosMsg> = vec![];
+
+            if !res.withdraw.is_empty() {
+                messages.push(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: info.sender.to_string(),
+                    amount: res.withdraw.into_vec(),
+                }))
+            }
+
+            if !res.fees.is_empty() {
+                messages.push(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: config.fee_address.to_string(),
+                    amount: res.fees.into_vec(),
+                }))
+            }
+
             Ok(Response::default()
-                .add_message(withdraw_message)
+                .add_messages(messages)
                 .add_events(res.events))
         }
     }
