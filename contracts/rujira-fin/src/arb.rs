@@ -4,7 +4,7 @@ use itertools::EitherOrBoth;
 use rujira_rs::fin::Side;
 use std::cmp::Ordering;
 
-use crate::{pool::Pool, swapper::Swappable};
+use crate::{pool::Pool, swappable::Swappable};
 
 /// Utility to capture arbitrage from overlapping orders
 pub struct Arb {

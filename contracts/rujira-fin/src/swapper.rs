@@ -1,20 +1,9 @@
-use cosmwasm_std::{Decimal, Event, StdResult, Storage, Uint128};
+use cosmwasm_std::{Decimal, Event, Storage, Uint128};
 use itertools::EitherOrBoth;
 use rujira_rs::fin::Side;
-use std::ops::{Add, Mul};
+use std::ops::Mul;
 
-use crate::{events::event_trade, pool::Pool, ContractError};
-
-pub trait Swappable {
-    // Effective price
-    fn rate(&self) -> Decimal;
-    // Total amount of bids
-    fn total(&self) -> Uint128;
-
-    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError>;
-
-    fn save(&self, storage: &mut dyn Storage) -> StdResult<()>;
-}
+use crate::{events::event_trade, pool::Pool, swappable::Swappable, ContractError};
 
 #[derive(Debug)]
 pub struct Swapper {
@@ -89,56 +78,6 @@ impl Swapper {
             return_amount: self.returned,
             remaining_offer: self.offer,
         })
-    }
-}
-
-impl Swappable for EitherOrBoth<Pool> {
-    fn rate(&self) -> Decimal {
-        self.clone().into_left().rate
-    }
-
-    fn total(&self) -> Uint128 {
-        match self {
-            EitherOrBoth::Both(a, b) => a.total().add(b.total()),
-            EitherOrBoth::Left(a) => a.total(),
-            EitherOrBoth::Right(a) => a.total(),
-        }
-    }
-
-    fn swap(&mut self, amount: Uint128) -> Result<(Uint128, Uint128), ContractError> {
-        match self {
-            EitherOrBoth::Both(a, b) => {
-                let offer_a = Decimal::from_ratio(a.total() * amount, a.total().add(b.total()))
-                    .to_uint_floor();
-                let offer_b = amount - offer_a;
-                let (consumed_offer_a, consumed_bids_a) = a.swap(offer_a)?;
-                let (consumed_offer_b, consumed_bids_b) = b.swap(offer_b)?;
-
-                Ok((
-                    consumed_offer_a + consumed_offer_b,
-                    consumed_bids_a + consumed_bids_b,
-                ))
-            }
-            EitherOrBoth::Left(x) => {
-                let (consumed_offer, consumed_bids) = x.swap(amount)?;
-                Ok((consumed_offer, consumed_bids))
-            }
-            EitherOrBoth::Right(x) => {
-                let (consumed_offer, consumed_bids) = x.swap(amount)?;
-                Ok((consumed_offer, consumed_bids))
-            }
-        }
-    }
-
-    fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
-        match self {
-            EitherOrBoth::Both(a, b) => {
-                a.save(storage)?;
-                b.save(storage)
-            }
-            EitherOrBoth::Left(a) => a.save(storage),
-            EitherOrBoth::Right(a) => a.save(storage),
-        }
     }
 }
 

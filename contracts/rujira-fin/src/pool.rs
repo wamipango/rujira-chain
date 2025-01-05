@@ -14,7 +14,7 @@ use std::cmp::Ordering;
 use crate::{
     order::Order,
     pool_key::{PoolKey, PoolType},
-    swapper::Swappable,
+    swappable::Swappable,
     ContractError,
 };
 const SNAPSHOTS: Map<(PoolKey, bid_pool::SumSnapshotKey), Frac> = Map::new("snapshots");

@@ -108,7 +108,7 @@ mod tests {
     use cosmwasm_std::{testing::MockStorage, Addr, Decimal, Timestamp, Uint128};
     use rujira_rs::fin::{Price, Side};
 
-    use crate::{pool::Pool, swapper::Swappable};
+    use crate::{pool::Pool, swappable::Swappable};
 
     #[test]
     fn query_order() {
