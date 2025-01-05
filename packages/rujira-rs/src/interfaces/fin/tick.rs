@@ -14,7 +14,7 @@ impl Tick {
         if v == self.truncate(v) {
             return Ok(());
         }
-        Err(TickError::Invalid { v: v.clone() })
+        Err(TickError::Invalid { v: *v })
     }
 
     fn truncate(&self, v: &Decimal) -> Decimal {
