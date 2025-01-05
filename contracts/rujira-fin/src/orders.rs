@@ -1,6 +1,6 @@
 use cosmwasm_std::{coin, Addr, Decimal, Event, Storage, Timestamp, Uint128};
 use cw_utils::NativeBalance;
-use rujira_rs::fin::{Denoms, Price, Side};
+use rujira_rs::fin::{Denoms, Price, Side, Tick};
 use std::cmp::Ordering;
 
 use crate::{
@@ -12,6 +12,7 @@ use crate::{
 
 pub struct OrderManager {
     denoms: Denoms,
+    tick: Tick,
     owner: Addr,
     timestamp: Timestamp,
     oracle: Decimal,
@@ -27,6 +28,7 @@ pub struct OrderManager {
 impl OrderManager {
     pub fn new(
         denoms: Denoms,
+        tick: Tick,
         owner: Addr,
         timestamp: Timestamp,
         oracle: Decimal,
@@ -34,6 +36,7 @@ impl OrderManager {
     ) -> Self {
         Self {
             denoms,
+            tick,
             owner,
             timestamp,
             oracle,
@@ -49,6 +52,9 @@ impl OrderManager {
         o: Vec<(Side, Price, Uint128)>,
     ) -> Result<ExecutionResult, ContractError> {
         for (side, price, target) in o {
+            if let Price::Fixed(x) = price {
+                self.tick.validate(&x)?;
+            }
             let mut pool = Pool::load(storage, &price, &side, &self.oracle);
             match pool.load_order(storage, &self.owner) {
                 Ok(mut order) => {
@@ -164,9 +170,11 @@ mod tests {
         let oracle = Decimal::from_str("1.0").unwrap();
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
+        let tick = Tick::new(4);
 
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            tick,
             info.sender,
             env.block.time,
             oracle,
@@ -202,6 +210,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
+        let tick = Tick::new(4);
 
         let oracle = Decimal::from_str("1.0").unwrap();
         let mut funds = NativeBalance::default();
@@ -210,6 +219,7 @@ mod tests {
 
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            tick,
             info.sender,
             env.block.time,
             oracle,
@@ -287,11 +297,13 @@ mod tests {
         let mut deps = mock_dependencies();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
+        let tick = Tick::new(4);
 
         let oracle = Decimal::from_str("1.0").unwrap();
         let funds = NativeBalance::default();
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            tick,
             info.sender,
             env.block.time,
             oracle,
@@ -314,6 +326,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
+        let tick = Tick::new(4);
 
         let oracle = Decimal::from_str("1.0").unwrap();
         let mut funds = NativeBalance::default();
@@ -321,6 +334,7 @@ mod tests {
         funds += coin(10000, "ruji");
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            tick.clone(),
             info.sender.clone(),
             env.block.time,
             oracle,
@@ -349,6 +363,7 @@ mod tests {
 
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            tick.clone(),
             info.sender.clone(),
             env.block.time,
             oracle,
@@ -426,6 +441,7 @@ mod tests {
 
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
+            tick,
             info.sender.clone(),
             env.block.time,
             oracle,
@@ -468,5 +484,35 @@ mod tests {
         assert_eq!(event.attributes[2].value, "oracle:10");
         assert_eq!(event.attributes[3].key, "amount");
         assert_eq!(event.attributes[3].value, "600");
+    }
+
+    #[test]
+    fn test_tick_validation() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = message_info(&Addr::unchecked("addr0000"), &[]);
+        let oracle = Decimal::from_str("1.0").unwrap();
+        let mut funds = NativeBalance::default();
+        funds += coin(1000, "usdc");
+        let tick = Tick::new(2);
+
+        let mut e = OrderManager::new(
+            Denoms::new("ruji", "usdc"),
+            tick,
+            info.sender,
+            env.block.time,
+            oracle,
+            funds,
+        );
+
+        e.execute_orders(
+            &mut deps.storage,
+            vec![(
+                Side::Quote,
+                Price::Fixed(Decimal::from_str("1.001").unwrap()),
+                Uint128::from(1000u128),
+            )],
+        )
+        .unwrap_err();
     }
 }

@@ -72,6 +72,7 @@ pub fn execute(
         ExecuteMsg::Order(vec) => {
             let mut e = OrderManager::new(
                 config.denoms,
+                config.tick,
                 info.sender.clone(),
                 env.block.time,
                 oracle,
@@ -194,7 +195,10 @@ mod tests {
     use super::*;
     use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
-    use rujira_rs::{fin::Denoms, Layer1Asset, Tick};
+    use rujira_rs::{
+        fin::{Denoms, Tick},
+        Layer1Asset,
+    };
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};
 
     fn setup() -> (RujiraApp, Addr) {
@@ -217,7 +221,7 @@ mod tests {
                         )
                         .unwrap(),
                     ],
-                    tick: Tick::new(4u8),
+                    tick: Tick::new(6u8),
                     fee_taker: Decimal::zero(),
                     fee_maker: Decimal::zero(),
                     fee_address: app.api().addr_make("fee").to_string(),

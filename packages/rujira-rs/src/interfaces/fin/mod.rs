@@ -12,3 +12,4 @@ pub use price::Price;
 pub use query::*;
 pub use side::Side;
 pub use sudo::SudoMsg;
+pub use tick::{Tick, TickError};

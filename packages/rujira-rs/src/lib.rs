@@ -12,7 +12,6 @@ mod msg;
 pub mod proto;
 pub mod query;
 mod share_pool;
-mod tick;
 mod token_factory;
 
 pub use account_pool::{AccountPool, AccountPoolAccount};
@@ -23,5 +22,4 @@ pub use chain::Chain;
 pub use fraction::Frac;
 pub use interfaces::*;
 pub use share_pool::{SharePool, SharePoolError};
-pub use tick::{Tick, TickError};
 pub use token_factory::{TokenFactory, TokenMetadata};

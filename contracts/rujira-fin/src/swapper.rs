@@ -134,7 +134,7 @@ mod tests {
         Addr,
     };
     use cw_utils::NativeBalance;
-    use rujira_rs::fin::{Denoms, Price};
+    use rujira_rs::fin::{Denoms, Price, Tick};
     use std::str::FromStr;
 
     #[test]
@@ -145,7 +145,8 @@ mod tests {
         let oracle = Decimal::from_str("1.0").unwrap();
         let funds = NativeBalance(vec![coin(1_000_000, "ruji"), coin(1_000_000, "usdc")]);
         let denoms = Denoms::new("ruji", "usdc");
-        let mut e = OrderManager::new(denoms, info.sender, env.block.time, oracle, funds);
+        let tick = Tick::new(4);
+        let mut e = OrderManager::new(denoms, tick, info.sender, env.block.time, oracle, funds);
 
         e.execute_orders(
             &mut storage,

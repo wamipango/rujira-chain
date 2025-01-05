@@ -2,8 +2,8 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, Decimal, StdResult, Storage};
 use cw_storage_plus::Item;
 use rujira_rs::{
-    fin::{ConfigResponse, Denoms, InstantiateMsg},
-    Layer1Asset, Tick,
+    fin::{ConfigResponse, Denoms, InstantiateMsg, Tick},
+    Layer1Asset,
 };
 
 pub static CONFIG: Item<Config> = Item::new("config");

@@ -1,9 +1,9 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Timestamp, Uint128};
 
-use crate::{tick::Tick, Layer1Asset};
+use crate::Layer1Asset;
 
-use super::{side::Side, Denoms, Price};
+use super::{side::Side, Denoms, Price, Tick};
 
 /// Standard interface to query contract state
 #[cw_serde]

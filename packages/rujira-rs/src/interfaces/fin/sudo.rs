@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Decimal;
 
-use crate::Tick;
+use super::Tick;
 
 #[cw_serde]
 pub enum SudoMsg {

@@ -1,8 +1,8 @@
-use crate::{tick::Tick, CallbackData, Layer1Asset};
+use crate::{CallbackData, Layer1Asset};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal, Uint128};
 
-use super::{price::Price, side::Side, Denoms};
+use super::{price::Price, side::Side, Denoms, Tick};
 
 #[cw_serde]
 pub struct InstantiateMsg {
