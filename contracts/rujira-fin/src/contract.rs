@@ -484,10 +484,14 @@ mod tests {
                     Price::Fixed(Decimal::from_str("91219").unwrap()),
                     Uint128::from(51000u128),
                 ),
-                (Side::Quote, Price::Oracle(1), Uint128::from(10000000u128)),
                 (
                     Side::Quote,
-                    Price::Fixed(Decimal::from_str("100010").unwrap()),
+                    Price::Oracle(-1000),
+                    Uint128::from(10000000u128),
+                ),
+                (
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("90000").unwrap()),
                     Uint128::from(12500000u128),
                 ),
                 (
@@ -499,6 +503,17 @@ mod tests {
             &funds,
         )
         .unwrap();
+
+        let book: BookResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Book {
+                    limit: None,
+                    offset: None,
+                },
+            )
+            .unwrap();
 
         let res = app
             .execute_contract(
@@ -539,25 +554,26 @@ mod tests {
                 &coins(300, "btc-btc"),
             )
             .unwrap();
+
         // Buying 10m USDC-worth of BTC
         // Best price = 91219
         // 10_000_000 / 91219 = 109
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
-            ("rate", "100010"),
-            ("offer", "225"),
+            ("rate", "90000"),
+            ("offer", "251"),
             ("bid", "22500000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
             ("rate", "87900"),
-            ("offer", "75"),
-            ("bid", "6592500"),
+            ("offer", "49"),
+            ("bid", "4307100"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "29092500eth-usdc"),
+            ("amount", "26807100eth-usdc"),
         ]));
 
         let res = app
@@ -572,17 +588,19 @@ mod tests {
                 &coins(1000, "btc-btc"),
             )
             .unwrap();
+        dbg!(&res);
+
         // Check that any unused funds are returned
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
             ("rate", "87900"),
-            ("offer", "506"),
-            ("bid", "44407500"),
+            ("offer", "532"),
+            ("bid", "46692900"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "494btc-btc,44407500eth-usdc"),
+            ("amount", "468btc-btc,46692900eth-usdc"),
         ]));
     }
 }

@@ -76,9 +76,8 @@ where
     fn arbitrage(&mut self, other: &mut Self) -> Result<(Uint128, Uint128), ContractError> {
         let float = self.total();
         let a = other.swap(float)?;
-        let remaining = float - a.0;
         let b = self.swap(a.1)?;
-        Ok((remaining.add(b.1).checked_sub(float)?, a.1.sub(b.0)))
+        Ok((b.1.checked_sub(a.0)?, a.1.sub(b.0)))
     }
 }
 
