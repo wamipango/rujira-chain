@@ -3,7 +3,7 @@ use cw_utils::NativeBalance;
 use itertools::EitherOrBoth;
 use rujira_rs::fin::{Denoms, Side};
 use std::fmt::Debug;
-use std::ops::{Add, Sub};
+use std::ops::Sub;
 
 use crate::{pool::Pool, swappable::Swappable, ContractError};
 
@@ -28,27 +28,24 @@ impl Arb {
         let mut base = base_iter.next();
         let mut quote = quote_iter.next();
         let mut profit = NativeBalance::default();
-        loop {
-            match (&mut base, &mut quote) {
-                (Some(b), Some(q)) => match b.arbitrage(q) {
-                    Ok(res) => {
-                        profit += coin(res.0.u128(), self.denoms.bid(&Side::Base));
-                        profit += coin(res.1.u128(), self.denoms.bid(&Side::Quote));
+        while let (Some(b), Some(q)) = (&mut base, &mut quote) {
+            match b.arbitrage(q) {
+                Ok(res) => {
+                    profit += coin(res.0.u128(), self.denoms.bid(&Side::Base));
+                    profit += coin(res.1.u128(), self.denoms.bid(&Side::Quote));
 
-                        self.pending.push(b.clone());
-                        self.pending.push(q.clone());
-                        if b.total().is_zero() {
-                            base = base_iter.next()
-                        }
-
-                        if q.total().is_zero() {
-                            quote = quote_iter.next()
-                        }
+                    self.pending.push(b.clone());
+                    self.pending.push(q.clone());
+                    if b.total().is_zero() {
+                        base = base_iter.next()
                     }
-                    Err(ContractError::Overflow(_)) => break,
-                    Err(err) => return Err(err),
-                },
-                _ => break,
+
+                    if q.total().is_zero() {
+                        quote = quote_iter.next()
+                    }
+                }
+                Err(ContractError::Overflow(_)) => break,
+                Err(err) => return Err(err),
             }
         }
         profit.normalize();

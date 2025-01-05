@@ -504,17 +504,6 @@ mod tests {
         )
         .unwrap();
 
-        let book: BookResponse = app
-            .wrap()
-            .query_wasm_smart(
-                contract.clone(),
-                &QueryMsg::Book {
-                    limit: None,
-                    offset: None,
-                },
-            )
-            .unwrap();
-
         let res = app
             .execute_contract(
                 owner.clone(),
