@@ -1,25 +1,27 @@
-use cosmwasm_std::{Addr, Decimal, QuerierWrapper, Uint128};
-use rujira_rs::fin::{BookItemResponse, Denoms, MarketMakerQuery, Side, Tick};
-use std::{ops::Mul, str::FromStr};
+use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{Addr, Binary, Decimal, QuerierWrapper, Uint128};
+use rujira_rs::fin::{Denoms, MarketMakerQuery, MarketMakerResponse, Side};
+use std::ops::Mul;
 
-pub struct MarketMakerIterator<'a> {
+pub struct MarketMaker<'a> {
     q: QuerierWrapper<'a>,
     denoms: Denoms,
     side: Side,
     contract: Addr,
-    tick: Tick,
+    step: Decimal,
     price: Decimal,
     bid: Uint128,
     ask: Uint128,
+    data: Option<Binary>,
 }
 
-impl<'a> MarketMakerIterator<'a> {
+impl<'a> MarketMaker<'a> {
     pub fn new(
         q: QuerierWrapper<'a>,
         denoms: Denoms,
         side: Side,
         contract: Addr,
-        tick: Tick,
+        step: Decimal,
         price: Decimal,
     ) -> Self {
         Self {
@@ -27,26 +29,33 @@ impl<'a> MarketMakerIterator<'a> {
             denoms,
             side,
             contract,
-            tick,
+            step,
             price,
             bid: Uint128::zero(),
             ask: Uint128::zero(),
+            data: None,
         }
     }
 }
 
-impl<'a> MarketMakerIterator<'a> {
+#[cw_serde]
+pub struct MarketMakerOffer {
+    pub price: Decimal,
+    pub total: Uint128,
+}
+
+impl<'a> MarketMaker<'a> {
     pub fn totals(&self) -> (Uint128, Uint128) {
         (self.bid, self.ask)
     }
 }
 
-impl Iterator for MarketMakerIterator<'_> {
-    type Item = BookItemResponse;
+impl Iterator for MarketMaker<'_> {
+    type Item = MarketMakerOffer;
 
     fn next(&mut self) -> Option<Self::Item> {
         let price = self.price;
-        let res: Option<Uint128> = self
+        let res: Option<MarketMakerResponse> = self
             .q
             .query_wasm_smart(
                 self.contract.to_string(),
@@ -56,18 +65,23 @@ impl Iterator for MarketMakerIterator<'_> {
                     bid_denom: self.denoms.bid(&self.side).to_string(),
                     bid_total: self.bid,
                     price,
+                    data: self.data.clone(),
                 },
             )
             .ok();
 
         match res {
             Some(res) => {
-                self.bid += Decimal::from_ratio(res, 1u128)
+                self.bid += Decimal::from_ratio(res.size, 1u128)
                     .mul(self.price)
                     .to_uint_ceil();
-                self.ask += res;
-                self.price += Decimal::from_str("0.25").unwrap();
-                Some(BookItemResponse { price, total: res })
+                self.ask += res.size;
+                self.price += self.step;
+                self.data = res.data;
+                Some(MarketMakerOffer {
+                    price,
+                    total: res.size,
+                })
             }
             None => None,
         }
@@ -77,6 +91,8 @@ impl Iterator for MarketMakerIterator<'_> {
 #[cfg(test)]
 
 mod test {
+    use std::str::FromStr;
+
     use super::*;
     use cosmwasm_std::{
         from_json, testing::MockQuerier, to_json_binary, ContractResult, SystemError, SystemResult,
@@ -100,20 +116,22 @@ mod test {
                     query.ask_total * Uint128::from(2u128)
                 };
 
-                SystemResult::Ok(ContractResult::Ok(to_json_binary(&size).unwrap()))
+                SystemResult::Ok(ContractResult::Ok(
+                    to_json_binary(&MarketMakerResponse { size, data: None }).unwrap(),
+                ))
             }
             _ => SystemResult::Err(SystemError::Unknown {}),
         });
-        let mut iter = MarketMakerIterator::new(
+        let mut iter = MarketMaker::new(
             QuerierWrapper::new(&q),
             Denoms::new("btc", "usdc"),
             Side::Quote,
             Addr::unchecked("bow"),
-            Tick::new(4),
+            Decimal::from_str("0.25").unwrap(),
             Decimal::one(),
         );
 
-        let items: Vec<BookItemResponse> = iter.by_ref().take(5).collect();
+        let items: Vec<MarketMakerOffer> = iter.by_ref().take(5).collect();
 
         assert_eq!(
             iter.totals(),
@@ -123,23 +141,23 @@ mod test {
         assert_eq!(
             items,
             vec![
-                BookItemResponse {
+                MarketMakerOffer {
                     price: Decimal::from_str("1").unwrap(),
                     total: Uint128::from(100u128)
                 },
-                BookItemResponse {
+                MarketMakerOffer {
                     price: Decimal::from_str("1.25").unwrap(),
                     total: Uint128::from(200u128)
                 },
-                BookItemResponse {
+                MarketMakerOffer {
                     price: Decimal::from_str("1.5").unwrap(),
                     total: Uint128::from(600u128)
                 },
-                BookItemResponse {
+                MarketMakerOffer {
                     price: Decimal::from_str("1.75").unwrap(),
                     total: Uint128::from(1800u128)
                 },
-                BookItemResponse {
+                MarketMakerOffer {
                     price: Decimal::from_str("2").unwrap(),
                     total: Uint128::from(5400u128)
                 }

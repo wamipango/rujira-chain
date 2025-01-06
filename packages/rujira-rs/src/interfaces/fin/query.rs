@@ -113,14 +113,3 @@ pub struct SimulationResponse {
     pub returned: Uint128,
     pub fee: Uint128,
 }
-
-#[cw_serde]
-pub struct MarketMakerQuery {
-    pub bid_denom: String,
-    // Cumulative bid requested over this iterator
-    pub bid_total: Uint128,
-    pub ask_denom: String,
-    // Cumlative ask returned in the iterator
-    pub ask_total: Uint128,
-    pub price: Decimal,
-}
