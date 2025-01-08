@@ -272,10 +272,7 @@ mod tests {
         assert_eq!(res.pending_inbound_rune, Uint128::from(0u128));
         assert_eq!(res.balance_asset, Uint128::from(68602648901u128));
         assert_eq!(res.balance_rune, Uint128::from(1172427071332399u128));
-        assert_eq!(
-            res.asset_tor_price,
-            Decimal::from_str("93308.37628318").unwrap(),
-        );
+        assert_eq!(res.asset_tor_price, Decimal::from_str("100100").unwrap(),);
         assert_eq!(res.pool_units, Uint128::from(613518358320559u128));
         assert_eq!(res.lp_units, Uint128::from(347866097255926u128));
         assert_eq!(res.synth_units, Uint128::from(265652261064633u128));

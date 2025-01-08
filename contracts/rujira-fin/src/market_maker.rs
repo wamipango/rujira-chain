@@ -66,7 +66,7 @@ impl Swappable for MarketMakerOffer {
     }
 
     fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
-        match self.side {
+        let res = match self.side {
             Side::Base => {
                 let offer_value = Decimal::from_ratio(offer, 1u128)
                     .div(self.price)
@@ -76,9 +76,9 @@ impl Swappable for MarketMakerOffer {
                     .to_uint_floor();
                 match self.total.cmp(&offer_value) {
                     // Partial fill
-                    Ordering::Greater => Ok((offer_value, offer)),
+                    Ordering::Greater => (offer_value, offer),
                     // Complete fill
-                    _ => Ok((self.total, pool_value)),
+                    _ => (self.total, pool_value),
                 }
             }
             Side::Quote => {
@@ -90,12 +90,14 @@ impl Swappable for MarketMakerOffer {
                     .to_uint_floor();
                 match self.total.cmp(&offer_value) {
                     // Partial fill
-                    Ordering::Greater => Ok((offer_value, offer)),
+                    Ordering::Greater => (offer_value, offer),
                     // Complete fill
-                    _ => Ok((self.total, pool_value)),
+                    _ => (self.total, pool_value),
                 }
             }
-        }
+        };
+        self.commitment = res;
+        Ok(res)
     }
 
     fn commit(&self, _storage: &mut dyn Storage) -> StdResult<SwapCommit> {
