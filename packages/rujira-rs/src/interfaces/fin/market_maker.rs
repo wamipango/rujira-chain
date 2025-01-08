@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Binary, Decimal, Uint128};
+use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 
 use super::Tick;
 
@@ -47,4 +47,24 @@ pub struct MarketMakerResponse {
     /// Provided in order to allow the market maker to load from storage only once, instead of
     /// for each iteration of the query
     pub data: Option<Binary>,
+}
+
+/// This interface should be callable on the market maker contract
+/// min_return should be a straight pass-through to MarketMakerCallback, which
+/// returns funds to fin
+#[cw_serde]
+pub struct MarketMakerExecute {
+    pub min_return: Coin,
+}
+
+#[cw_serde]
+pub struct MarketMakerCallback {
+    pub min_return: Coin,
+}
+impl From<MarketMakerExecute> for MarketMakerCallback {
+    fn from(value: MarketMakerExecute) -> Self {
+        Self {
+            min_return: value.min_return,
+        }
+    }
 }

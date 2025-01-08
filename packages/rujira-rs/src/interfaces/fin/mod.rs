@@ -8,8 +8,10 @@ mod sudo;
 mod tick;
 
 pub use denoms::Denoms;
-pub use execute::{CallbackMsg, ExecuteMsg, InstantiateMsg};
-pub use market_maker::{MarketMakerQuery, MarketMakerResponse};
+pub use execute::{ExecuteMsg, InstantiateMsg};
+pub use market_maker::{
+    MarketMakerCallback, MarketMakerExecute, MarketMakerQuery, MarketMakerResponse,
+};
 pub use price::Price;
 pub use query::*;
 pub use side::Side;

@@ -2,7 +2,7 @@ use crate::{CallbackData, Layer1Asset};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Coin, Decimal, Uint128};
 
-use super::{price::Price, side::Side, Denoms, Tick};
+use super::{price::Price, side::Side, Denoms, MarketMakerCallback, Tick};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -57,11 +57,6 @@ pub enum ExecuteMsg {
     /// can be reused to fund orders in 1 and 3  
     Order(Vec<(Side, Price, Uint128)>),
 
-    Callback(CallbackMsg),
-}
-
-#[cw_serde]
-pub enum CallbackMsg {
     /// Must be called by the market maker contract with correct return amount
-    MarketMaker { min_return: Coin },
+    MarketMaker(MarketMakerCallback),
 }

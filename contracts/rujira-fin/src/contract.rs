@@ -1,14 +1,15 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, QuerierWrapper, Response,
+    coin, coins, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut,
+    Env, MessageInfo, QuerierWrapper, Response, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
 use rujira_rs::fin::{
-    BookResponse, CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse,
-    OrdersResponse, Price, QueryMsg, Side, SimulationResponse, StatusResponse, SudoMsg,
+    BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, MarketMakerCallback,
+    MarketMakerExecute, OrderResponse, OrdersResponse, Price, QueryMsg, Side, SimulationResponse,
+    StatusResponse, SudoMsg,
 };
 use rujira_rs::query;
 
@@ -62,7 +63,7 @@ pub fn execute(
                 deps.querier,
                 config.denoms.clone(),
                 side.clone(),
-                config.market_maker,
+                config.market_maker.clone(),
                 config.tick,
             );
             let mut swapper = Swapper::new(
@@ -73,7 +74,21 @@ pub fn execute(
                 config.fee_taker,
             );
             let res = swapper.swap(deps.storage, &mut mm)?;
-            swapper.commit(deps.storage)?;
+            let commit = swapper.commit(deps.storage)?;
+            if let Some(mm) = config.market_maker {
+                if !commit.market_maker.1.is_zero() {
+                    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                        contract_addr: mm.to_string(),
+                        msg: to_json_binary(&MarketMakerExecute {
+                            min_return: coin(
+                                commit.market_maker.0.u128(),
+                                config.denoms.bid(&side),
+                            ),
+                        })?,
+                        funds: coins(commit.market_maker.1.u128(), config.denoms.ask(&side)),
+                    }))
+                }
+            }
 
             let mut funds = NativeBalance(vec![
                 coin(res.return_amount.u128(), config.denoms.bid(&side)),
@@ -143,24 +158,22 @@ pub fn execute(
                 .add_events(res.events))
         }
 
-        ExecuteMsg::Callback(CallbackMsg::MarketMaker { min_return }) => {
-            match config.market_maker {
-                Some(mm) => {
-                    ensure_eq!(mm, info.sender, ContractError::Unauthorized {});
-                    let amount = one_coin(&info)?;
-                    ensure_eq!(
-                        min_return,
-                        amount,
-                        ContractError::InsufficientFunds {
-                            expected: min_return,
-                            returned: amount
-                        }
-                    );
-                    Ok(Response::default())
-                }
-                None => Err(ContractError::Unauthorized {}),
+        ExecuteMsg::MarketMaker(MarketMakerCallback { min_return }) => match config.market_maker {
+            Some(mm) => {
+                ensure_eq!(mm, info.sender, ContractError::Unauthorized {});
+                let amount = one_coin(&info)?;
+                ensure_eq!(
+                    min_return,
+                    amount,
+                    ContractError::InsufficientFunds {
+                        expected: min_return,
+                        returned: amount
+                    }
+                );
+                Ok(Response::default())
             }
-        }
+            None => Err(ContractError::Unauthorized {}),
+        },
     }
 }
 
