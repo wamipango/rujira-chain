@@ -21,7 +21,7 @@ pub trait Swappable {
 #[derive(Debug, Default)]
 pub struct SwapCommit {
     /// The (offer, ask) totals committed to by the MarketMaker
-    market_maker: (Uint128, Uint128),
+    pub market_maker: (Uint128, Uint128),
 }
 
 impl Add for SwapCommit {

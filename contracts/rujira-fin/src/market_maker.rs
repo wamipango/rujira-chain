@@ -1,9 +1,10 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{
-    Addr, Attribute, Binary, Decimal, Fraction, QuerierWrapper, StdResult, Storage, Uint128,
-};
+use cosmwasm_std::{Addr, Attribute, Binary, Decimal, QuerierWrapper, StdResult, Storage, Uint128};
 use rujira_rs::fin::{Denoms, MarketMakerQuery, MarketMakerResponse, Side, Tick};
-use std::ops::Mul;
+use std::{
+    cmp::Ordering,
+    ops::{Div, Mul},
+};
 
 use crate::{
     swappable::{SwapCommit, Swappable},
@@ -48,7 +49,7 @@ pub struct MarketMakerOffer {
     pub price: Decimal,
     pub total: Uint128,
     side: Side,
-    consumed: Uint128,
+    commitment: (Uint128, Uint128),
 }
 
 impl Swappable for MarketMakerOffer {
@@ -65,11 +66,42 @@ impl Swappable for MarketMakerOffer {
     }
 
     fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
-        todo!()
+        match self.side {
+            Side::Base => {
+                let offer_value = Decimal::from_ratio(offer, 1u128)
+                    .div(self.price)
+                    .to_uint_floor();
+                let pool_value = Decimal::from_ratio(self.total, 1u128)
+                    .mul(self.price)
+                    .to_uint_floor();
+                match self.total.cmp(&offer_value) {
+                    // Partial fill
+                    Ordering::Greater => Ok((offer_value, offer)),
+                    // Complete fill
+                    _ => Ok((self.total, pool_value)),
+                }
+            }
+            Side::Quote => {
+                let offer_value = Decimal::from_ratio(offer, 1u128)
+                    .mul(self.price)
+                    .to_uint_floor();
+                let pool_value = Decimal::from_ratio(self.total, 1u128)
+                    .div(self.price)
+                    .to_uint_floor();
+                match self.total.cmp(&offer_value) {
+                    // Partial fill
+                    Ordering::Greater => Ok((offer_value, offer)),
+                    // Complete fill
+                    _ => Ok((self.total, pool_value)),
+                }
+            }
+        }
     }
 
-    fn commit(&self, storage: &mut dyn Storage) -> StdResult<SwapCommit> {
-        Ok(SwapCommit::default())
+    fn commit(&self, _storage: &mut dyn Storage) -> StdResult<SwapCommit> {
+        Ok(SwapCommit {
+            market_maker: self.commitment,
+        })
     }
 }
 
@@ -108,7 +140,7 @@ impl<'a> MarketMaker<'a> {
                     price: res.price,
                     total: res.size,
                     side: self.side.clone(),
-                    consumed: Uint128::zero(),
+                    commitment: Default::default(),
                 })
             }
             None => None,
@@ -188,33 +220,79 @@ mod test {
                     price: Decimal::from_str("1.25").unwrap(),
                     total: Uint128::from(100u128),
                     side: Side::Quote,
-                    consumed: Uint128::zero()
+                    commitment: Default::default()
                 },
                 MarketMakerOffer {
                     price: Decimal::from_str("1.5").unwrap(),
                     total: Uint128::from(200u128),
                     side: Side::Quote,
-                    consumed: Uint128::zero()
+                    commitment: Default::default()
                 },
                 MarketMakerOffer {
                     price: Decimal::from_str("1.75").unwrap(),
                     total: Uint128::from(600u128),
                     side: Side::Quote,
-                    consumed: Uint128::zero()
+                    commitment: Default::default()
                 },
                 MarketMakerOffer {
                     price: Decimal::from_str("2").unwrap(),
                     total: Uint128::from(1800u128),
                     side: Side::Quote,
-                    consumed: Uint128::zero()
+                    commitment: Default::default()
                 },
                 MarketMakerOffer {
                     price: Decimal::from_str("2.25").unwrap(),
                     total: Uint128::from(5400u128),
                     side: Side::Quote,
-                    consumed: Uint128::zero()
+                    commitment: Default::default()
                 }
             ]
         );
+    }
+    #[test]
+    fn test_market_market_item_swap() {
+        // Quote partial fill
+        let mut o = MarketMakerOffer {
+            price: Decimal::from_str("1.25").unwrap(),
+            total: Uint128::from(10000u128),
+            side: Side::Quote,
+            commitment: Default::default(),
+        };
+        let (bid_returned, offer_consumed) = o.swap(Uint128::from(500u128)).unwrap();
+        assert_eq!(bid_returned, Uint128::from(625u128));
+        assert_eq!(offer_consumed, Uint128::from(500u128));
+
+        // Quote full fill
+        let mut o = MarketMakerOffer {
+            price: Decimal::from_str("1.25").unwrap(),
+            total: Uint128::from(10000u128),
+            side: Side::Quote,
+            commitment: Default::default(),
+        };
+        let (bid_returned, offer_consumed) = o.swap(Uint128::from(500000u128)).unwrap();
+        assert_eq!(bid_returned, Uint128::from(10000u128));
+        assert_eq!(offer_consumed, Uint128::from(8000u128));
+
+        // Base partial fill
+        let mut o = MarketMakerOffer {
+            price: Decimal::from_str("1.25").unwrap(),
+            total: Uint128::from(10000u128),
+            side: Side::Base,
+            commitment: Default::default(),
+        };
+        let (bid_returned, offer_consumed) = o.swap(Uint128::from(500u128)).unwrap();
+        assert_eq!(bid_returned, Uint128::from(400u128));
+        assert_eq!(offer_consumed, Uint128::from(500u128));
+
+        // Base full fill
+        let mut o = MarketMakerOffer {
+            price: Decimal::from_str("1.25").unwrap(),
+            total: Uint128::from(10000u128),
+            side: Side::Base,
+            commitment: Default::default(),
+        };
+        let (bid_returned, offer_consumed) = o.swap(Uint128::from(500000u128)).unwrap();
+        assert_eq!(bid_returned, Uint128::from(10000u128));
+        assert_eq!(offer_consumed, Uint128::from(12500u128));
     }
 }
