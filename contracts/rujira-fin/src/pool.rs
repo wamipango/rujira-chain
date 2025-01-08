@@ -3,10 +3,10 @@ use cosmwasm_std::{
     Addr, Attribute, Decimal, Decimal256, Fraction, StdResult, Storage, Timestamp, Uint128, Uint256,
 };
 use cw_storage_plus::Map;
-use itertools::{EitherOrBoth, Itertools, MergeJoinBy};
+use itertools::{Itertools, MergeJoinBy};
 use rujira_rs::{
     bid_pool::{self, SumSnapshot},
-    fin::{BookItemResponse, Price, Side},
+    fin::{Price, Side},
     Frac,
 };
 use std::cmp::Ordering;
@@ -178,13 +178,6 @@ impl Pool {
             bid.sum_snapshot_key(),
         );
         SNAPSHOTS.load(storage, key)
-    }
-
-    pub fn combine(v: EitherOrBoth<Self>) -> BookItemResponse {
-        BookItemResponse {
-            price: v.rate(),
-            total: v.total(),
-        }
     }
 }
 

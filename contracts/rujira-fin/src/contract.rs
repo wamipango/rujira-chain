@@ -7,9 +7,9 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
 use rujira_rs::fin::{
-    BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, MarketMakerCallback,
-    MarketMakerExecute, OrderResponse, OrdersResponse, Price, QueryMsg, Side, SimulationResponse,
-    StatusResponse, SudoMsg,
+    BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg,
+    MarketMakerCallback, MarketMakerExecute, OrderResponse, OrdersResponse, Price, QueryMsg, Side,
+    SimulationResponse, StatusResponse, SudoMsg,
 };
 use rujira_rs::query;
 
@@ -20,6 +20,7 @@ use crate::market_maker::MarketMaker;
 use crate::order::Order;
 use crate::order_manager::OrderManager;
 use crate::pool::Pool;
+use crate::swappable::Swappable;
 use crate::swapper::Swapper;
 
 // version info for migration info
@@ -244,13 +245,19 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
             let base = Pool::side(deps.storage, &Side::Base, &oracle)
                 .skip(offset as usize)
                 .take(limit as usize)
-                .map(Pool::combine)
+                .map(|v| BookItemResponse {
+                    price: v.rate(),
+                    total: v.total(),
+                })
                 .collect();
 
             let quote = Pool::side(deps.storage, &Side::Quote, &oracle)
                 .skip(offset as usize)
                 .take(limit as usize)
-                .map(Pool::combine)
+                .map(|v| BookItemResponse {
+                    price: v.rate(),
+                    total: v.total(),
+                })
                 .collect();
 
             to_json_binary(&BookResponse { base, quote })
