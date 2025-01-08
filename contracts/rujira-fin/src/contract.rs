@@ -541,9 +541,9 @@ mod tests {
         // 10_000_000 / 91219 = 109
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "base"),
-            ("rate", "91219"),
             ("offer", "10000000"),
             ("bid", "109"),
+            ("price", "fixed:91219"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
@@ -571,15 +571,16 @@ mod tests {
         // 10_000_000 / 91219 = 109
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
-            ("rate", "90000"),
             ("offer", "251"),
             ("bid", "22500000"),
+            ("price", "oracle:-1000"),
+            ("price", "fixed:90000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
-            ("rate", "87900"),
             ("offer", "49"),
             ("bid", "4307100"),
+            ("price", "fixed:87900"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
@@ -603,9 +604,9 @@ mod tests {
         // Check that any unused funds are returned
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
-            ("rate", "87900"),
             ("offer", "532"),
             ("bid", "46692900"),
+            ("price", "fixed:87900"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),

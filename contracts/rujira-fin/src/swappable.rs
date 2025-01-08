@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, StdResult, Storage, Uint128};
+use cosmwasm_std::{Attribute, Decimal, StdResult, Storage, Uint128};
 use itertools::EitherOrBoth;
 use std::ops::Add;
 
@@ -7,6 +7,9 @@ use crate::ContractError;
 pub trait Swappable {
     // Effective price
     fn rate(&self) -> Decimal;
+
+    // Extra attributes to append to trade events
+    fn attributes(&self) -> Vec<Attribute>;
     // Total amount of bids
     fn total(&self) -> Uint128;
 
@@ -21,6 +24,18 @@ where
 {
     fn rate(&self) -> Decimal {
         self.clone().into_left().rate()
+    }
+
+    fn attributes(&self) -> Vec<Attribute> {
+        match self {
+            EitherOrBoth::Both(a, b) => {
+                let mut res = a.attributes();
+                res.append(&mut b.attributes());
+                res
+            }
+            EitherOrBoth::Left(x) => x.attributes(),
+            EitherOrBoth::Right(x) => x.attributes(),
+        }
     }
 
     fn total(&self) -> Uint128 {

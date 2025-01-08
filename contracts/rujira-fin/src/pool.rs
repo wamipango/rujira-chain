@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    Addr, Decimal, Decimal256, Fraction, StdResult, Storage, Timestamp, Uint128, Uint256,
+    Addr, Attribute, Decimal, Decimal256, Fraction, StdResult, Storage, Timestamp, Uint128, Uint256,
 };
 use cw_storage_plus::Map;
 use itertools::{EitherOrBoth, Itertools, MergeJoinBy};
@@ -219,6 +219,10 @@ impl Swappable for Pool {
         }
 
         POOLS.save(storage, self.key(), &())
+    }
+
+    fn attributes(&self) -> Vec<Attribute> {
+        vec![Attribute::new("price", self.price.to_string())]
     }
 
     fn rate(&self) -> Decimal {

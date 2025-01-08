@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, Event, Uint128};
+use cosmwasm_std::{Attribute, Event, Uint128};
 use rujira_rs::fin::Side;
 
 use crate::{order::Order, pool::Pool};
@@ -35,10 +35,15 @@ pub fn event_retract_order(pool: &Pool, order: &Order, amount: &Uint128) -> Even
         .add_attribute("amount", amount.to_string())
 }
 
-pub fn event_trade(side: &Side, price: &Decimal, offer: Uint128, bid: Uint128) -> Event {
+pub fn event_trade(
+    side: &Side,
+    offer: Uint128,
+    bid: Uint128,
+    attributes: &Vec<Attribute>,
+) -> Event {
     Event::new("rujira-fin/trade")
         .add_attribute("side", side.to_string())
-        .add_attribute("rate", price.to_string())
         .add_attribute("offer", offer.to_string())
         .add_attribute("bid", bid.to_string())
+        .add_attributes(attributes.clone())
 }
