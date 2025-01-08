@@ -26,6 +26,10 @@ pub enum QueryMsg {
     #[returns(OrdersResponse)]
     Orders {
         owner: String,
+        /// When Side is provided, orders are sorted by price
+        /// N.B: This sorts on the underlying Price key, not the effective execution price,
+        /// so Oracle and Fixed prices will be grouped
+        side: Option<Side>,
         offset: Option<u8>,
         limit: Option<u8>,
     },

@@ -9,7 +9,8 @@ use rujira_rs::{
     fin::{Price, Side},
 };
 
-pub const ORDERS: Map<(Addr, PoolKey), (Timestamp, Uint128, bid_pool::Bid)> = Map::new("orders");
+pub const ORDERS: Map<(Addr, Side, Price), (Timestamp, Uint128, bid_pool::Bid)> =
+    Map::new("orders");
 const MAX_LIMIT: u8 = 31;
 const DEFAULT_LIMIT: u8 = 10;
 
@@ -30,10 +31,7 @@ impl Order {
         price: &Price,
     ) -> Result<Self, ContractError> {
         let (updated_at, offer, bid) = ORDERS
-            .load(
-                storage,
-                (owner.clone(), PoolKey::new(side.clone(), price.clone())),
-            )
+            .load(storage, (owner.clone(), side.clone(), price.clone()))
             .map_err(|_| ContractError::NotFound {})?;
         Ok(Self {
             owner: owner.clone(),
@@ -46,19 +44,66 @@ impl Order {
     pub fn by_owner(
         storage: &dyn Storage,
         owner: &Addr,
+        side: Option<Side>,
         offset: Option<u8>,
         limit: Option<u8>,
     ) -> StdResult<Vec<(PoolKey, Self)>> {
-        let limit: u8 = min(limit.unwrap_or(DEFAULT_LIMIT), MAX_LIMIT);
+        let limit = min(limit.unwrap_or(DEFAULT_LIMIT), MAX_LIMIT) as usize;
+        let offset = offset.unwrap_or(0) as usize;
+        match side {
+            Some(side) => Self::by_owner_side(storage, owner, side, offset, limit),
+            None => Self::by_owner_all(storage, owner, offset, limit),
+        }
+    }
+
+    fn by_owner_all(
+        storage: &dyn Storage,
+        owner: &Addr,
+        offset: usize,
+        limit: usize,
+    ) -> StdResult<Vec<(PoolKey, Self)>> {
         ORDERS
-            .prefix(owner.clone())
+            .sub_prefix(owner.clone())
             .range(storage, None, None, cosmwasm_std::Order::Ascending)
-            .skip(offset.unwrap_or(0) as usize)
+            .skip(offset)
             .take(limit as usize)
             .map(|x| {
                 x.map(|(k, (updated_at, offer, bid))| {
                     (
-                        k,
+                        PoolKey::new(k.0, k.1),
+                        Self {
+                            owner: owner.clone(),
+                            updated_at,
+                            offer,
+                            bid,
+                        },
+                    )
+                })
+            })
+            .collect()
+    }
+
+    fn by_owner_side(
+        storage: &dyn Storage,
+        owner: &Addr,
+        side: Side,
+        offset: usize,
+        limit: usize,
+    ) -> StdResult<Vec<(PoolKey, Self)>> {
+        let order = match side {
+            Side::Base => cosmwasm_std::Order::Ascending,
+            Side::Quote => cosmwasm_std::Order::Descending,
+        };
+
+        ORDERS
+            .prefix((owner.clone(), side.clone()))
+            .range(storage, None, None, order)
+            .skip(offset)
+            .take(limit)
+            .map(|x| {
+                x.map(|(k, (updated_at, offer, bid))| {
+                    (
+                        PoolKey::new(side.clone(), k),
                         Self {
                             owner: owner.clone(),
                             updated_at,
@@ -82,10 +127,7 @@ impl Order {
         }
         ORDERS.save(
             storage,
-            (
-                self.owner.clone(),
-                PoolKey::new(pool.side.clone(), pool.price.clone()),
-            ),
+            (self.owner.clone(), pool.side.clone(), pool.price.clone()),
             &(self.updated_at, self.offer, self.bid.clone()),
         )?;
         Ok(())
@@ -94,16 +136,15 @@ impl Order {
     fn remove(&self, storage: &mut dyn Storage, pool: &Pool) {
         ORDERS.remove(
             storage,
-            (
-                self.owner.clone(),
-                PoolKey::new(pool.side.clone(), pool.price.clone()),
-            ),
+            (self.owner.clone(), pool.side.clone(), pool.price.clone()),
         )
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use cosmwasm_std::{testing::MockStorage, Addr, Decimal, Timestamp, Uint128};
     use rujira_rs::fin::{Price, Side};
@@ -138,6 +179,31 @@ mod tests {
         let mut pool1 = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle);
         let mut pool2 = Pool::load(&store, &Price::Oracle(1), &Side::Quote, &oracle);
         let mut pool3 = Pool::load(&store, &Price::Oracle(2), &Side::Quote, &oracle);
+        let mut pool4 = Pool::load(
+            &store,
+            &Price::Fixed(Decimal::from_str("1.0").unwrap()),
+            &Side::Quote,
+            &oracle,
+        );
+        let mut pool5 = Pool::load(
+            &store,
+            &Price::Fixed(Decimal::from_str("1.1").unwrap()),
+            &Side::Quote,
+            &oracle,
+        );
+        let mut pool6 = Pool::load(
+            &store,
+            &Price::Fixed(Decimal::from_str("1.2").unwrap()),
+            &Side::Quote,
+            &oracle,
+        );
+        let mut pool7 = Pool::load(
+            &store,
+            &Price::Fixed(Decimal::from_str("1.2").unwrap()),
+            &Side::Base,
+            &oracle,
+        );
+
         pool1
             .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
@@ -147,14 +213,32 @@ mod tests {
         pool3
             .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
+        pool4
+            .create_order(&mut store, &timestamp, &owner, offer)
+            .unwrap();
+        pool5
+            .create_order(&mut store, &timestamp, &owner, offer)
+            .unwrap();
+        pool6
+            .create_order(&mut store, &timestamp, &owner, offer)
+            .unwrap();
+        pool7
+            .create_order(&mut store, &timestamp, &owner, offer)
+            .unwrap();
+
         pool1
             .create_order(&mut store, &timestamp, &owner2, offer)
             .unwrap();
 
         pool1.save(&mut store).unwrap();
 
-        let orders = Order::by_owner(&store, &owner, None, None).unwrap();
-        assert_eq!(orders.len(), 3);
+        let orders = Order::by_owner(&store, &owner, None, None, None).unwrap();
+        assert_eq!(orders.len(), 7);
+        assert_eq!(orders[0].1.owner, owner);
+        assert_eq!(orders[0].1.offer, offer);
+
+        let orders = Order::by_owner(&store, &owner, Some(Side::Quote), None, None).unwrap();
+        assert_eq!(orders.len(), 6);
         assert_eq!(orders[0].1.owner, owner);
         assert_eq!(orders[0].1.offer, offer);
     }

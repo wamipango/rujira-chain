@@ -174,12 +174,13 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
         }
         QueryMsg::Orders {
             owner,
+            side,
             offset,
             limit,
         } => {
             let addr = deps.api.addr_validate(owner.as_str())?;
             let orders: Result<Vec<OrderResponse>, ContractError> =
-                Order::by_owner(deps.storage, &addr, offset, limit)?
+                Order::by_owner(deps.storage, &addr, side, offset, limit)?
                     .iter_mut()
                     .map(|(k, order)| {
                         let pool = Pool::load(deps.storage, &k.price, &k.side, &oracle);
