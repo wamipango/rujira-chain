@@ -12,6 +12,7 @@ pub static CONFIG: Item<Config> = Item::new("config");
 pub struct Config {
     pub denoms: Denoms,
     pub oracles: [Layer1Asset; 2],
+    pub market_maker: Option<Addr>,
     pub tick: Tick,
     pub fee_maker: Decimal,
     pub fee_taker: Decimal,
@@ -23,6 +24,10 @@ impl Config {
         Ok(Self {
             denoms: value.denoms.clone(),
             oracles: value.oracles,
+            market_maker: value
+                .market_maker
+                .map(|x| api.addr_validate(x.as_str()))
+                .transpose()?,
             tick: value.tick,
             fee_taker: value.fee_taker,
             fee_maker: value.fee_maker,
@@ -41,12 +46,16 @@ impl Config {
     pub fn update(
         &mut self,
         tick: Option<Tick>,
+        market_maker: Option<Addr>,
         fee_taker: Option<Decimal>,
         fee_maker: Option<Decimal>,
         fee_address: Option<Addr>,
     ) {
         if let Some(tick) = tick {
             self.tick = tick;
+        }
+        if let Some(market_maker) = market_maker {
+            self.market_maker = Some(market_maker);
         }
         if let Some(fee_taker) = fee_taker {
             self.fee_taker = fee_taker;

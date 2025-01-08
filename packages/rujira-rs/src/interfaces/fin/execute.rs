@@ -1,6 +1,6 @@
 use crate::{CallbackData, Layer1Asset};
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{Coin, Decimal, Uint128};
 
 use super::{price::Price, side::Side, Denoms, Tick};
 
@@ -10,6 +10,10 @@ pub struct InstantiateMsg {
     pub denoms: Denoms,
 
     pub oracles: [Layer1Asset; 2],
+
+    /// The address of the market maker contract. Must implement [crate::market_maker::MarketMakerQuery],
+    /// and return funds with [CallbackMsg::MarketMaker]
+    pub market_maker: Option<String>,
 
     /// Ticked truncates Decimal to significant figures.
     /// This accommodates prices decreasing and adding zeroes,
@@ -52,4 +56,12 @@ pub enum ExecuteMsg {
     /// Funds sent must be equal to the net change of balances. Funds withdrawn in step 0 and retracted in 1's,
     /// can be reused to fund orders in 1 and 3  
     Order(Vec<(Side, Price, Uint128)>),
+
+    Callback(CallbackMsg),
+}
+
+#[cw_serde]
+pub enum CallbackMsg {
+    /// Must be called by the market maker contract with correct return amount
+    MarketMaker { min_return: Coin },
 }

@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    CheckedFromRatioError, ConversionOverflowError, OverflowError, StdError, Uint128,
+    CheckedFromRatioError, Coin, ConversionOverflowError, OverflowError, StdError, Uint128,
 };
 use cw_utils::PaymentError;
 use rujira_rs::{bid_pool::BidPoolError, fin::TickError, query::PoolError};
@@ -36,6 +36,9 @@ pub enum ContractError {
         expected: Uint128,
         returned: Uint128,
     },
+
+    #[error("InsufficientFunds expected {expected} got {returned}")]
+    InsufficientFunds { expected: Coin, returned: Coin },
 
     #[error("Unauthorized")]
     Unauthorized {},

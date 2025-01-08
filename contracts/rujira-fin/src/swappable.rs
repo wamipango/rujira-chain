@@ -1,6 +1,6 @@
 use cosmwasm_std::{Attribute, Decimal, StdResult, Storage, Uint128};
 use itertools::EitherOrBoth;
-use std::ops::Add;
+use std::ops::{Add, AddAssign};
 
 use crate::ContractError;
 
@@ -15,15 +15,46 @@ pub trait Swappable {
 
     fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError>;
 
-    fn save(&self, storage: &mut dyn Storage) -> StdResult<()>;
+    fn commit(&self, storage: &mut dyn Storage) -> StdResult<SwapCommit>;
 }
 
-impl<T> Swappable for EitherOrBoth<T>
+#[derive(Debug, Default)]
+pub struct SwapCommit {
+    /// The (offer, ask) totals committed to by the MarketMaker
+    market_maker: (Uint128, Uint128),
+}
+
+impl Add for SwapCommit {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            market_maker: (
+                self.market_maker.0.add(rhs.market_maker.0),
+                self.market_maker.1.add(rhs.market_maker.1),
+            ),
+        }
+    }
+}
+
+impl AddAssign for SwapCommit {
+    fn add_assign(&mut self, rhs: Self) {
+        self.market_maker.0 += rhs.market_maker.0;
+        self.market_maker.1 += rhs.market_maker.1;
+    }
+}
+
+impl<T, V> Swappable for EitherOrBoth<T, V>
 where
     T: Swappable + Clone,
+    V: Swappable + Clone,
 {
     fn rate(&self) -> Decimal {
-        self.clone().into_left().rate()
+        match self {
+            EitherOrBoth::Both(a, _) => a.rate(),
+            EitherOrBoth::Left(x) => x.rate(),
+            EitherOrBoth::Right(x) => x.rate(),
+        }
     }
 
     fn attributes(&self) -> Vec<Attribute> {
@@ -71,14 +102,11 @@ where
         }
     }
 
-    fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
+    fn commit(&self, storage: &mut dyn Storage) -> StdResult<SwapCommit> {
         match self {
-            EitherOrBoth::Both(a, b) => {
-                a.save(storage)?;
-                b.save(storage)
-            }
-            EitherOrBoth::Left(a) => a.save(storage),
-            EitherOrBoth::Right(a) => a.save(storage),
+            EitherOrBoth::Both(a, b) => Ok(a.commit(storage)? + b.commit(storage)?),
+            EitherOrBoth::Left(a) => a.commit(storage),
+            EitherOrBoth::Right(a) => a.commit(storage),
         }
     }
 }

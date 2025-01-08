@@ -54,7 +54,7 @@ impl Arber {
 
     pub fn commit(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
         for x in self.pending.iter_mut() {
-            x.save(storage)?;
+            x.commit(storage)?;
         }
 
         Ok(())

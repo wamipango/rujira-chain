@@ -12,5 +12,6 @@ pub enum SudoMsg {
         fee_taker: Option<Decimal>,
         fee_maker: Option<Decimal>,
         fee_address: Option<String>,
+        market_maker: Option<String>,
     },
 }

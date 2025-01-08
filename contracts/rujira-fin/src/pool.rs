@@ -14,7 +14,7 @@ use std::cmp::Ordering;
 use crate::{
     order::Order,
     pool_key::{PoolKey, PoolType},
-    swappable::Swappable,
+    swappable::{SwapCommit, Swappable},
     ContractError,
 };
 const SNAPSHOTS: Map<(PoolKey, bid_pool::SumSnapshotKey), Frac> = Map::new("snapshots");
@@ -111,7 +111,7 @@ impl Pool {
             updated_at: *timestamp,
             bid: self.pool.new_bid(offer.into()),
         };
-        self.save(storage)?;
+        self.commit(storage)?;
         order.save(storage, self)?;
         Ok(order)
     }
@@ -133,7 +133,7 @@ impl Pool {
         order.offer = order.amount();
         order.updated_at = *timestamp;
         order.save(storage, self)?;
-        self.save(storage)?;
+        self.commit(storage)?;
         Ok(amount)
     }
 
@@ -149,7 +149,7 @@ impl Pool {
         order.offer = order.amount();
         order.updated_at = *timestamp;
         order.save(storage, self)?;
-        self.save(storage)?;
+        self.commit(storage)?;
         Ok(Uint128::try_from(refund_amount)?)
     }
 
@@ -206,7 +206,7 @@ impl Swappable for Pool {
         ))
     }
 
-    fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
+    fn commit(&self, storage: &mut dyn Storage) -> StdResult<SwapCommit> {
         for s in self.pending_sum_snapshots.clone() {
             SNAPSHOTS.save(storage, (self.key(), s.key()), &s.sum)?;
         }
@@ -215,10 +215,11 @@ impl Swappable for Pool {
         // Clear empty pools so they're not iterated over during a swap
         if self.pool.is_zero() {
             POOLS.remove(storage, self.key());
-            return Ok(());
+            return Ok(SwapCommit::default());
         }
 
-        POOLS.save(storage, self.key(), &())
+        POOLS.save(storage, self.key(), &())?;
+        Ok(SwapCommit::default())
     }
 
     fn attributes(&self) -> Vec<Attribute> {
@@ -259,7 +260,7 @@ mod tests {
         pool.create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
-        pool.save(&mut store).unwrap();
+        pool.commit(&mut store).unwrap();
         // Check both the pool and bid pool are stored
         POOLS.load(&store, k.clone()).unwrap();
         BID_POOLS.load(&store, k.clone()).unwrap();
@@ -267,7 +268,7 @@ mod tests {
         pool.swap(Uint128::from(100u128)).unwrap();
 
         // Bid Pool should have been emptied, so the container Pool shold be cleared, but the BidPool should remain
-        pool.save(&mut store).unwrap();
+        pool.commit(&mut store).unwrap();
         POOLS.load(&store, k.clone()).unwrap_err();
         let bp = BID_POOLS.load(&store, k.clone()).unwrap();
         // Check it's different from the default

@@ -1,6 +1,8 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Binary, Decimal, Uint128};
 
+use super::Tick;
+
 /// FIN is configured with a privileged, passive market maker.
 ///
 #[cw_serde]
@@ -13,8 +15,8 @@ pub struct MarketMakerQuery {
     pub bid_denom: String,
     /// The denom that the market maker is asking for
     pub ask_denom: String,
-    /// The price that FIN is currently requesting a quote for
-    pub price: Decimal,
+    /// The previous price quoted for
+    pub last_price: Option<Decimal>,
 
     /// Total amount of bid_denom that has been committed by the
     /// market maker, prior to execution
@@ -26,12 +28,17 @@ pub struct MarketMakerQuery {
     /// of bid_denom at the end of the transaction
     pub ask_total: Uint128,
 
+    /// Tick size of the pair
+    pub tick: Tick,
+
     /// Optional binary data that is simply read from MarketMakerResponse::data and returned by FIN
     pub data: Option<Binary>,
 }
 
 #[cw_serde]
 pub struct MarketMakerResponse {
+    pub price: Decimal,
+
     /// The size of the bid that the market maker is willing to make
     /// at the requested price
     pub size: Uint128,

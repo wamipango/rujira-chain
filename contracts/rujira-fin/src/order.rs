@@ -161,7 +161,7 @@ mod tests {
         pool.create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
-        pool.save(&mut store).unwrap();
+        pool.commit(&mut store).unwrap();
 
         let order = Order::load(&store, &owner, &Side::Quote, &Price::Oracle(0)).unwrap();
         assert_eq!(order.owner, owner);
@@ -230,7 +230,7 @@ mod tests {
             .create_order(&mut store, &timestamp, &owner2, offer)
             .unwrap();
 
-        pool1.save(&mut store).unwrap();
+        pool1.commit(&mut store).unwrap();
 
         let orders = Order::by_owner(&store, &owner, None, None, None).unwrap();
         assert_eq!(orders.len(), 7);

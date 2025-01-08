@@ -1,20 +1,21 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
-    QuerierWrapper, Response,
+    coin, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
+    MessageInfo, QuerierWrapper, Response,
 };
 use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
 use rujira_rs::fin::{
-    BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, Price,
-    QueryMsg, Side, SimulationResponse, StatusResponse, SudoMsg,
+    BookResponse, CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse,
+    OrdersResponse, Price, QueryMsg, Side, SimulationResponse, StatusResponse, SudoMsg,
 };
 use rujira_rs::query;
 
 use crate::arb::Arber;
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
+use crate::market_maker::MarketMaker;
 use crate::order::Order;
 use crate::order_manager::OrderManager;
 use crate::pool::Pool;
@@ -57,6 +58,13 @@ pub fn execute(
             let to = to.map(|x| deps.api.addr_validate(&x)).transpose()?;
             let funds = one_coin(&info)?;
             let side = config.denoms.ask_side(&funds)?;
+            let mut mm = MarketMaker::new(
+                deps.querier,
+                config.denoms.clone(),
+                side.clone(),
+                config.market_maker,
+                config.tick,
+            );
             let mut swapper = Swapper::new(
                 side.clone(),
                 funds.amount,
@@ -64,7 +72,7 @@ pub fn execute(
                 oracle,
                 config.fee_taker,
             );
-            let res = swapper.swap(deps.storage)?;
+            let res = swapper.swap(deps.storage, &mut mm)?;
             swapper.commit(deps.storage)?;
 
             let mut funds = NativeBalance(vec![
@@ -134,6 +142,25 @@ pub fn execute(
                 .add_messages(messages)
                 .add_events(res.events))
         }
+
+        ExecuteMsg::Callback(CallbackMsg::MarketMaker { min_return }) => {
+            match config.market_maker {
+                Some(mm) => {
+                    ensure_eq!(mm, info.sender, ContractError::Unauthorized {});
+                    let amount = one_coin(&info)?;
+                    ensure_eq!(
+                        min_return,
+                        amount,
+                        ContractError::InsufficientFunds {
+                            expected: min_return,
+                            returned: amount
+                        }
+                    );
+                    Ok(Response::default())
+                }
+                None => Err(ContractError::Unauthorized {}),
+            }
+        }
     }
 }
 
@@ -147,12 +174,18 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             fee_taker,
             fee_maker,
             fee_address,
+            market_maker,
         } => {
             let fee_address = fee_address
                 .map(|x| deps.api.addr_validate(&x))
                 .transpose()?;
+
+            let market_maker = market_maker
+                .map(|x| deps.api.addr_validate(&x))
+                .transpose()?;
             let mut config = CONFIG.load(deps.storage)?;
-            config.update(tick, fee_taker, fee_maker, fee_address);
+
+            config.update(tick, market_maker, fee_taker, fee_maker, fee_address);
             config.save(deps.storage)?;
             Ok(Response::default())
         }
@@ -213,7 +246,15 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
             let side = config.denoms.ask_side(&offer)?;
             let mut swapper =
                 Swapper::new(side.clone(), offer.amount, None, oracle, config.fee_taker);
-            let res = swapper.swap(deps.storage)?;
+            let mut mm = MarketMaker::new(
+                deps.querier,
+                config.denoms,
+                side,
+                config.market_maker,
+                config.tick,
+            );
+
+            let res = swapper.swap(deps.storage, &mut mm)?;
             to_json_binary(&SimulationResponse {
                 returned: res.return_amount,
                 fee: res.fee_amount,
@@ -269,6 +310,7 @@ mod tests {
                 owner,
                 &InstantiateMsg {
                     denoms: Denoms::new("btc-btc", "eth-usdc"),
+                    market_maker: None,
                     oracles: [
                         Layer1Asset::try_from("BTC.BTC").unwrap(),
                         Layer1Asset::try_from(
@@ -306,6 +348,7 @@ mod tests {
                     Layer1Asset::try_from("THOR.RUJI").unwrap(),
                     Layer1Asset::try_from("ETH.USDC").unwrap(),
                 ],
+                market_maker: None,
                 tick: Tick::new(4u8),
                 fee_taker: Decimal::zero(),
                 fee_maker: Decimal::zero(),
@@ -338,6 +381,7 @@ mod tests {
                         )
                         .unwrap(),
                     ],
+                    market_maker: None,
                     tick: Tick::new(4u8),
                     fee_taker: Decimal::zero(),
                     fee_maker: Decimal::zero(),

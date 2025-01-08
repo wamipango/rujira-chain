@@ -1,9 +1,15 @@
 use cosmwasm_std::{Decimal, Event, StdResult, Storage, Uint128};
-use itertools::EitherOrBoth;
+use itertools::{EitherOrBoth, Itertools};
 use rujira_rs::fin::Side;
 use std::ops::Mul;
 
-use crate::{events::event_trade, pool::Pool, swappable::Swappable, ContractError};
+use crate::{
+    events::event_trade,
+    market_maker::{MarketMaker, MarketMakerOffer},
+    pool::Pool,
+    swappable::{SwapCommit, Swappable},
+    ContractError,
+};
 
 #[derive(Debug)]
 pub struct Swapper {
@@ -14,7 +20,7 @@ pub struct Swapper {
     oracle: Decimal,
     returned: Uint128,
     side: Side,
-    pending: Vec<EitherOrBoth<Pool>>,
+    pending: Vec<EitherOrBoth<EitherOrBoth<Pool>, MarketMakerOffer>>,
 }
 
 impl Swapper {
@@ -38,8 +44,13 @@ impl Swapper {
         }
     }
 
-    pub fn swap(&mut self, storage: &dyn Storage) -> Result<SwapResult, ContractError> {
-        let iter = Pool::side(storage, &self.side, &self.oracle);
+    pub fn swap(
+        &mut self,
+        storage: &dyn Storage,
+        market_maker: &mut MarketMaker,
+    ) -> Result<SwapResult, ContractError> {
+        let iter = Pool::side(storage, &self.side, &self.oracle)
+            .merge_join_by(market_maker, |x, y| x.rate().cmp(&y.price));
         for mut v in iter {
             if self.offer.is_zero() {
                 break;
@@ -76,12 +87,13 @@ impl Swapper {
         })
     }
 
-    pub fn commit(&self, storage: &mut dyn Storage) -> StdResult<()> {
+    pub fn commit(&self, storage: &mut dyn Storage) -> StdResult<SwapCommit> {
+        let mut res = SwapCommit::default();
         for pool in self.pending.iter() {
-            pool.save(storage)?;
+            res += pool.commit(storage)?;
         }
 
-        Ok(())
+        Ok(res)
     }
 }
 
@@ -101,8 +113,8 @@ mod tests {
     use super::*;
     use cosmwasm_std::{
         coin,
-        testing::{message_info, mock_env, MockStorage},
-        Addr,
+        testing::{message_info, mock_env, MockQuerier, MockStorage},
+        Addr, QuerierWrapper,
     };
     use cw_utils::NativeBalance;
     use rujira_rs::fin::{Denoms, Price, Tick};
@@ -111,6 +123,8 @@ mod tests {
     #[test]
     fn test_swap_execution() {
         let mut storage = MockStorage::new();
+        let q = MockQuerier::default();
+        let q = QuerierWrapper::new(&q);
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
         let oracle = Decimal::from_str("1.0").unwrap();
@@ -118,6 +132,8 @@ mod tests {
         let denoms = Denoms::new("ruji", "usdc");
         let tick = Tick::new(4);
         let fee = Decimal::from_str("0.001").unwrap();
+        let mut mm = MarketMaker::new(q, denoms.clone(), Side::Base, None, Tick::new(2));
+
         let mut e = OrderManager::new(
             denoms,
             fee,
@@ -192,7 +208,7 @@ mod tests {
             oracle,
             Decimal::from_str("0.001").unwrap(),
         );
-        let res = s.swap(&mut storage).unwrap();
+        let res = s.swap(&mut storage, &mut mm).unwrap();
         assert_eq!(res.return_amount, Uint128::from(6245u128));
         assert_eq!(res.fee_amount, Uint128::from(7u128));
         assert_eq!(res.remaining_offer, Uint128::zero());
