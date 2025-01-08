@@ -8,7 +8,7 @@ use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
 use rujira_rs::fin::{
     BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, Price,
-    QueryMsg, Side, StatusResponse, SudoMsg,
+    QueryMsg, Side, SimulationResponse, StatusResponse, SudoMsg,
 };
 use rujira_rs::query;
 
@@ -57,14 +57,15 @@ pub fn execute(
             let to = to.map(|x| deps.api.addr_validate(&x)).transpose()?;
             let funds = one_coin(&info)?;
             let side = config.denoms.ask_side(&funds)?;
-            let res = Swapper::new(
+            let mut swapper = Swapper::new(
                 side.clone(),
                 funds.amount,
                 min_return,
                 oracle,
                 config.fee_taker,
-            )
-            .swap(deps.storage)?;
+            );
+            let res = swapper.swap(deps.storage)?;
+            swapper.commit(deps.storage)?;
 
             let mut funds = NativeBalance(vec![
                 coin(res.return_amount.u128(), config.denoms.bid(&side)),
@@ -207,7 +208,16 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 
             to_json_binary(&BookResponse { base, quote })
         }
-        QueryMsg::Simulate(_offer) => todo!(),
+        QueryMsg::Simulate(offer) => {
+            let side = config.denoms.ask_side(&offer)?;
+            let mut swapper =
+                Swapper::new(side.clone(), offer.amount, None, oracle, config.fee_taker);
+            let res = swapper.swap(deps.storage)?;
+            to_json_binary(&SimulationResponse {
+                returned: res.return_amount,
+                fee: res.fee_amount,
+            })
+        }
     }
     .map_err(ContractError::Std)
 }
@@ -507,6 +517,12 @@ mod tests {
             &funds,
         )
         .unwrap();
+        let swap_amount = coin(10_000_000, "eth-usdc");
+
+        let sim: SimulationResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Simulate(swap_amount.clone()))
+            .unwrap();
 
         let res = app
             .execute_contract(
@@ -517,7 +533,7 @@ mod tests {
                     to: None,
                     callback: None,
                 },
-                &coins(10_000_000, "eth-usdc"),
+                &vec![swap_amount],
             )
             .unwrap();
         // Buying 10m USDC-worth of BTC
@@ -534,6 +550,8 @@ mod tests {
             ("sender", contract.as_str()),
             ("amount", "109btc-btc"),
         ]));
+
+        assert_eq!(sim.returned, Uint128::from(109u128));
 
         let res = app
             .execute_contract(
@@ -581,7 +599,6 @@ mod tests {
                 &coins(1000, "btc-btc"),
             )
             .unwrap();
-        dbg!(&res);
 
         // Check that any unused funds are returned
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![

@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, Event, Storage, Uint128};
+use cosmwasm_std::{Decimal, Event, StdResult, Storage, Uint128};
 use itertools::EitherOrBoth;
 use rujira_rs::fin::Side;
 use std::ops::Mul;
@@ -38,7 +38,7 @@ impl Swapper {
         }
     }
 
-    pub fn swap(&mut self, storage: &mut dyn Storage) -> Result<SwapResult, ContractError> {
+    pub fn swap(&mut self, storage: &dyn Storage) -> Result<SwapResult, ContractError> {
         let iter = Pool::side(storage, &self.side, &self.oracle);
         for mut v in iter {
             if self.offer.is_zero() {
@@ -68,16 +68,20 @@ impl Swapper {
             }
         }
 
-        for pool in self.pending.iter_mut() {
-            pool.save(storage)?;
-        }
-
         Ok(SwapResult {
             events: self.events.clone(),
             fee_amount: fee,
             return_amount: self.returned,
             remaining_offer: self.offer,
         })
+    }
+
+    pub fn commit(&self, storage: &mut dyn Storage) -> StdResult<()> {
+        for pool in self.pending.iter() {
+            pool.save(storage)?;
+        }
+
+        Ok(())
     }
 }
 
