@@ -57,11 +57,12 @@ impl Swapper {
             }
             let (offer, bids) = v.swap(self.offer)?;
             let attrs = v.attributes();
+            self.events
+                .push(event_trade(&v, &self.side, offer, bids, &attrs));
+
             self.pending.push(v);
             self.offer -= offer;
             self.returned += bids;
-            self.events
-                .push(event_trade(&self.side, offer, bids, &attrs));
         }
 
         let fee = Decimal::from_ratio(self.returned, 1u128)
@@ -217,66 +218,78 @@ mod tests {
         assert_eq!(event.ty, "rujira-fin/trade");
         assert_eq!(event.attributes[0].key, "side");
         assert_eq!(event.attributes[0].value, "quote");
-        assert_eq!(event.attributes[1].key, "offer");
-        assert_eq!(event.attributes[1].value, "1000");
-        assert_eq!(event.attributes[2].key, "bid");
+        assert_eq!(event.attributes[1].key, "rate");
+        assert_eq!(event.attributes[1].value, "1");
+        assert_eq!(event.attributes[2].key, "offer");
         assert_eq!(event.attributes[2].value, "1000");
-        assert_eq!(event.attributes[3].key, "price");
-        assert_eq!(event.attributes[3].value, "fixed:1");
+        assert_eq!(event.attributes[3].key, "bid");
+        assert_eq!(event.attributes[3].value, "1000");
+        assert_eq!(event.attributes[4].key, "price");
+        assert_eq!(event.attributes[4].value, "fixed:1");
 
         let event = res.events[1].clone();
         assert_eq!(event.ty, "rujira-fin/trade");
         assert_eq!(event.attributes[0].key, "side");
         assert_eq!(event.attributes[0].value, "quote");
-        assert_eq!(event.attributes[1].key, "offer");
-        assert_eq!(event.attributes[1].value, "2224");
-        assert_eq!(event.attributes[2].key, "bid");
-        assert_eq!(event.attributes[2].value, "2000");
-        assert_eq!(event.attributes[3].key, "price");
-        assert_eq!(event.attributes[3].value, "fixed:0.9");
+        assert_eq!(event.attributes[1].key, "rate");
+        assert_eq!(event.attributes[1].value, "0.9");
+        assert_eq!(event.attributes[2].key, "offer");
+        assert_eq!(event.attributes[2].value, "2224");
+        assert_eq!(event.attributes[3].key, "bid");
+        assert_eq!(event.attributes[3].value, "2000");
+        assert_eq!(event.attributes[4].key, "price");
+        assert_eq!(event.attributes[4].value, "fixed:0.9");
 
         let event = res.events[2].clone();
         assert_eq!(event.ty, "rujira-fin/trade");
         assert_eq!(event.attributes[0].key, "side");
         assert_eq!(event.attributes[0].value, "quote");
-        assert_eq!(event.attributes[1].key, "offer");
-        assert_eq!(event.attributes[1].value, "1177");
-        assert_eq!(event.attributes[2].key, "bid");
-        assert_eq!(event.attributes[2].value, "1000");
-        assert_eq!(event.attributes[3].key, "price");
-        assert_eq!(event.attributes[3].value, "oracle:-1500");
+        assert_eq!(event.attributes[1].key, "rate");
+        assert_eq!(event.attributes[1].value, "0.85");
+        assert_eq!(event.attributes[2].key, "offer");
+        assert_eq!(event.attributes[2].value, "1177");
+        assert_eq!(event.attributes[3].key, "bid");
+        assert_eq!(event.attributes[3].value, "1000");
+        assert_eq!(event.attributes[4].key, "price");
+        assert_eq!(event.attributes[4].value, "oracle:-1500");
 
         let event = res.events[3].clone();
         assert_eq!(event.ty, "rujira-fin/trade");
         assert_eq!(event.attributes[0].key, "side");
         assert_eq!(event.attributes[0].value, "quote");
-        assert_eq!(event.attributes[1].key, "offer");
-        assert_eq!(event.attributes[1].value, "1250");
-        assert_eq!(event.attributes[2].key, "bid");
-        assert_eq!(event.attributes[2].value, "1000");
-        assert_eq!(event.attributes[3].key, "price");
-        assert_eq!(event.attributes[3].value, "fixed:0.8");
+        assert_eq!(event.attributes[1].key, "rate");
+        assert_eq!(event.attributes[1].value, "0.8");
+        assert_eq!(event.attributes[2].key, "offer");
+        assert_eq!(event.attributes[2].value, "1250");
+        assert_eq!(event.attributes[3].key, "bid");
+        assert_eq!(event.attributes[3].value, "1000");
+        assert_eq!(event.attributes[4].key, "price");
+        assert_eq!(event.attributes[4].value, "fixed:0.8");
 
         let event = res.events[4].clone();
         assert_eq!(event.ty, "rujira-fin/trade");
         assert_eq!(event.attributes[0].key, "side");
         assert_eq!(event.attributes[0].value, "quote");
-        assert_eq!(event.attributes[1].key, "offer");
-        assert_eq!(event.attributes[1].value, "1429");
-        assert_eq!(event.attributes[2].key, "bid");
-        assert_eq!(event.attributes[2].value, "1000");
-        assert_eq!(event.attributes[3].key, "price");
-        assert_eq!(event.attributes[3].value, "fixed:0.7");
+        assert_eq!(event.attributes[1].key, "rate");
+        assert_eq!(event.attributes[1].value, "0.7");
+        assert_eq!(event.attributes[2].key, "offer");
+        assert_eq!(event.attributes[2].value, "1429");
+        assert_eq!(event.attributes[3].key, "bid");
+        assert_eq!(event.attributes[3].value, "1000");
+        assert_eq!(event.attributes[4].key, "price");
+        assert_eq!(event.attributes[4].value, "fixed:0.7");
 
         let event = res.events[5].clone();
         assert_eq!(event.ty, "rujira-fin/trade");
         assert_eq!(event.attributes[0].key, "side");
         assert_eq!(event.attributes[0].value, "quote");
-        assert_eq!(event.attributes[1].key, "offer");
-        assert_eq!(event.attributes[1].value, "420");
-        assert_eq!(event.attributes[2].key, "bid");
-        assert_eq!(event.attributes[2].value, "252");
-        assert_eq!(event.attributes[3].key, "price");
-        assert_eq!(event.attributes[3].value, "fixed:0.6");
+        assert_eq!(event.attributes[1].key, "rate");
+        assert_eq!(event.attributes[1].value, "0.6");
+        assert_eq!(event.attributes[2].key, "offer");
+        assert_eq!(event.attributes[2].value, "420");
+        assert_eq!(event.attributes[3].key, "bid");
+        assert_eq!(event.attributes[3].value, "252");
+        assert_eq!(event.attributes[4].key, "price");
+        assert_eq!(event.attributes[4].value, "fixed:0.6");
     }
 }
