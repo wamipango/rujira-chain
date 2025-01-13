@@ -1,15 +1,15 @@
+use crate::ContractError;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Attribute, Binary, Decimal, QuerierWrapper, StdResult, Storage, Uint128};
-use rujira_rs::fin::{Denoms, MarketMakerQuery, MarketMakerResponse, Side, Tick};
+use rujira_rs::{
+    fin::{Denoms, MarketMakerQuery, MarketMakerResponse, Side, Tick},
+    SwapCommit, Swappable,
+};
 use std::{
     cmp::Ordering,
     ops::{Div, Mul},
 };
 
-use crate::{
-    swappable::{SwapCommit, Swappable},
-    ContractError,
-};
 pub struct MarketMaker<'a> {
     q: QuerierWrapper<'a>,
     denoms: Denoms,
@@ -52,7 +52,7 @@ pub struct MarketMakerOffer {
     commitment: (Uint128, Uint128),
 }
 
-impl Swappable for MarketMakerOffer {
+impl Swappable<ContractError> for MarketMakerOffer {
     fn rate(&self) -> Decimal {
         self.price
     }

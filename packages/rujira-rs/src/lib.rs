@@ -12,6 +12,7 @@ mod msg;
 pub mod proto;
 pub mod query;
 mod share_pool;
+mod swappable;
 mod token_factory;
 
 pub use account_pool::{AccountPool, AccountPoolAccount};
@@ -22,4 +23,5 @@ pub use chain::Chain;
 pub use fraction::Frac;
 pub use interfaces::*;
 pub use share_pool::{SharePool, SharePoolError};
+pub use swappable::{SwapCommit, Swappable};
 pub use token_factory::{TokenFactory, TokenMetadata};

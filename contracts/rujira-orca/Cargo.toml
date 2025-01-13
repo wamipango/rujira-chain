@@ -1,0 +1,30 @@
+[package]
+name = "rujira-orca"
+version = "0.0.0"
+authors = []
+edition = { workspace = true }
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# use library feature to disable all instantiate/execute/query exports
+library = []
+
+[dependencies]
+rujira-rs = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cosmwasm-std = { workspace = true }
+cw-utils = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+itertools = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+rujira-rs-testing = { workspace = true }

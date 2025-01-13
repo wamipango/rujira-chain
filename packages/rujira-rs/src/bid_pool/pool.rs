@@ -74,6 +74,10 @@ impl Pool {
         self.total
     }
 
+    pub fn epoch(&self) -> u32 {
+        self.epoch
+    }
+
     fn distribute_full(&mut self, rate: &Decimal256) -> Result<DistributionResult, BidPoolError> {
         let inv = rate.inv().unwrap();
         let consumed_offer = Decimal256::from_atomics(self.total, 0).unwrap() * inv;

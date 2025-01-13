@@ -1,13 +1,12 @@
 use cosmwasm_std::{Decimal, Event, StdResult, Storage, Uint128};
 use itertools::{EitherOrBoth, Itertools};
-use rujira_rs::fin::Side;
+use rujira_rs::{fin::Side, SwapCommit, Swappable};
 use std::ops::Mul;
 
 use crate::{
     events::event_trade,
     market_maker::{MarketMaker, MarketMakerOffer},
     pool::Pool,
-    swappable::{SwapCommit, Swappable},
     ContractError,
 };
 

@@ -1,11 +1,14 @@
 use cosmwasm_std::{coin, Decimal, StdResult, Storage, Uint128};
 use cw_utils::NativeBalance;
 use itertools::EitherOrBoth;
-use rujira_rs::fin::{Denoms, Side};
+use rujira_rs::{
+    fin::{Denoms, Side},
+    Swappable,
+};
 use std::fmt::Debug;
 use std::ops::Sub;
 
-use crate::{pool::Pool, swappable::Swappable, ContractError};
+use crate::{pool::Pool, ContractError};
 
 /// Utility to capture arbitrage from overlapping orders
 pub struct Arber {
@@ -61,14 +64,14 @@ impl Arber {
     }
 }
 
-pub trait Arbitrage: Swappable + Sized {
+pub trait Arbitrage: Swappable<ContractError> + Sized {
     /// Returns arbitrage profit in (self, other) token
     fn arbitrage(&mut self, other: &mut Self) -> Result<(Uint128, Uint128), ContractError>;
 }
 
 impl<T> Arbitrage for T
 where
-    T: Swappable + Clone + Debug,
+    T: Swappable<ContractError> + Clone + Debug,
 {
     fn arbitrage(&mut self, other: &mut Self) -> Result<(Uint128, Uint128), ContractError> {
         let float = self.total();

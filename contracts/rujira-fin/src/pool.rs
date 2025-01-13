@@ -7,14 +7,13 @@ use itertools::{Itertools, MergeJoinBy};
 use rujira_rs::{
     bid_pool::{self, SumSnapshot},
     fin::{Price, Side},
-    Frac,
+    Frac, SwapCommit, Swappable,
 };
 use std::cmp::Ordering;
 
 use crate::{
     order::Order,
     pool_key::{PoolKey, PoolType},
-    swappable::{SwapCommit, Swappable},
     ContractError,
 };
 const SNAPSHOTS: Map<(PoolKey, bid_pool::SumSnapshotKey), Frac> = Map::new("snapshots");
@@ -181,7 +180,7 @@ impl Pool {
     }
 }
 
-impl Swappable for Pool {
+impl Swappable<ContractError> for Pool {
     fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
         let rate = match self.side {
             Side::Base => self.rate.inv().unwrap(),

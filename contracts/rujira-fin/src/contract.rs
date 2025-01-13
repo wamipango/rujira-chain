@@ -11,7 +11,7 @@ use rujira_rs::fin::{
     MarketMakerCallback, MarketMakerExecute, OrderResponse, OrdersResponse, Price, QueryMsg, Side,
     SimulationResponse, StatusResponse, SudoMsg,
 };
-use rujira_rs::query;
+use rujira_rs::{query, Swappable};
 
 use crate::arb::Arber;
 use crate::config::{Config, CONFIG};
@@ -20,7 +20,6 @@ use crate::market_maker::MarketMaker;
 use crate::order::Order;
 use crate::order_manager::OrderManager;
 use crate::pool::Pool;
-use crate::swappable::Swappable;
 use crate::swapper::Swapper;
 
 // version info for migration info

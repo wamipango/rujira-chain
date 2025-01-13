@@ -1,10 +1,8 @@
-use cosmwasm_std::{Attribute, Decimal, StdResult, Storage, Uint128};
+use cosmwasm_std::{Attribute, Decimal, StdError, StdResult, Storage, Uint128};
 use itertools::EitherOrBoth;
 use std::ops::{Add, AddAssign};
 
-use crate::ContractError;
-
-pub trait Swappable {
+pub trait Swappable<E: From<StdError>> {
     // Effective price
     fn rate(&self) -> Decimal;
 
@@ -13,7 +11,7 @@ pub trait Swappable {
     // Total amount of bids
     fn total(&self) -> Uint128;
 
-    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError>;
+    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), E>;
 
     fn commit(&self, storage: &mut dyn Storage) -> StdResult<SwapCommit>;
 }
@@ -44,10 +42,11 @@ impl AddAssign for SwapCommit {
     }
 }
 
-impl<T, V> Swappable for EitherOrBoth<T, V>
+impl<T, V, E> Swappable<E> for EitherOrBoth<T, V>
 where
-    T: Swappable + Clone,
-    V: Swappable + Clone,
+    T: Swappable<E> + Clone,
+    V: Swappable<E> + Clone,
+    E: From<StdError>,
 {
     fn rate(&self) -> Decimal {
         match self {
@@ -77,7 +76,7 @@ where
         }
     }
 
-    fn swap(&mut self, amount: Uint128) -> Result<(Uint128, Uint128), ContractError> {
+    fn swap(&mut self, amount: Uint128) -> Result<(Uint128, Uint128), E> {
         match self {
             EitherOrBoth::Both(a, b) => {
                 let offer_a = Decimal::from_ratio(a.total() * amount, a.total().add(b.total()))
