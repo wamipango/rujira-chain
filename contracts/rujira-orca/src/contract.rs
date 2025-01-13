@@ -397,7 +397,7 @@ mod tests {
     }
 
     #[test]
-    fn query_book() {
+    fn query_pools() {
         let (mut app, contract) = setup();
         let owner = app.api().addr_make("owner");
         let funds = vec![coin(500_000_000, "btc-btc"), coin(500_000_000, "eth-usdc")];
@@ -472,7 +472,7 @@ mod tests {
             &funds,
         )
         .unwrap();
-        let swap_amount = coin(10_000_000, "btc-btc");
+        let swap_amount = coin(100, "btc-btc");
 
         let sim: SimulationResponse = app
             .wrap()
@@ -491,22 +491,19 @@ mod tests {
                 &vec![swap_amount],
             )
             .unwrap();
-        // Buying 10m USDC-worth of BTC
-        // Best price = 91219
-        // 10_000_000 / 91219 = 109
-        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
-            ("side", "base"),
-            ("offer", "10000000"),
-            ("bid", "109"),
-            ("price", "fixed:91219"),
+        res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
+            ("offer", "100"),
+            ("bid", "9000000"),
+            ("rate", "90000"),
+            ("premium", "10"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "109btc-btc"),
+            ("amount", "9000000eth-usdc"),
         ]));
 
-        assert_eq!(sim.returned, Uint128::from(109u128));
+        assert_eq!(sim.returned, Uint128::from(9000000u128));
 
         let res = app
             .execute_contract(
@@ -520,27 +517,25 @@ mod tests {
                 &coins(300, "btc-btc"),
             )
             .unwrap();
-
-        // Buying 10m USDC-worth of BTC
-        // Best price = 91219
-        // 10_000_000 / 91219 = 109
-        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
-            ("side", "quote"),
-            ("offer", "251"),
-            ("bid", "22500000"),
-            ("price", "oracle:-1000"),
-            ("price", "fixed:90000"),
+        res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
+            ("offer", "12"),
+            ("bid", "1000000"),
+            ("rate", "90000"),
         ]));
-        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
-            ("side", "quote"),
-            ("offer", "49"),
-            ("bid", "4307100"),
-            ("price", "fixed:87900"),
+        res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
+            ("offer", "148"),
+            ("bid", "12500000"),
+            ("rate", "85000"),
+        ]));
+        res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
+            ("offer", "140"),
+            ("bid", "11200000"),
+            ("rate", "80000"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "26807100eth-usdc"),
+            ("amount", "24700000eth-usdc"),
         ]));
 
         let res = app
@@ -555,18 +550,16 @@ mod tests {
                 &coins(1000, "btc-btc"),
             )
             .unwrap();
-
         // Check that any unused funds are returned
-        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
-            ("side", "quote"),
-            ("offer", "532"),
-            ("bid", "46692900"),
-            ("price", "fixed:87900"),
+        res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
+            ("offer", "498"),
+            ("bid", "39800000"),
+            ("rate", "80000"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "468btc-btc,46692900eth-usdc"),
+            ("amount", "502btc-btc,39800000eth-usdc"),
         ]));
     }
 }

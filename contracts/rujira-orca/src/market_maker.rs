@@ -5,7 +5,6 @@ use rujira_rs::{
     orca::{Denoms, MarketMakerQuery, MarketMakerResponse},
 };
 
-use crate::ContractError;
 pub struct MarketMaker<'a> {
     q: QuerierWrapper<'a>,
     denoms: Denoms,

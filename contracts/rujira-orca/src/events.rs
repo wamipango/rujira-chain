@@ -1,30 +1,30 @@
-use cosmwasm_std::{Attribute, Event, Uint128};
+use cosmwasm_std::{Event, Uint128};
 
-use crate::{order::Order, pool::Pool, ContractError};
+use crate::{order::Order, pool::Pool};
 
 pub fn event_create_order(pool: &Pool, order: &Order) -> Event {
-    Event::new("rujira-orca/order.create")
+    Event::new("pilot/order.create")
         .add_attribute("owner", order.owner.clone())
         .add_attribute("premium", pool.premium.to_string())
         .add_attribute("offer", order.offer)
 }
 
 pub fn event_withdraw_order(pool: &Pool, order: &Order, amount: &Uint128) -> Event {
-    Event::new("rujira-orca/order.withdraw")
+    Event::new("pilot/order.withdraw")
         .add_attribute("owner", order.owner.clone())
         .add_attribute("premium", pool.premium.to_string())
         .add_attribute("amount", amount.to_string())
 }
 
 pub fn event_increase_order(pool: &Pool, order: &Order, amount: &Uint128) -> Event {
-    Event::new("rujira-orca/order.increase")
+    Event::new("pilot/order.increase")
         .add_attribute("owner", order.owner.clone())
         .add_attribute("premium", pool.premium.to_string())
         .add_attribute("amount", amount.to_string())
 }
 
 pub fn event_retract_order(pool: &Pool, order: &Order, amount: &Uint128) -> Event {
-    Event::new("rujira-orca/order.retract")
+    Event::new("pilot/order.retract")
         .add_attribute("owner", order.owner.clone())
         .add_attribute("premium", pool.premium.to_string())
         .add_attribute("amount", amount.to_string())
