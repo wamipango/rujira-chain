@@ -3,7 +3,7 @@ use std::ops::Mul;
 
 use super::{commit::SwapCommit, error::SwapError, Swappable};
 
-/// Execvutes a swap over an Iterator<Swappable>, consuming the offer and returning the returned amount, events and required onward swaps
+/// Executes a swap over an Iterator<Swappable>, consuming the offer and returning the returned amount
 #[derive(Debug)]
 pub struct Swapper<T> {
     events: Vec<Event>,
