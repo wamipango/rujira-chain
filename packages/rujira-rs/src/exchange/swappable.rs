@@ -1,8 +1,11 @@
-use cosmwasm_std::{Attribute, Decimal, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{Attribute, Decimal, Storage, Uint128};
 use itertools::EitherOrBoth;
-use std::ops::{Add, AddAssign};
+use std::ops::Add;
 
-pub trait Swappable<E: From<StdError>> {
+use super::{commit::SwapCommit, error::SwapError};
+
+pub trait Swappable {
+    fn prefix(&self) -> &str;
     // Effective price
     fn rate(&self) -> Decimal;
 
@@ -11,43 +14,25 @@ pub trait Swappable<E: From<StdError>> {
     // Total amount of bids
     fn total(&self) -> Uint128;
 
-    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), E>;
+    /// Returns the (offer_consumed, bids_returned) amounts
+    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError>;
 
-    fn commit(&self, storage: &mut dyn Storage) -> StdResult<SwapCommit>;
+    fn commit(&self, storage: &mut dyn Storage) -> Result<SwapCommit, SwapError>;
 }
 
-#[derive(Debug, Default)]
-pub struct SwapCommit {
-    /// The (offer, ask) totals committed to by the MarketMaker
-    pub market_maker: (Uint128, Uint128),
-}
-
-impl Add for SwapCommit {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            market_maker: (
-                self.market_maker.0.add(rhs.market_maker.0),
-                self.market_maker.1.add(rhs.market_maker.1),
-            ),
+impl<T, V> Swappable for EitherOrBoth<T, V>
+where
+    T: Swappable + Clone,
+    V: Swappable + Clone,
+{
+    fn prefix(&self) -> &str {
+        match self {
+            EitherOrBoth::Both(a, _) => a.prefix(),
+            EitherOrBoth::Left(x) => x.prefix(),
+            EitherOrBoth::Right(x) => x.prefix(),
         }
     }
-}
 
-impl AddAssign for SwapCommit {
-    fn add_assign(&mut self, rhs: Self) {
-        self.market_maker.0 += rhs.market_maker.0;
-        self.market_maker.1 += rhs.market_maker.1;
-    }
-}
-
-impl<T, V, E> Swappable<E> for EitherOrBoth<T, V>
-where
-    T: Swappable<E> + Clone,
-    V: Swappable<E> + Clone,
-    E: From<StdError>,
-{
     fn rate(&self) -> Decimal {
         match self {
             EitherOrBoth::Both(a, _) => a.rate(),
@@ -76,7 +61,7 @@ where
         }
     }
 
-    fn swap(&mut self, amount: Uint128) -> Result<(Uint128, Uint128), E> {
+    fn swap(&mut self, amount: Uint128) -> Result<(Uint128, Uint128), SwapError> {
         match self {
             EitherOrBoth::Both(a, b) => {
                 let offer_a = Decimal::from_ratio(a.total() * amount, a.total().add(b.total()))
@@ -101,7 +86,7 @@ where
         }
     }
 
-    fn commit(&self, storage: &mut dyn Storage) -> StdResult<SwapCommit> {
+    fn commit(&self, storage: &mut dyn Storage) -> Result<SwapCommit, SwapError> {
         match self {
             EitherOrBoth::Both(a, b) => Ok(a.commit(storage)? + b.commit(storage)?),
             EitherOrBoth::Left(a) => a.commit(storage),

@@ -1,5 +1,4 @@
 use cosmwasm_std::{Attribute, Event, Uint128};
-use rujira_rs::Swappable;
 
 use crate::{order::Order, pool::Pool, ContractError};
 
@@ -29,17 +28,4 @@ pub fn event_retract_order(pool: &Pool, order: &Order, amount: &Uint128) -> Even
         .add_attribute("owner", order.owner.clone())
         .add_attribute("premium", pool.premium.to_string())
         .add_attribute("amount", amount.to_string())
-}
-
-pub fn event_trade<T: Swappable<ContractError>>(
-    s: &T,
-    offer: Uint128,
-    bid: Uint128,
-    attributes: &Vec<Attribute>,
-) -> Event {
-    Event::new("rujira-orca/trade")
-        .add_attribute("rate", s.rate().to_string())
-        .add_attribute("offer", offer.to_string())
-        .add_attribute("bid", bid.to_string())
-        .add_attributes(attributes.clone())
 }

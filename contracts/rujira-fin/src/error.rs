@@ -1,8 +1,6 @@
-use cosmwasm_std::{
-    CheckedFromRatioError, Coin, ConversionOverflowError, OverflowError, StdError, Uint128,
-};
+use cosmwasm_std::{CheckedFromRatioError, Coin, ConversionOverflowError, OverflowError, StdError};
 use cw_utils::PaymentError;
-use rujira_rs::{bid_pool::BidPoolError, fin::TickError, query::PoolError};
+use rujira_rs::{bid_pool::BidPoolError, exchange::SwapError, fin::TickError, query::PoolError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -31,11 +29,8 @@ pub enum ContractError {
     #[error("{0}")]
     Overflow(#[from] OverflowError),
 
-    #[error("InsufficientReturn expected {expected} got {returned}")]
-    InsufficientReturn {
-        expected: Uint128,
-        returned: Uint128,
-    },
+    #[error("{0}")]
+    Swap(#[from] SwapError),
 
     #[error("InsufficientFunds expected {expected} got {returned}")]
     InsufficientFunds { expected: Coin, returned: Coin },

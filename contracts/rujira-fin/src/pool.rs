@@ -6,8 +6,9 @@ use cw_storage_plus::Map;
 use itertools::{Itertools, MergeJoinBy};
 use rujira_rs::{
     bid_pool::{self, SumSnapshot},
+    exchange::{SwapCommit, SwapError, Swappable},
     fin::{Price, Side},
-    Frac, SwapCommit, Swappable,
+    Frac,
 };
 use std::cmp::Ordering;
 
@@ -103,7 +104,7 @@ impl Pool {
         timestamp: &Timestamp,
         owner: &Addr,
         offer: Uint128,
-    ) -> StdResult<Order> {
+    ) -> Result<Order, ContractError> {
         let order = Order {
             owner: owner.clone(),
             offer,
@@ -180,8 +181,8 @@ impl Pool {
     }
 }
 
-impl Swappable<ContractError> for Pool {
-    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
+impl Swappable for Pool {
+    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
         let rate = match self.side {
             Side::Base => self.rate.inv().unwrap(),
             Side::Quote => self.rate,
@@ -198,7 +199,7 @@ impl Swappable<ContractError> for Pool {
         ))
     }
 
-    fn commit(&self, storage: &mut dyn Storage) -> StdResult<SwapCommit> {
+    fn commit(&self, storage: &mut dyn Storage) -> Result<SwapCommit, SwapError> {
         for s in self.pending_sum_snapshots.clone() {
             SNAPSHOTS.save(storage, (self.key(), s.key()), &s.sum)?;
         }
@@ -215,7 +216,10 @@ impl Swappable<ContractError> for Pool {
     }
 
     fn attributes(&self) -> Vec<Attribute> {
-        vec![Attribute::new("price", self.price.to_string())]
+        vec![
+            Attribute::new("price", self.price.to_string()),
+            Attribute::new("side", self.side.to_string()),
+        ]
     }
 
     fn rate(&self) -> Decimal {
@@ -224,6 +228,10 @@ impl Swappable<ContractError> for Pool {
 
     fn total(&self) -> Uint128 {
         self.pool.total().try_into().unwrap()
+    }
+
+    fn prefix(&self) -> &str {
+        "rujira-fin"
     }
 }
 

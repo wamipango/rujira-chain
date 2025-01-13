@@ -1,3 +1,10 @@
+use crate::config::{Config, CONFIG};
+use crate::error::ContractError;
+use crate::market_maker::{MarketMaker, MarketMakerOffer};
+use crate::order::Order;
+use crate::order_manager::OrderManager;
+use crate::pool::Pool;
+use crate::premium::Premium;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
@@ -6,21 +13,14 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, one_coin, NativeBalance};
+use itertools::{EitherOrBoth, Itertools};
+use rujira_rs::exchange::{SwapError, SwapResult, Swappable, Swapper};
 use rujira_rs::orca::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, MarketMakerCallback, MarketMakerExecute,
     OrderResponse, OrdersResponse, PoolResponse, PoolsResponse, QueryMsg, SimulationResponse,
     StatusResponse, SudoMsg,
 };
-use rujira_rs::{query, Swappable};
-
-use crate::config::{Config, CONFIG};
-use crate::error::ContractError;
-use crate::market_maker::MarketMaker;
-use crate::order::Order;
-use crate::order_manager::OrderManager;
-use crate::pool::Pool;
-use crate::premium::Premium;
-use crate::swapper::Swapper;
+use rujira_rs::query;
 
 // version info for migration info
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -56,14 +56,10 @@ pub fn execute(
         ExecuteMsg::Swap { min_return, to, .. } => {
             let to = to.map(|x| deps.api.addr_validate(&x)).transpose()?;
             let funds = must_pay(&info, config.denoms.ask())?;
-            let mut mm = MarketMaker::new(
-                deps.querier,
-                config.denoms.clone(),
-                config.market_maker.clone(),
-            );
-            let mut swapper = Swapper::new(funds, min_return, oracle, config.fee_taker);
-            let res = swapper.swap(deps.storage, &mut mm)?;
+            let mut swapper = Swapper::new(funds, min_return, config.fee_taker);
+            let res = simulate_swap(&mut swapper, deps.as_ref(), &oracle, &config)?;
             let commit = swapper.commit(deps.storage)?;
+
             if let Some(mm) = config.market_maker {
                 if !commit.market_maker.1.is_zero() {
                     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -233,9 +229,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
             to_json_binary(&PoolsResponse { pools })
         }
         QueryMsg::Simulate(offer) => {
-            let mut swapper = Swapper::new(offer.amount, None, oracle, config.fee_taker);
-            let mut mm = MarketMaker::new(deps.querier, config.denoms, config.market_maker);
-            let res = swapper.swap(deps.storage, &mut mm)?;
+            let mut swapper = Swapper::new(offer.amount, None, config.fee_taker);
+            let res = simulate_swap(&mut swapper, deps, &oracle, &config)?;
             to_json_binary(&SimulationResponse {
                 returned: res.return_amount,
                 fee: res.fee_amount,
@@ -243,6 +238,24 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
         }
     }
     .map_err(ContractError::Std)
+}
+
+fn simulate_swap(
+    swapper: &mut Swapper<EitherOrBoth<Pool, MarketMakerOffer>>,
+    deps: Deps,
+    oracle: &Decimal,
+    config: &Config,
+) -> Result<SwapResult, SwapError> {
+    let market_maker = MarketMaker::new(
+        deps.querier,
+        config.denoms.clone(),
+        config.market_maker.clone(),
+    );
+
+    let mut iter = Pool::iter(deps.storage, &oracle)
+        .merge_join_by(market_maker, |x, y| x.rate().cmp(&y.rate()));
+
+    swapper.swap(&mut iter)
 }
 
 fn load_oracle_price(q: QuerierWrapper, config: &Config) -> Result<Decimal, ContractError> {

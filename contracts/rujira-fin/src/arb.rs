@@ -1,9 +1,9 @@
-use cosmwasm_std::{coin, Decimal, StdResult, Storage, Uint128};
+use cosmwasm_std::{coin, Decimal, Storage, Uint128};
 use cw_utils::NativeBalance;
 use itertools::EitherOrBoth;
 use rujira_rs::{
+    exchange::{SwapError, Swappable},
     fin::{Denoms, Side},
-    Swappable,
 };
 use std::fmt::Debug;
 use std::ops::Sub;
@@ -55,7 +55,7 @@ impl Arber {
         Ok(profit)
     }
 
-    pub fn commit(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
+    pub fn commit(&mut self, storage: &mut dyn Storage) -> Result<(), SwapError> {
         for x in self.pending.iter_mut() {
             x.commit(storage)?;
         }
@@ -64,14 +64,14 @@ impl Arber {
     }
 }
 
-pub trait Arbitrage: Swappable<ContractError> + Sized {
+pub trait Arbitrage: Swappable + Sized {
     /// Returns arbitrage profit in (self, other) token
     fn arbitrage(&mut self, other: &mut Self) -> Result<(Uint128, Uint128), ContractError>;
 }
 
 impl<T> Arbitrage for T
 where
-    T: Swappable<ContractError> + Clone + Debug,
+    T: Swappable + Clone + Debug,
 {
     fn arbitrage(&mut self, other: &mut Self) -> Result<(Uint128, Uint128), ContractError> {
         let float = self.total();

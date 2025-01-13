@@ -997,6 +997,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "rujira-orca"
+version = "0.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "itertools 0.14.0",
+ "rujira-rs",
+ "rujira-rs-testing",
+ "schemars",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "rujira-revenue"
 version = "1.0.0-rc1"
 dependencies = [
@@ -1020,6 +1038,7 @@ dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
  "cw-utils",
+ "itertools 0.14.0",
  "prost",
  "regex",
  "schemars",

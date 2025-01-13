@@ -5,7 +5,8 @@ use cosmwasm_std::{
 use cw_storage_plus::Map;
 use rujira_rs::{
     bid_pool::{self, SumSnapshot},
-    Frac, SwapCommit, Swappable,
+    exchange::{SwapCommit, SwapError, Swappable},
+    Frac,
 };
 
 use crate::{order::Order, premium::Premium, ContractError};
@@ -65,7 +66,7 @@ impl Pool {
         timestamp: &Timestamp,
         owner: &Addr,
         offer: Uint128,
-    ) -> StdResult<Order> {
+    ) -> Result<Order, ContractError> {
         let order = Order {
             owner: owner.clone(),
             offer,
@@ -139,8 +140,8 @@ impl Pool {
     }
 }
 
-impl Swappable<ContractError> for Pool {
-    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
+impl Swappable for Pool {
+    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
         let res = self
             .pool
             .distribute(offer.into(), &Decimal256::from(self.rate))?;
@@ -153,7 +154,7 @@ impl Swappable<ContractError> for Pool {
         ))
     }
 
-    fn commit(&self, storage: &mut dyn Storage) -> StdResult<SwapCommit> {
+    fn commit(&self, storage: &mut dyn Storage) -> Result<SwapCommit, SwapError> {
         for s in self.pending_sum_snapshots.clone() {
             SNAPSHOTS.save(storage, (self.premium, s.key()), &s.sum)?;
         }
@@ -179,6 +180,10 @@ impl Swappable<ContractError> for Pool {
 
     fn total(&self) -> Uint128 {
         self.pool.total().try_into().unwrap()
+    }
+
+    fn prefix(&self) -> &str {
+        "rujira-orca"
     }
 }
 

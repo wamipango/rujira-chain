@@ -1,8 +1,8 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Attribute, Binary, Decimal, QuerierWrapper, StdResult, Storage, Uint128};
 use rujira_rs::{
+    exchange::{SwapCommit, SwapError, Swappable},
     orca::{Denoms, MarketMakerQuery, MarketMakerResponse},
-    SwapCommit, Swappable,
 };
 
 use crate::ContractError;
@@ -37,7 +37,7 @@ pub struct MarketMakerOffer {
     commitment: (Uint128, Uint128),
 }
 
-impl Swappable<ContractError> for MarketMakerOffer {
+impl Swappable for MarketMakerOffer {
     fn rate(&self) -> Decimal {
         todo!()
     }
@@ -50,14 +50,18 @@ impl Swappable<ContractError> for MarketMakerOffer {
         self.total
     }
 
-    fn swap(&mut self, _offer: Uint128) -> Result<(Uint128, Uint128), ContractError> {
+    fn swap(&mut self, _offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
         todo!()
     }
 
-    fn commit(&self, _storage: &mut dyn Storage) -> StdResult<SwapCommit> {
+    fn commit(&self, _storage: &mut dyn Storage) -> Result<SwapCommit, SwapError> {
         Ok(SwapCommit {
             market_maker: self.commitment,
         })
+    }
+
+    fn prefix(&self) -> &str {
+        todo!()
     }
 }
 
