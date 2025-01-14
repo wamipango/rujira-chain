@@ -1,4 +1,4 @@
-use std::cmp::{max, Ordering};
+use std::cmp::Ordering;
 use std::fmt::Write;
 use std::i64;
 use std::ops::{Add, Div, Mul};
@@ -80,6 +80,47 @@ impl DecimalScaled {
             self.0 .1 - scale as i64,
         ))
     }
+
+    fn map_equalised(
+        &self,
+        other: Self,
+        f: impl Fn(Uint256, Uint256, i64) -> Self,
+        g: impl Fn(Self, Self) -> Self,
+    ) -> Self {
+        let mut res = match self.0 .1.cmp(&other.0 .1) {
+            Ordering::Less => {
+                let pow = other.0 .1.sub(self.0 .1) as u32;
+
+                match Uint256::from(10u128)
+                    .checked_pow(pow)
+                    .and_then(|x| self.0 .0.checked_mul(x))
+                {
+                    Ok(v) => f(v, other.0 .0, other.0 .1),
+                    Err(OverflowError { .. }) => {
+                        // Shave an order of precision off and try again
+                        g(self.clone(), other.truncate(1))
+                    }
+                }
+            }
+            Ordering::Equal => f(self.0 .0, other.0 .0, self.0 .1),
+            Ordering::Greater => {
+                let pow = self.0 .1.sub(other.0 .1) as u32;
+                match Uint256::from(10u128)
+                    .checked_pow(pow)
+                    .and_then(|x| other.0 .0.checked_mul(x))
+                {
+                    Ok(v) => f(self.0 .0, v, self.0 .1),
+                    Err(OverflowError { .. }) => {
+                        // Shave an order of precision off and try again
+                        g(self.truncate(1), other)
+                    }
+                }
+            }
+        };
+
+        res.normalize();
+        res
+    }
 }
 
 impl From<Decimal256> for DecimalScaled {
@@ -113,10 +154,13 @@ impl Mul for DecimalScaled {
         if self.is_zero() || rhs.is_zero() {
             return Self::zero();
         }
-        match self.0 .0.checked_mul(rhs.0 .0) {
+
+        let mut res = match self.0 .0.checked_mul(rhs.0 .0) {
             Ok(v) => Self((v, self.0 .1 + rhs.0 .1)),
             Err(_) => self.truncate(1) * rhs.truncate(1),
-        }
+        };
+        res.normalize();
+        res
     }
 }
 
@@ -131,53 +175,18 @@ impl Div for DecimalScaled {
             return Self::one();
         }
 
-        let mut res = match self.0 .1.cmp(&rhs.0 .1) {
-            Ordering::Less => {
-                let pow = rhs.0 .1.sub(self.0 .1) as u32;
-
-                match Uint256::from(10u128)
-                    .checked_pow(pow)
-                    .and_then(|x| self.0 .0.checked_mul(x))
-                {
-                    Ok(v) => Self((
-                        Self::DECIMAL_FRACTIONAL
-                            .checked_multiply_ratio(v, rhs.0 .0)
-                            .unwrap(),
-                        Self::DECIMAL_PLACES,
-                    )),
-                    Err(OverflowError { .. }) => {
-                        // Shave an order of precision off and try again
-                        self / rhs.truncate(1)
-                    }
-                }
-            }
-            Ordering::Equal => Self((
-                Self::DECIMAL_FRACTIONAL
-                    .checked_multiply_ratio(self.0 .0, rhs.0 .0)
-                    .unwrap(),
-                Self::DECIMAL_PLACES,
-            )),
-            Ordering::Greater => {
-                let pow = self.0 .1.sub(rhs.0 .1) as u32;
-                match Uint256::from(10u128)
-                    .checked_pow(pow)
-                    .and_then(|x| rhs.0 .0.checked_mul(x))
-                {
-                    Ok(v) => Self((
-                        Self::DECIMAL_FRACTIONAL
-                            .checked_multiply_ratio(self.0 .0, v)
-                            .unwrap(),
-                        Self::DECIMAL_PLACES,
-                    )),
-                    Err(OverflowError { .. }) => {
-                        // Shave an order of precision off and try again
-                        self.truncate(1) / rhs
-                    }
-                }
-            }
-        };
-        res.normalize();
-        res
+        self.map_equalised(
+            rhs,
+            |a, b, _| {
+                Self((
+                    Self::DECIMAL_FRACTIONAL
+                        .checked_multiply_ratio(a, b)
+                        .unwrap(),
+                    Self::DECIMAL_PLACES,
+                ))
+            },
+            Div::div,
+        )
     }
 }
 
@@ -185,38 +194,7 @@ impl Add for DecimalScaled {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        let mut res = match self.0 .1.cmp(&rhs.0 .1) {
-            Ordering::Less => {
-                let pow = rhs.0 .1.sub(self.0 .1) as u32;
-
-                match Uint256::from(10u128)
-                    .checked_pow(pow)
-                    .and_then(|x| self.0 .0.checked_mul(x))
-                {
-                    Ok(v) => Self((v.add(rhs.0 .0), rhs.0 .1)),
-                    Err(OverflowError { .. }) => {
-                        // Shave an order of precision off and try again
-                        self + rhs.truncate(1)
-                    }
-                }
-            }
-            Ordering::Equal => Self((self.0 .0.add(rhs.0 .0), self.0 .1)),
-            Ordering::Greater => {
-                let pow = self.0 .1.sub(rhs.0 .1) as u32;
-                match Uint256::from(10u128)
-                    .checked_pow(pow)
-                    .and_then(|x| rhs.0 .0.checked_mul(x))
-                {
-                    Ok(v) => Self((self.0 .0.add(v), self.0 .1)),
-                    Err(OverflowError { .. }) => {
-                        // Shave an order of precision off and try again
-                        self.truncate(1) + rhs
-                    }
-                }
-            }
-        };
-        res.normalize();
-        res
+        self.map_equalised(rhs, |a, b, i| Self((a.add(b), i)), Add::add)
     }
 }
 
@@ -224,38 +202,7 @@ impl Sub for DecimalScaled {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        let mut res = match self.0 .1.cmp(&rhs.0 .1) {
-            Ordering::Less => {
-                let pow = rhs.0 .1.sub(self.0 .1) as u32;
-
-                match Uint256::from(10u128)
-                    .checked_pow(pow)
-                    .and_then(|x| self.0 .0.checked_mul(x))
-                {
-                    Ok(v) => Self((v.sub(rhs.0 .0), rhs.0 .1)),
-                    Err(OverflowError { .. }) => {
-                        // Shave an order of precision off and try again
-                        self - rhs.truncate(1)
-                    }
-                }
-            }
-            Ordering::Equal => Self((self.0 .0.sub(rhs.0 .0), self.0 .1)),
-            Ordering::Greater => {
-                let pow = self.0 .1.sub(rhs.0 .1) as u32;
-                match Uint256::from(10u128)
-                    .checked_pow(pow)
-                    .and_then(|x| rhs.0 .0.checked_mul(x))
-                {
-                    Ok(v) => Self((self.0 .0.sub(v), self.0 .1)),
-                    Err(OverflowError { .. }) => {
-                        // Shave an order of precision off and try again
-                        self.truncate(1) - rhs
-                    }
-                }
-            }
-        };
-        res.normalize();
-        res
+        self.map_equalised(rhs, |a, b, i| Self((a.sub(b), i)), Sub::sub)
     }
 }
 
@@ -548,17 +495,17 @@ mod tests {
     fn div() {
         assert_eq!(
             DecimalScaled((Uint256::from(5u128), 0)) / DecimalScaled((Uint256::from(3u128), 0)),
-            DecimalScaled((Uint256::from(1666666666666666666u128), 18))
+            DecimalScaled((Uint256::from(1666666666666666666666666u128), 24))
         );
 
         assert_eq!(
             DecimalScaled((Uint256::from(5125u128), 3)) / DecimalScaled((Uint256::from(3u128), 0)),
-            DecimalScaled((Uint256::from(1708333333333333333u128), 18))
+            DecimalScaled((Uint256::from(1708333333333333333333333u128), 24))
         );
 
         assert_eq!(
             DecimalScaled((Uint256::from(5u128), -2)) / DecimalScaled((Uint256::from(3u128), 0)),
-            DecimalScaled((Uint256::from(166666666666666666666u128), 18))
+            DecimalScaled((Uint256::from(166666666666666666666666666u128), 24))
         );
 
         assert_eq!(
@@ -570,7 +517,7 @@ mod tests {
             DecimalScaled((Uint256::from(101u128), 0))
             // 100.0000000000000000000000001
                 / DecimalScaled((Uint256::from(1_000_000_000_000_000_000_000_000_001u128), 25)),
-            DecimalScaled((Uint256::from(1009999999999999999u128), 18))
+            DecimalScaled((Uint256::from(1009999999999999999999999u128), 24))
         );
     }
 
