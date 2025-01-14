@@ -1,7 +1,7 @@
 use super::{error::BidPoolError, pool::Pool, sum_snapshot::SumSnapshotKey};
-use crate::{decimal_scaled::DecimalScaled, Frac};
+use crate::decimal_scaled::DecimalScaled;
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Decimal256, Uint256};
+use cosmwasm_std::Uint256;
 
 #[cw_serde]
 pub struct Bid {

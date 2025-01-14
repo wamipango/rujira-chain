@@ -6,11 +6,11 @@ use cw_storage_plus::Map;
 use rujira_rs::{
     bid_pool::{self, SumSnapshot},
     exchange::{SwapCommit, SwapError, Swappable},
-    Frac,
+    DecimalScaled,
 };
 
 use crate::{order::Order, premium::Premium, ContractError};
-const SNAPSHOTS: Map<(u8, bid_pool::SumSnapshotKey), Frac> = Map::new("snapshots");
+const SNAPSHOTS: Map<(u8, bid_pool::SumSnapshotKey), DecimalScaled> = Map::new("snapshots");
 // The POOLS Map is used simply as an indicator that there is a non-zero BidPool at this key
 // The BID_POOLS Map is used to store the BidPool itself, and the Key is used to populate the Pool values
 const POOLS: Map<u8, ()> = Map::new("pools");
@@ -134,7 +134,7 @@ impl Pool {
         Ok(self.pool.sync_bid(&mut order.bid, sum_snapshot)?)
     }
 
-    fn sum_snapshot(&self, storage: &dyn Storage, bid: &bid_pool::Bid) -> StdResult<Frac> {
+    fn sum_snapshot(&self, storage: &dyn Storage, bid: &bid_pool::Bid) -> StdResult<DecimalScaled> {
         let key = (self.premium, bid.sum_snapshot_key());
         SNAPSHOTS.load(storage, key)
     }

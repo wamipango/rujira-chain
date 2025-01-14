@@ -312,8 +312,9 @@ mod tests {
             let res = pool
                 .distribute(Uint256::from(9999999u128), &Decimal256::one())
                 .unwrap();
-            // println!("      {}", pool.sum);
-            // println!("      {}", pool.product);
+            // TODO: bail earlier. the overlap between sum and product is the precision with which bids are filled
+            println!("      {}", pool.sum);
+            println!("      {}", pool.product);
 
             let s = res.snapshots.first().map(|s| s.sum);
             bids.push(bid);
@@ -322,7 +323,7 @@ mod tests {
                 // Only the most recent bid has any amount remaining
                 assert!(bid.amount <= pool.total);
                 assert!(bid.amount + bid.filled <= Uint256::from(10000000u128));
-                // println!("{n} amount {} filled {}", bid.amount, bid.filled);
+                println!("{n} amount {} filled {}", bid.amount, bid.filled);
             }
         }
         pool.new_bid(Uint256::from(10000000u128));

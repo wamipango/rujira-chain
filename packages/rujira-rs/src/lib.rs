@@ -7,7 +7,6 @@ mod coin;
 mod coins;
 mod decimal_scaled;
 pub mod exchange;
-mod fraction;
 mod interfaces;
 mod memoed;
 mod msg;
@@ -21,7 +20,7 @@ pub use asset::{Asset, Layer1Asset, NativeAsset, SecuredAsset};
 
 pub use callback::{CallbackData, CallbackMsg};
 pub use chain::Chain;
-pub use fraction::Frac;
+pub use decimal_scaled::DecimalScaled;
 pub use interfaces::*;
 pub use share_pool::{SharePool, SharePoolError};
 pub use token_factory::{TokenFactory, TokenMetadata};
