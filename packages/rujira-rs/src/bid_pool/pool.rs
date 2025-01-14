@@ -1,8 +1,7 @@
-use std::ops::Mul;
-
-use crate::Frac;
+use std::ops::{Div, Mul};
 
 use super::{bid::Bid, BidPoolError, SumSnapshot};
+use crate::decimal_scaled::DecimalScaled;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal256, Fraction as _, StdResult, Uint256};
 
@@ -14,8 +13,8 @@ use cosmwasm_std::{Decimal256, Fraction as _, StdResult, Uint256};
 #[derive(Copy)]
 pub struct Pool {
     pub(crate) total: Uint256,
-    pub(crate) sum: Frac,
-    pub(crate) product: Frac,
+    pub(crate) sum: DecimalScaled,
+    pub(crate) product: DecimalScaled,
     pub(crate) epoch: u32,
 }
 
@@ -23,8 +22,8 @@ impl Default for Pool {
     fn default() -> Self {
         Self {
             total: Uint256::zero(),
-            product: Frac::one(),
-            sum: Frac::zero(),
+            sum: DecimalScaled::zero(),
+            product: DecimalScaled::one(),
             epoch: 0,
         }
     }
@@ -37,7 +36,7 @@ impl Pool {
         Bid {
             amount,
             filled: Uint256::zero(),
-            product_snapshot: self.product,
+            product_snapshot: self.product.clone(),
             sum_snapshot: self.sum,
             epoch_snapshot: self.epoch,
         }
@@ -82,8 +81,7 @@ impl Pool {
         let inv = rate.inv().unwrap();
         let consumed_offer = Decimal256::from_atomics(self.total, 0).unwrap() * inv;
         let consumed_bids = self.total;
-
-        self.sum += self.product.mul(inv);
+        self.sum = self.sum + self.product.mul(inv);
 
         let mut snapshots = vec![SumSnapshot::from(*self)];
         self.increment_epoch();
@@ -102,12 +100,26 @@ impl Pool {
         offer: Uint256,
     ) -> Result<DistributionResult, BidPoolError> {
         // S + E / D * P
-        self.sum += self.product * Frac::from_ratio(offer, self.total);
+        let ratio = DecimalScaled::from_ratio(offer, self.total);
 
+        // If sum is not incremented, bids are not filled.
+        // Eg     sum = 0.99999999999999999999999999999999999999999999999999992559979936021098395430438
+        //    product = 0.0000000000000000000000000000000000000000000000000000000000000000000000000000000006226962958147167932332866989055998293039199447359426092824598426728536322091
+        // And so the scale of rthe product is too small to increment the sum. At this point the pool
+        // has scaled too much and we can't execute a distribution
+        // TODO: Can we "cancel" the bids?
+        let sum = self.sum + self.product * ratio;
+        if sum == self.sum {
+            return Err(BidPoolError::DistributionError {});
+        }
+
+        self.sum = sum;
         // 1 - Q / D
-        self.product = self.product * (Frac::one() - Frac::from_ratio(bids_value, self.total));
-
-        if self.product == Frac::zero() {
+        // NB: This is where product can truncate to zero with regular datatypes,
+        // ensure that decimals are scaled well
+        let ratio = DecimalScaled::one() - DecimalScaled::from_ratio(bids_value, self.total);
+        self.product = self.product * ratio;
+        if self.product == DecimalScaled::zero() {
             return Err(BidPoolError::DistributionError {});
         }
 
@@ -121,7 +133,7 @@ impl Pool {
         })
     }
 
-    pub fn sync_bid(&self, bid: &mut Bid, sum_snapshot: Option<Frac>) -> StdResult<()> {
+    pub fn sync_bid(&self, bid: &mut Bid, sum_snapshot: Option<DecimalScaled>) -> StdResult<()> {
         bid.filled += self.bid_filled_amount(bid, sum_snapshot)?;
         bid.amount = self.bid_remaining_amount(bid)?;
         bid.product_snapshot = self.product;
@@ -130,13 +142,20 @@ impl Pool {
         Ok(())
     }
 
-    fn bid_filled_amount(&self, bid: &Bid, sum_snapshot: Option<Frac>) -> StdResult<Uint256> {
+    fn bid_filled_amount(
+        &self,
+        bid: &Bid,
+        sum_snapshot: Option<DecimalScaled>,
+    ) -> StdResult<Uint256> {
         if bid.product_snapshot.is_zero() {
             return Ok(Uint256::zero());
         }
-        let inv = bid.product_snapshot.inv().unwrap();
         let reference_ss = sum_snapshot.unwrap_or(bid.sum_snapshot);
-        let res = (reference_ss - bid.sum_snapshot).mul(inv).mul(bid.amount);
+        let res = DecimalScaled::from(reference_ss - bid.sum_snapshot)
+            .mul(bid.amount)
+            .div(bid.product_snapshot)
+            .to_uint_floor();
+
         Ok(res)
     }
 
@@ -153,13 +172,13 @@ impl Pool {
         }
         let ratio = self.product / bid.product_snapshot;
         let amount = ratio * bid.amount;
-        Ok(amount)
+        Ok(amount.to_uint_floor())
     }
 
     fn increment_epoch(&mut self) {
         self.total = Uint256::zero();
-        self.sum = Frac::zero();
-        self.product = Frac::one();
+        self.sum = DecimalScaled::zero();
+        self.product = DecimalScaled::one();
         self.epoch += 1;
     }
 }
@@ -186,9 +205,9 @@ mod tests {
         let mut bid_d = pool.new_bid(Uint256::from(1000u128));
 
         assert_eq!(pool.total(), Uint256::from(1550u128));
-        assert_eq!(pool.sum, Frac::zero());
+        assert_eq!(pool.sum, DecimalScaled::zero());
         assert_eq!(pool.epoch, 0);
-        assert_eq!(pool.product, Frac::one());
+        assert_eq!(pool.product, DecimalScaled::one());
 
         let res = pool
             .distribute(
@@ -205,6 +224,7 @@ mod tests {
         let s = res.snapshots.first().map(|s| s.sum);
 
         pool.sync_bid(&mut bid_a, s).unwrap();
+
         pool.sync_bid(&mut bid_b, s).unwrap();
         pool.sync_bid(&mut bid_c, s).unwrap();
         pool.sync_bid(&mut bid_d, s).unwrap();
@@ -226,7 +246,6 @@ mod tests {
         let mut bid_f = pool.new_bid(Uint256::from(950u128));
 
         assert_eq!(pool.total(), Uint256::from(2563u128));
-
         pool.sync_bid(&mut bid_a, s).unwrap();
         pool.sync_bid(&mut bid_b, s).unwrap();
         pool.sync_bid(&mut bid_c, s).unwrap();
@@ -287,20 +306,23 @@ mod tests {
         let mut pool = Pool::default();
         let mut bids: Vec<Bid> = vec![];
 
-        for _ in 0..5 {
+        for n in 0..13 {
             let bid = pool.new_bid(Uint256::from(10000000u128));
 
             let res = pool
                 .distribute(Uint256::from(9999999u128), &Decimal256::one())
                 .unwrap();
+            // println!("      {}", pool.sum);
+            // println!("      {}", pool.product);
 
             let s = res.snapshots.first().map(|s| s.sum);
             bids.push(bid);
             for bid in bids.iter_mut() {
                 pool.sync_bid(bid, s).unwrap();
-                assert!(bid.amount < Uint256::from(5u128));
-                assert!(bid.filled > Uint256::from(9999990u128));
+                // Only the most recent bid has any amount remaining
+                assert!(bid.amount <= pool.total);
                 assert!(bid.amount + bid.filled <= Uint256::from(10000000u128));
+                // println!("{n} amount {} filled {}", bid.amount, bid.filled);
             }
         }
         pool.new_bid(Uint256::from(10000000u128));

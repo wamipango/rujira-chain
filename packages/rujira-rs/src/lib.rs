@@ -5,6 +5,7 @@ mod callback;
 mod chain;
 mod coin;
 mod coins;
+mod decimal_scaled;
 pub mod exchange;
 mod fraction;
 mod interfaces;
