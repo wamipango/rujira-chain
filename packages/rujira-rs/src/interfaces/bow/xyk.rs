@@ -1,8 +1,8 @@
 use crate::bow::error::StrategyError;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    coin, ensure, from_json, to_json_binary, Coin, Decimal, Decimal256, Deps, Env, Fraction, Isqrt,
-    MessageInfo, StdResult, Uint128, Uint256,
+    coin, ensure, from_json, to_json_binary, Coin, Decimal, Decimal256, Deps, Env, Isqrt,
+    MessageInfo, Uint128, Uint256,
 };
 use cw_utils::NativeBalance;
 use std::{
@@ -16,6 +16,10 @@ use super::{strategy::Strategy, QuoteRequest, QuoteResponse};
 pub struct Xyk {
     x: String,
     y: String,
+    // The % deployed in the first request
+    step: Decimal,
+    // The minimum value of K required for the pool to be active
+    min_k: Uint256,
 }
 
 #[cw_serde]
@@ -26,11 +30,8 @@ struct PoolState {
 }
 
 impl Xyk {
-    pub fn new(x: &str, y: &str) -> Self {
-        Self {
-            x: x.to_string(),
-            y: y.to_string(),
-        }
+    pub fn new(x: String, y: String, step: Decimal, min_k: Uint256) -> Self {
+        Self { x, y, step, min_k }
     }
     fn state(
         &self,
@@ -86,6 +87,10 @@ impl PoolState {
             k: Uint256::from(x) * Uint256::from(y),
         }
     }
+
+    pub fn price(&self) -> Decimal {
+        Decimal::from_ratio(self.y, self.x)
+    }
 }
 
 impl Strategy for Xyk {
@@ -110,39 +115,32 @@ impl Strategy for Xyk {
             Some(binary) => from_json(binary)?,
             None => self.state(deps, env, req.bid_denom.as_str(), req.ask_denom.as_str())?,
         };
-        if state.k.is_zero() {
+        if state.k.lt(&self.min_k) {
             return Ok(None);
         }
 
-        match req.price {
+        let offer_size = match req.price {
             Some(price) => {
                 let offer_dec = Decimal::from_ratio(state.x, 1u128);
                 let ask_dec = Decimal::from_ratio(state.y, 1u128);
-                let offer_size = offer_dec.mul(price).sub(ask_dec).div(price).to_uint_floor();
-                let (ask_size, price) = state.swap(offer_size)?;
-
-                Ok(Some(QuoteResponse {
-                    price,
-                    size: ask_size,
-                    data: Some(to_json_binary(&state)?),
-                }))
+                offer_dec.mul(price).sub(ask_dec).div(price).to_uint_floor()
             }
-            None => {
-                // No price requested. Offer with 0.1% of total funds
-                let offer_size = state.x.multiply_ratio(1u128, 1000u128);
-                let (ask_size, price) = state.swap(offer_size)?;
-                let size_min = Uint128::from(10_000u128);
-                if ask_size.lt(&size_min) {
-                    return Ok(None);
-                }
+            None => Decimal::from_ratio(state.x, 1u128)
+                .mul(self.step)
+                .to_uint_floor(),
+        };
 
-                Ok(Some(QuoteResponse {
-                    price,
-                    size: ask_size,
-                    data: Some(to_json_binary(&state)?),
-                }))
-            }
+        let current_price = state.price();
+        let (ask_size, price) = state.swap(offer_size)?;
+        if price.ge(&current_price) {
+            return Ok(None);
         }
+
+        Ok(Some(QuoteResponse {
+            price,
+            size: ask_size,
+            data: Some(to_json_binary(&state)?),
+        }))
     }
 
     fn calculate_share(
@@ -234,6 +232,8 @@ mod test {
         let xyk = Xyk {
             x: "denom_x".to_string(),
             y: "denom_y".to_string(),
+            min_k: Uint256::zero(),
+            step: Decimal::zero(),
         };
         let deps = mock_dependencies_with_balances(&[(
             MOCK_CONTRACT_ADDR,
@@ -278,6 +278,8 @@ mod test {
         let xyk = Xyk {
             x: "denom_x".to_string(),
             y: "denom_y".to_string(),
+            min_k: Uint256::zero(),
+            step: Decimal::zero(),
         };
 
         // Initial deposit. Share = sqrt(k)
@@ -349,6 +351,8 @@ mod test {
         let xyk = Xyk {
             x: "denom_x".to_string(),
             y: "denom_y".to_string(),
+            min_k: Uint256::zero(),
+            step: Decimal::zero(),
         };
 
         // Initial deposit. Share = sqrt(k)
@@ -413,6 +417,8 @@ mod test {
         let xyk = Xyk {
             x: "denom_x".to_string(),
             y: "denom_y".to_string(),
+            min_k: Uint256::from(2_000_001u128),
+            step: Decimal::from_ratio(1u128, 1000u128),
         };
 
         let deps = mock_dependencies();
