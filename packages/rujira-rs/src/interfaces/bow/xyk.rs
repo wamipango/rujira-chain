@@ -95,11 +95,24 @@ impl Strategy for Xyk {
         info: MessageInfo,
         supply: Uint128,
     ) -> Result<Uint128, StrategyError> {
-        let deposit_x = may_pay(&info, &self.x.as_str())?;
-        let deposit_y = may_pay(&info, self.y.as_str())?;
+        let deposit_x = info
+            .funds
+            .iter()
+            .find(|x| x.denom == self.x)
+            .map(|x| x.amount)
+            .unwrap_or_default();
+        let deposit_y = info
+            .funds
+            .iter()
+            .find(|x| x.denom == self.y)
+            .map(|x| x.amount)
+            .unwrap_or_default();
+
         let data = self.load_balances(deps, env)?;
         Ok(if supply.is_zero() {
-            data.k.isqrt()
+            Uint256::from(deposit_x)
+                .mul(Uint256::from(deposit_y))
+                .isqrt()
         } else {
             min(
                 Uint256::from(deposit_x).multiply_ratio(supply, data.x),
@@ -135,7 +148,13 @@ impl Strategy for Xyk {
 
 #[cfg(test)]
 mod test {
-    use cosmwasm_std::testing::{mock_dependencies_with_balances, mock_env, MOCK_CONTRACT_ADDR};
+    use cosmwasm_std::{
+        testing::{
+            message_info, mock_dependencies, mock_dependencies_with_balances, mock_env,
+            MOCK_CONTRACT_ADDR,
+        },
+        Addr,
+    };
 
     use super::*;
 
@@ -181,5 +200,76 @@ mod test {
             coin(48, "denom_x"),
         )
         .unwrap_err();
+    }
+
+    #[test]
+    fn test_share() {
+        let xyk = Xyk {
+            x: "denom_x".to_string(),
+            y: "denom_y".to_string(),
+        };
+
+        // Initial deposit. Share = sqrt(k)
+        let deps = mock_dependencies();
+
+        let amount = xyk
+            .calculate_share(
+                deps.as_ref(),
+                mock_env(),
+                message_info(
+                    &Addr::unchecked("sender"),
+                    &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
+                ),
+                Uint128::zero(),
+            )
+            .unwrap();
+
+        assert_eq!(amount, Uint128::from(1414u128));
+
+        let deps = mock_dependencies_with_balances(&[(
+            MOCK_CONTRACT_ADDR,
+            &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
+        )]);
+
+        // Adding 50% in correct ratio
+        let amount = xyk
+            .calculate_share(
+                deps.as_ref(),
+                mock_env(),
+                message_info(
+                    &Addr::unchecked("sender"),
+                    &vec![coin(500, "denom_x"), coin(1000, "denom_y")],
+                ),
+                Uint128::from(1414u128),
+            )
+            .unwrap();
+        assert_eq!(amount, Uint128::from(707u128));
+
+        // Adding more than 50% on one side
+        let amount = xyk
+            .calculate_share(
+                deps.as_ref(),
+                mock_env(),
+                message_info(
+                    &Addr::unchecked("sender"),
+                    &vec![coin(500, "denom_x"), coin(2000, "denom_y")],
+                ),
+                Uint128::from(1414u128),
+            )
+            .unwrap();
+        assert_eq!(amount, Uint128::from(707u128));
+
+        let amount = xyk
+            .calculate_share(
+                deps.as_ref(),
+                mock_env(),
+                message_info(
+                    &Addr::unchecked("sender"),
+                    &vec![coin(2000, "denom_x"), coin(1000, "denom_y")],
+                ),
+                Uint128::from(1414u128),
+            )
+            .unwrap();
+        assert_eq!(amount, Uint128::from(707u128));
     }
 }
