@@ -4,7 +4,7 @@ use cosmwasm_std::{
     coin, ensure, from_json, to_json_binary, Coin, Decimal, Deps, Env, Isqrt, MessageInfo,
     StdResult, Uint128, Uint256,
 };
-use cw_utils::{may_pay, NativeBalance};
+use cw_utils::NativeBalance;
 use std::{
     cmp::min,
     ops::{Add, Mul},
@@ -129,6 +129,9 @@ impl Strategy for Xyk {
         supply: Uint128,
         balance: Uint128,
     ) -> Result<NativeBalance, StrategyError> {
+        if supply.is_zero() || balance.is_zero() {
+            return Ok(NativeBalance::default());
+        }
         let data = self.load_balances(deps, env)?;
         let mut balances = NativeBalance(vec![
             coin(
@@ -271,5 +274,50 @@ mod test {
             )
             .unwrap();
         assert_eq!(amount, Uint128::from(707u128));
+    }
+
+    #[test]
+    fn test_ownership() {
+        let xyk = Xyk {
+            x: "denom_x".to_string(),
+            y: "denom_y".to_string(),
+        };
+
+        // Initial deposit. Share = sqrt(k)
+        let deps = mock_dependencies_with_balances(&[(
+            MOCK_CONTRACT_ADDR,
+            &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
+        )]);
+
+        let amount = xyk
+            .calculate_ownership(deps.as_ref(), mock_env(), Uint128::zero(), Uint128::zero())
+            .unwrap();
+
+        assert_eq!(amount, NativeBalance::default());
+
+        let amount = xyk
+            .calculate_ownership(
+                deps.as_ref(),
+                mock_env(),
+                Uint128::from(1000u128),
+                Uint128::zero(),
+            )
+            .unwrap();
+
+        assert_eq!(amount, NativeBalance::default());
+
+        let amount = xyk
+            .calculate_ownership(
+                deps.as_ref(),
+                mock_env(),
+                Uint128::from(1000u128),
+                Uint128::from(125u128),
+            )
+            .unwrap();
+
+        assert_eq!(
+            amount,
+            NativeBalance(vec![coin(125, "denom_x"), coin(250, "denom_y")])
+        );
     }
 }
