@@ -1,6 +1,6 @@
 use crate::bow::error::StrategyError;
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Deps, Env, MessageInfo, Uint128};
+use cosmwasm_std::{Coin, Coins, Deps, Env, MessageInfo, Uint128};
 use cw_utils::NativeBalance;
 
 use super::{strategy::Strategy, QuoteRequest, QuoteResponse};
@@ -42,7 +42,7 @@ impl Strategy for Arbitrage {
         _info: MessageInfo,
         // Current supply of the share token
         _supply: Uint128,
-    ) -> Result<Uint128, StrategyError> {
+    ) -> Result<(Coins, Uint128), StrategyError> {
         todo!()
     }
 

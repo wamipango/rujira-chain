@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Binary, Decimal, Uint128};
+use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 
 use crate::CallbackData;
 
@@ -14,7 +14,7 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     /// Executes a market trade based on current order book.
     Swap {
-        min_return: Uint128,
+        min_return: Coin,
         to: Option<String>,
 
         /// An optional callback that BOW will execute with the funds from the swap.
@@ -27,7 +27,9 @@ pub enum ExecuteMsg {
 }
 
 #[cw_serde]
-pub enum SudoMsg {}
+pub enum SudoMsg {
+    SetStrategy(Strategies),
+}
 
 #[cw_serde]
 #[derive(QueryResponses)]

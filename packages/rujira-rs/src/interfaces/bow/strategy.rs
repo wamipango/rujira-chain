@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Deps, Env, MessageInfo, Uint128};
+use cosmwasm_std::{Coin, Coins, Deps, Env, MessageInfo, Uint128};
 use cw_utils::NativeBalance;
 
 use super::{arbitrage::Arbitrage, error::StrategyError, xyk::Xyk, QuoteRequest, QuoteResponse};
@@ -26,7 +26,7 @@ pub trait Strategy {
         info: MessageInfo,
         // Current supply of the share token
         supply: Uint128,
-    ) -> Result<Uint128, StrategyError>;
+    ) -> Result<(Coins, Uint128), StrategyError>;
 
     /// Calculates the underlying assets owned by a given share token amount
     fn calculate_ownership(
@@ -73,7 +73,7 @@ impl Strategy for Strategies {
         env: Env,
         info: MessageInfo,
         supply: Uint128,
-    ) -> Result<Uint128, StrategyError> {
+    ) -> Result<(Coins, Uint128), StrategyError> {
         delegate_strategy!(self, calculate_share, deps, env, info, supply)
     }
 

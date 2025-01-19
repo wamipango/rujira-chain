@@ -4,11 +4,13 @@ use cosmwasm_std::{
     coin, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
 };
 use cw2::set_contract_version;
-use cw_utils::one_coin;
+use cw_utils::{must_pay, one_coin};
 use rujira_rs::bow::{ExecuteMsg, InstantiateMsg, QueryMsg, Strategy, SudoMsg};
+use rujira_rs::TokenFactory;
 
 use crate::config::Config;
 use crate::error::ContractError;
+use crate::events::{event_deposit, event_withdraw};
 
 // version info for migration info
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -37,16 +39,11 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     match msg {
-        ExecuteMsg::Swap {
-            min_return,
-            to,
-            callback,
-        } => {
+        ExecuteMsg::Swap { min_return, to, .. } => {
             let offer = one_coin(&info)?;
-            let ask = coin(min_return.u128(), "TODO");
             config
                 .strategy
-                .validate(deps.as_ref(), env, offer, ask.clone())?;
+                .validate(deps.as_ref(), env, offer, min_return.clone())?;
             let to_address = to
                 .map(|x| deps.api.addr_validate(x.as_str()))
                 .transpose()?
@@ -54,18 +51,63 @@ pub fn execute(
             Ok(
                 Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: to_address.to_string(),
-                    amount: vec![ask],
+                    amount: vec![min_return],
                 })),
             )
         }
-        ExecuteMsg::Deposit {} => todo!(),
-        ExecuteMsg::Withdraw {} => todo!(),
+        ExecuteMsg::Deposit {} => {
+            let t = token(&env);
+            let supply = t.supply(deps.querier)?;
+            let (deposited, minted) =
+                config
+                    .strategy
+                    .calculate_share(deps.as_ref(), env, info.clone(), supply)?;
+            Ok(Response::default()
+                .add_message(t.mint_msg(minted, info.sender.clone()))
+                .add_event(event_deposit(
+                    info.sender,
+                    deposited,
+                    coin(minted.u128(), t.denom()),
+                )))
+        }
+        ExecuteMsg::Withdraw {} => {
+            let t = token(&env);
+            let supply = t.supply(deps.querier)?;
+            let balance = must_pay(&info, t.denom().as_str())?;
+            let withdrawn =
+                config
+                    .strategy
+                    .calculate_ownership(deps.as_ref(), env, supply, balance)?;
+            Ok(Response::default()
+                .add_message(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: info.sender.to_string(),
+                    amount: withdrawn.clone().into_vec(),
+                }))
+                .add_event(event_withdraw(
+                    info.sender,
+                    coin(balance.u128(), t.denom()),
+                    withdrawn,
+                )))
+        }
     }
 }
 
+fn token(env: &Env) -> TokenFactory {
+    TokenFactory::new(env, "ulp")
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn sudo(_deps: DepsMut, _env: Env, _msg: SudoMsg) -> Result<Response, ContractError> {
-    Ok(Response::default())
+pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+    let mut config = Config::load(deps.storage)?;
+
+    match msg {
+        SudoMsg::SetStrategy(strategy) => {
+            config.strategy = strategy;
+            config.validate()?;
+            config.save(deps.storage)?;
+            Ok(Response::default())
+        }
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -80,6 +122,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 mod tests {
 
     use super::*;
+    use cosmwasm_std::{Decimal, Uint256};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
     use rujira_rs::bow::{Strategies, Xyk};
 
@@ -94,7 +137,12 @@ mod tests {
             code_id,
             owner,
             &InstantiateMsg {
-                strategy: Strategies::Xyk(Xyk::new("ruji", "usdc")),
+                strategy: Strategies::Xyk(Xyk::new(
+                    "ruji".to_string(),
+                    "usdc".to_string(),
+                    Decimal::from_ratio(1u128, 1000u128),
+                    Uint256::zero(),
+                )),
             },
             &[],
             "template",

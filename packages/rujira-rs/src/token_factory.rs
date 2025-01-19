@@ -2,7 +2,9 @@ use crate::msg::token_factory::{
     MsgBurnTokens, MsgCreateDenom, MsgMintTokens, MsgSetDenomAdmin, MsgSetMetadata,
 };
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Coin, CosmosMsg, DenomMetadata, DenomUnit, Env, Uint128};
+use cosmwasm_std::{
+    Addr, Coin, CosmosMsg, DenomMetadata, DenomUnit, Env, QuerierWrapper, StdResult, Uint128,
+};
 
 pub struct TokenFactory {
     id: String,
@@ -19,6 +21,10 @@ impl TokenFactory {
 
     pub fn denom(&self) -> String {
         format!("factory/{}/{}", self.env.contract.address, self.id)
+    }
+
+    pub fn supply(&self, q: QuerierWrapper) -> StdResult<Uint128> {
+        Ok(q.query_supply(self.denom())?.amount)
     }
 
     pub fn create_msg(&self, metadata: TokenMetadata) -> CosmosMsg {

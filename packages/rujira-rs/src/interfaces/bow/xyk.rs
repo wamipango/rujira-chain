@@ -1,7 +1,7 @@
 use crate::bow::error::StrategyError;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    coin, ensure, from_json, to_json_binary, Coin, Decimal, Decimal256, Deps, Env, Isqrt,
+    coin, ensure, from_json, to_json_binary, Coin, Coins, Decimal, Decimal256, Deps, Env, Isqrt,
     MessageInfo, Uint128, Uint256,
 };
 use cw_utils::NativeBalance;
@@ -70,22 +70,16 @@ impl PoolState {
         let y = self.y;
         // Ceil the ask amount in order to ensure rounding maintains new_k > self.k
         self.y = Decimal256::one().mul(ratio).to_uint_ceil().try_into()?;
-        // Y has decreased, get the delta
         let return_amount = y.sub(self.y);
         let price: Decimal = Decimal::from_ratio(return_amount, offer_amount);
         self.k = Uint256::from(self.x) * Uint256::from(self.y);
-
-        // Ensure K has not decreased
         ensure!(self.k >= k, StrategyError::InsufficientReturn {});
         Ok((return_amount, price))
     }
 
     pub fn new(x: Uint128, y: Uint128) -> Self {
-        Self {
-            x,
-            y,
-            k: Uint256::from(x) * Uint256::from(y),
-        }
+        let k = Uint256::from(x) * Uint256::from(y);
+        Self { x, y, k }
     }
 
     pub fn price(&self) -> Decimal {
@@ -149,32 +143,31 @@ impl Strategy for Xyk {
         env: Env,
         info: MessageInfo,
         supply: Uint128,
-    ) -> Result<Uint128, StrategyError> {
-        let deposit_x = info
-            .funds
-            .iter()
-            .find(|x| x.denom == self.x)
-            .map(|x| x.amount)
-            .unwrap_or_default();
-        let deposit_y = info
-            .funds
-            .iter()
-            .find(|x| x.denom == self.y)
-            .map(|x| x.amount)
-            .unwrap_or_default();
+    ) -> Result<(Coins, Uint128), StrategyError> {
+        let deposit_x = info.funds.iter().find(|x| x.denom == self.x);
+        let deposit_y = info.funds.iter().find(|x| x.denom == self.y);
 
-        let data = self.state(deps, env, self.x.as_str(), self.y.as_str())?;
-        Ok(if supply.is_zero() {
-            Uint256::from(deposit_x)
-                .mul(Uint256::from(deposit_y))
-                .isqrt()
-        } else {
-            min(
-                Uint256::from(deposit_x).multiply_ratio(supply, data.x),
-                Uint256::from(deposit_y).multiply_ratio(supply, data.y),
-            )
+        match (deposit_x, deposit_y) {
+            (Some(x), Some(y)) => {
+                let mut deposited = Coins::default();
+                deposited.add(x.clone())?;
+                deposited.add(y.clone())?;
+
+                let data = self.state(deps, env, self.x.as_str(), self.y.as_str())?;
+                let minted = if supply.is_zero() {
+                    Uint256::from(x.amount).mul(Uint256::from(y.amount)).isqrt()
+                } else {
+                    min(
+                        Uint256::from(x.amount).multiply_ratio(supply, data.x),
+                        Uint256::from(y.amount).multiply_ratio(supply, data.y),
+                    )
+                }
+                .try_into()?;
+
+                Ok((deposited, minted))
+            }
+            _ => Err(StrategyError::InvalidDeposit {}),
         }
-        .try_into()?)
     }
 
     fn calculate_ownership(
@@ -285,7 +278,7 @@ mod test {
         // Initial deposit. Share = sqrt(k)
         let deps = mock_dependencies();
 
-        let amount = xyk
+        let (_, amount) = xyk
             .calculate_share(
                 deps.as_ref(),
                 mock_env(),
@@ -305,7 +298,7 @@ mod test {
         )]);
 
         // Adding 50% in correct ratio
-        let amount = xyk
+        let (_, amount) = xyk
             .calculate_share(
                 deps.as_ref(),
                 mock_env(),
@@ -319,7 +312,7 @@ mod test {
         assert_eq!(amount, Uint128::from(707u128));
 
         // Adding more than 50% on one side
-        let amount = xyk
+        let (_, amount) = xyk
             .calculate_share(
                 deps.as_ref(),
                 mock_env(),
@@ -332,7 +325,7 @@ mod test {
             .unwrap();
         assert_eq!(amount, Uint128::from(707u128));
 
-        let amount = xyk
+        let (_, amount) = xyk
             .calculate_share(
                 deps.as_ref(),
                 mock_env(),

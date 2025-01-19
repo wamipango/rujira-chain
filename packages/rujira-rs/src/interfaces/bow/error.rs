@@ -19,6 +19,9 @@ pub enum StrategyError {
     #[error("InvalidPair")]
     InvalidPair {},
 
+    #[error("InvalidDeposit")]
+    InvalidDeposit {},
+
     #[error("InsufficientReturn")]
     InsufficientReturn {},
 }
