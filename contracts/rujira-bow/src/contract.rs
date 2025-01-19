@@ -89,7 +89,7 @@ pub fn execute(
                 .add_event(event_withdraw(
                     info.sender,
                     coin(balance.u128(), t.denom()),
-                    withdrawn,
+                    withdrawn.into_vec().try_into()?,
                 )))
         }
     }
@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn deposit() {
+    fn deposit_withdraw() {
         let mut app = mock_rujira_app();
         let addr = app.api().addr_make("depositor");
         app.init_modules(|router, _api, storage| {
@@ -207,7 +207,7 @@ mod tests {
         let res = app
             .execute_contract(
                 addr.clone(),
-                contract,
+                contract.clone(),
                 &ExecuteMsg::Deposit {},
                 &vec![coin(1000, "ruji"), coin(1000, "usdc")],
             )
@@ -223,5 +223,30 @@ mod tests {
             ("denom", "x/bow-xyk-ruji-usdc"),
             ("recipient", addr.as_str()),
         ]));
+
+        let res = app
+            .execute_contract(
+                addr.clone(),
+                contract.clone(),
+                &ExecuteMsg::Withdraw {},
+                &vec![coin(200, "x/bow-xyk-ruji-usdc")],
+            )
+            .unwrap();
+
+        res.assert_event(&Event::new("wasm-rujira-bow/withdraw").add_attributes(vec![
+            ("share", "200x/bow-xyk-ruji-usdc"),
+            ("withdrawn", "200ruji,200usdc"),
+        ]));
+
+        res.assert_event(&Event::new("transfer").add_attributes(vec![
+            ("amount", "200ruji,200usdc"),
+            ("recipient", addr.as_str()),
+            ("sender", contract.as_str()),
+        ]));
+
+        res.assert_event(
+            &Event::new("burn")
+                .add_attributes(vec![("amount", "200"), ("denom", "x/bow-xyk-ruji-usdc")]),
+        );
     }
 }

@@ -1,4 +1,4 @@
-use cosmwasm_std::{CheckedFromRatioError, StdError};
+use cosmwasm_std::{CheckedFromRatioError, CoinsError, StdError};
 use cw_utils::PaymentError;
 use rujira_rs::{bow::StrategyError, SharePoolError};
 use thiserror::Error;
@@ -19,6 +19,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     Strategy(#[from] StrategyError),
+
+    #[error("{0}")]
+    Coins(#[from] CoinsError),
 
     #[error("Unauthorized")]
     Unauthorized {},
