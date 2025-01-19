@@ -18,6 +18,7 @@ pub struct MarketMaker<'a> {
     tick: Tick,
     bid: Uint128,
     ask: Uint128,
+    last_price: Option<Decimal>,
     data: Option<Binary>,
 }
 
@@ -37,6 +38,7 @@ impl<'a> MarketMaker<'a> {
             tick,
             bid: Uint128::zero(),
             ask: Uint128::zero(),
+            last_price: None,
             data: None,
         }
     }
@@ -120,6 +122,8 @@ impl<'a> MarketMaker<'a> {
             .query_wasm_smart(
                 contract.to_string(),
                 &bow::QuoteRequest {
+                    // TODO: Add Tick
+                    price: self.last_price,
                     ask_denom: self.denoms.ask(&self.side).to_string(),
                     bid_denom: self.denoms.bid(&self.side).to_string(),
                     data: self.data.clone(),
@@ -171,15 +175,21 @@ mod test {
         q.update_wasm(|x| match x {
             WasmQuery::Smart { msg, .. } => {
                 let query: bow::QuoteRequest = from_json(msg).unwrap();
+                let ask_total: Uint128 = query
+                    .data
+                    .map(|x| from_json(x))
+                    .transpose()
+                    .unwrap()
+                    .unwrap_or_default();
                 // Double the order size until we run out of funds
-                if query.ask_total.gt(&Uint128::from(1000000u128)) {
+                if ask_total.gt(&Uint128::from(1000000u128)) {
                     return SystemResult::Err(SystemError::Unknown {});
                 }
 
-                let size = if query.ask_total.is_zero() {
+                let size = if ask_total.is_zero() {
                     Uint128::from(100u128)
                 } else {
-                    query.ask_total * Uint128::from(2u128)
+                    ask_total * Uint128::from(2u128)
                 };
 
                 SystemResult::Ok(ContractResult::Ok(
@@ -187,7 +197,7 @@ mod test {
                         size,
                         data: None,
                         price: query
-                            .last_price
+                            .price
                             .unwrap_or(Decimal::one())
                             .add(Decimal::from_ratio(1u128, 4u128)),
                     })

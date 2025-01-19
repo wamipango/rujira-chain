@@ -65,10 +65,12 @@ pub fn execute(
 
             if let Some(mm) = config.market_maker {
                 if !commit.market_maker.1.is_zero() {
+                    let min_return = coin(commit.market_maker.0.u128(), config.denoms.bid(&side));
+
                     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                         contract_addr: mm.to_string(),
                         msg: to_json_binary(&bow::ExecuteMsg::Swap {
-                            min_return: Some(commit.market_maker.0),
+                            min_return,
                             to: None,
                             callback: None,
                         })?,
