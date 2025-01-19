@@ -67,7 +67,7 @@ pub struct QuoteResponse {
     ///
     pub price: Decimal,
 
-    /// The size of the bid that the market maker is willing to make
+    /// The size of the ask_denom that the market maker is willing to make
     /// at the given price
     pub size: Uint128,
 

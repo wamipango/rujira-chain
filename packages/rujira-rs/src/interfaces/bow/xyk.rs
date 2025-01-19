@@ -1,13 +1,13 @@
 use crate::bow::error::StrategyError;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    coin, ensure, from_json, to_json_binary, Coin, Decimal, Deps, Env, Isqrt, MessageInfo,
-    StdResult, Uint128, Uint256,
+    coin, ensure, from_json, to_json_binary, Coin, Decimal, Decimal256, Deps, Env, Isqrt,
+    MessageInfo, StdResult, Uint128, Uint256,
 };
 use cw_utils::NativeBalance;
 use std::{
     cmp::min,
-    ops::{Add, Mul},
+    ops::{Add, Mul, Sub},
 };
 
 use super::{strategy::Strategy, QuoteRequest, QuoteResponse};
@@ -84,28 +84,47 @@ impl Strategy for Xyk {
         env: Env,
         req: QuoteRequest,
     ) -> Result<Option<QuoteResponse>, StrategyError> {
-        let data: Data = match req.data {
+        let mut data: Data = match req.data {
             Some(binary) => from_json(binary)?,
             None => self.load_balances(deps, env)?,
         };
         if data.k.is_zero() {
             return Ok(None);
         }
-        let price = Decimal::one();
-        let size = Uint128::one();
+
+        let (offer_balance, ask_balance) =
+            self.direction_for(&data, req.bid_denom.as_str(), req.ask_denom.as_str())?;
 
         match req.price {
-            Some(_) => todo!(),
+            Some(_) => Ok(None),
             None => {
-                // No price requested. Quote based on initial size
-                todo!()
+                // No price requested. Offer with 0.1% of total funds
+                // Following terminology from the perspective of the external query.
+                // i.e. offer == denom offered _to_ us, and increasing local balance
+                let offer_size = offer_balance.multiply_ratio(1u128, 1000u128);
+                let new_offer = offer_balance.sub(offer_size);
+                let ratio = Decimal256::from_ratio(data.k, new_offer);
+                // Ceil the ask amount in order to ensure rounding keeps new K > K
+                let new_ask: Uint128 = Decimal256::one().mul(ratio).to_uint_ceil().try_into()?;
+                let ask_size = new_ask.sub(ask_balance);
+                let price = Decimal::from_ratio(offer_size, ask_size);
+                let size_min = Uint128::from(10000u128);
+                if ask_size.lt(&size_min) {
+                    return Ok(None);
+                }
+
+                // TODO: Apply direction
+                data.x += offer_size;
+                data.y -= ask_size;
+                data.k = Uint256::from(new_ask) * Uint256::from(new_offer);
+
+                Ok(Some(QuoteResponse {
+                    price,
+                    size: offer_size,
+                    data: Some(to_json_binary(&data)?),
+                }))
             }
         }
-        Ok(Some(QuoteResponse {
-            price,
-            size,
-            data: Some(to_json_binary(&data)?),
-        }))
     }
 
     fn calculate_share(
@@ -171,6 +190,8 @@ impl Strategy for Xyk {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
     use cosmwasm_std::{
         testing::{
             message_info, mock_dependencies, mock_dependencies_with_balances, mock_env,
@@ -363,14 +384,13 @@ mod test {
                 },
             )
             .unwrap();
-        dbg!(&quote);
         assert_eq!(quote, None);
 
         let deps = mock_dependencies_with_balances(&[(
             MOCK_CONTRACT_ADDR,
             &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
         )]);
-        // Test best price
+        // Test with low balances
         let quote = xyk
             .quote(
                 deps.as_ref(),
@@ -383,7 +403,39 @@ mod test {
                 },
             )
             .unwrap();
-        dbg!(&quote);
         assert_eq!(quote, None);
+
+        let deps = mock_dependencies_with_balances(&[(
+            MOCK_CONTRACT_ADDR,
+            &vec![
+                coin(1_000_000_000, "denom_x"),
+                coin(2_000_000_000, "denom_y"),
+            ],
+        )]);
+        // Test iniital price
+        let quote = xyk
+            .quote(
+                deps.as_ref(),
+                mock_env(),
+                QuoteRequest {
+                    price: None,
+                    bid_denom: "denom_x".to_string(),
+                    ask_denom: "denom_y".to_string(),
+                    data: None,
+                },
+            )
+            .unwrap()
+            .unwrap();
+        // Quote to sell when X/Y price = 0.5
+        assert_eq!(
+            quote.price,
+            Decimal::from_str("0.499499750999374126").unwrap()
+        );
+        assert_eq!(quote.size, Uint128::from(1000000u128));
+        let data: Data = from_json(quote.data.unwrap()).unwrap();
+        dbg!(&data);
+        assert_eq!(data.x, Uint128::from(1_001_000_000u128));
+        assert_eq!(data.y, Uint128::from(1_997_997_997u128));
+        assert_eq!(data.k, Uint256::from(2_000_000_000_997_000_000u128));
     }
 }
