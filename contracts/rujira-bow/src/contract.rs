@@ -121,7 +121,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 mod tests {
 
     use super::*;
-    use cosmwasm_std::{Decimal, Uint256};
+    use cosmwasm_std::{Decimal, Event, Uint256};
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{
         bow::{Strategies, Xyk},
@@ -161,5 +161,67 @@ mod tests {
             None,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn deposit() {
+        let mut app = mock_rujira_app();
+        let addr = app.api().addr_make("depositor");
+        app.init_modules(|router, _api, storage| {
+            router
+                .bank
+                .init_balance(storage, &addr, vec![coin(1000, "ruji"), coin(1000, "usdc")])
+        })
+        .unwrap();
+        let owner = app.api().addr_make("owner");
+
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+        let code_id = app.store_code(code);
+        let contract = app
+            .instantiate_contract(
+                code_id,
+                owner,
+                &InstantiateMsg {
+                    metadata: TokenMetadata {
+                        description: "RUJI-USDC XYK Liquidity Pool Token".to_string(),
+                        exponent: 6,
+                        display: "LP RUJI-USDC".to_string(),
+                        name: "LP RUJI-USDC".to_string(),
+                        symbol: "LP/RUJI-USDC".to_string(),
+                        uri: None,
+                        uri_hash: None,
+                    },
+                    strategy: Strategies::Xyk(Xyk::new(
+                        "ruji".to_string(),
+                        "usdc".to_string(),
+                        Decimal::from_ratio(1u128, 1000u128),
+                        Uint256::zero(),
+                    )),
+                },
+                &[],
+                "template",
+                None,
+            )
+            .unwrap();
+
+        let res = app
+            .execute_contract(
+                addr.clone(),
+                contract,
+                &ExecuteMsg::Deposit {},
+                &vec![coin(1000, "ruji"), coin(1000, "usdc")],
+            )
+            .unwrap();
+
+        res.assert_event(&Event::new("wasm-rujira-bow/deposit").add_attributes(vec![
+            ("deposit", "1000ruji,1000usdc"),
+            ("minted", "1000x/bow-xyk-ruji-usdc"),
+        ]));
+
+        res.assert_event(&Event::new("mint").add_attributes(vec![
+            ("amount", "1000"),
+            ("denom", "x/bow-xyk-ruji-usdc"),
+            ("recipient", addr.as_str()),
+        ]));
     }
 }
