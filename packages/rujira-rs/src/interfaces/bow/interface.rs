@@ -39,6 +39,11 @@ pub enum QueryMsg {
 
 #[cw_serde]
 pub struct QuoteRequest {
+    /// An optional price that should be honoured when present, and set in QuoteResponse::price
+    /// Allows consumers to request prices that match specific ticks (eg Orca requesting prices at a given premium)
+    /// but also allows a Strategy to set its own best price (eg when market making on FIN)
+    pub price: Option<Decimal>,
+
     /// Denom that the Caller is bidding
     /// ie the token that will be sent by FIN to BOW
     /// Eg. if a market order USDC buy of RUJI on FIN is being
@@ -55,10 +60,15 @@ pub struct QuoteRequest {
 
 #[cw_serde]
 pub struct QuoteResponse {
+    /// The price of the offer
+    /// Quoted in ask_denom, so eg for RUIJ @ $5,
+    /// a bid of RUJI for ask of USDC, price = 5
+    /// a bid of USDC for ask of RUJI, price = 0.2
+    ///
     pub price: Decimal,
 
     /// The size of the bid that the market maker is willing to make
-    /// at the requested price
+    /// at the given price
     pub size: Uint128,
 
     /// Optionally provide arbitrary binary data that is returned in subsequent QuoteQuery's

@@ -6,7 +6,10 @@ use super::{arbitrage::Arbitrage, error::StrategyError, xyk::Xyk, QuoteRequest, 
 
 pub trait Strategy {
     /// Validates a swap size against the strategy
+    /// Offer is the amount offered _to_ the strategy (ie increase in local balance)
+    /// and Ask is amount requested _from_ the strategy (decrease)
     fn validate(&self, deps: Deps, env: Env, offer: Coin, ask: Coin) -> Result<(), StrategyError>;
+
     /// Quotes for a FIN market maker request
     fn quote(
         &self,
@@ -14,6 +17,7 @@ pub trait Strategy {
         env: Env,
         req: QuoteRequest,
     ) -> Result<Option<QuoteResponse>, StrategyError>;
+
     /// Calculates the number of share tokens to be minted for a new deposit
     fn calculate_share(
         &self,
@@ -23,6 +27,7 @@ pub trait Strategy {
         // Current supply of the share token
         supply: Uint128,
     ) -> Result<Uint128, StrategyError>;
+
     /// Calculates the underlying assets owned by a given share token amount
     fn calculate_ownership(
         &self,

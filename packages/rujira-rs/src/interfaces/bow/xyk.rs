@@ -46,27 +46,36 @@ impl Xyk {
             k,
         })
     }
+    /// Orientates X & Y into (Offer, Ask) for a given offer_denom
+    fn direction_for(
+        &self,
+        data: &Data,
+        offer: &str,
+        ask: &str,
+    ) -> Result<(Uint128, Uint128), StrategyError> {
+        if offer == self.x && ask == self.y {
+            return Ok((data.x, data.y));
+        };
+
+        if offer == self.y && ask == self.x {
+            return Ok((data.y, data.x));
+        };
+        Err(StrategyError::InvalidPair {})
+    }
 }
 
 impl Strategy for Xyk {
     fn validate(&self, deps: Deps, env: Env, offer: Coin, ask: Coin) -> Result<(), StrategyError> {
         let balances = self.load_balances(deps, env)?;
-
-        if offer.denom == self.x && ask.denom == self.y {
-            let x = Uint256::from(balances.x.checked_sub(offer.amount)?);
-            let y = Uint256::from(balances.y.add(ask.amount));
-            ensure!(x.mul(y) >= balances.k, StrategyError::InsufficientReturn {});
-            return Ok(());
-        };
-
-        if offer.denom == self.y && ask.denom == self.x {
-            let x = Uint256::from(balances.x.checked_sub(ask.amount)?);
-            let y = Uint256::from(balances.y.add(offer.amount));
-            ensure!(x.mul(y) >= balances.k, StrategyError::InsufficientReturn {});
-            return Ok(());
-        };
-
-        Err(StrategyError::InvalidPair {})
+        let (offer_balance, ask_balance) =
+            self.direction_for(&balances, offer.denom.as_str(), ask.denom.as_str())?;
+        let new_offer = Uint256::from(offer_balance.add(offer.amount));
+        let new_ask = Uint256::from(ask_balance.checked_sub(ask.amount)?);
+        ensure!(
+            new_offer.mul(new_ask) >= balances.k,
+            StrategyError::InsufficientReturn {}
+        );
+        Ok(())
     }
 
     fn quote(
@@ -84,6 +93,14 @@ impl Strategy for Xyk {
         }
         let price = Decimal::one();
         let size = Uint128::one();
+
+        match req.price {
+            Some(_) => todo!(),
+            None => {
+                // No price requested. Quote based on initial size
+                todo!()
+            }
+        }
         Ok(Some(QuoteResponse {
             price,
             size,
@@ -179,7 +196,7 @@ mod test {
             deps.as_ref(),
             mock_env(),
             coin(50, "denom_x"),
-            coin(106, "denom_y"),
+            coin(95, "denom_y"),
         )
         .unwrap();
 
@@ -187,7 +204,7 @@ mod test {
             deps.as_ref(),
             mock_env(),
             coin(50, "denom_x"),
-            coin(105, "denom_y"),
+            coin(96, "denom_y"),
         )
         .unwrap_err();
 
@@ -339,6 +356,7 @@ mod test {
                 deps.as_ref(),
                 mock_env(),
                 QuoteRequest {
+                    price: None,
                     bid_denom: "denom_x".to_string(),
                     ask_denom: "denom_y".to_string(),
                     data: None,
@@ -348,10 +366,24 @@ mod test {
         dbg!(&quote);
         assert_eq!(quote, None);
 
-        // // Initial deposit. Share = sqrt(k)
-        // let deps = mock_dependencies_with_balances(&[(
-        //     MOCK_CONTRACT_ADDR,
-        //     &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
-        // )]);
+        let deps = mock_dependencies_with_balances(&[(
+            MOCK_CONTRACT_ADDR,
+            &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
+        )]);
+        // Test best price
+        let quote = xyk
+            .quote(
+                deps.as_ref(),
+                mock_env(),
+                QuoteRequest {
+                    price: None,
+                    bid_denom: "denom_x".to_string(),
+                    ask_denom: "denom_y".to_string(),
+                    data: None,
+                },
+            )
+            .unwrap();
+        dbg!(&quote);
+        assert_eq!(quote, None);
     }
 }
