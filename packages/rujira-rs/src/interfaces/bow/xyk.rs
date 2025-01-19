@@ -1,13 +1,13 @@
 use crate::bow::error::StrategyError;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    coin, ensure, from_json, to_json_binary, Coin, Decimal, Decimal256, Deps, Env, Isqrt,
+    coin, ensure, from_json, to_json_binary, Coin, Decimal, Decimal256, Deps, Env, Fraction, Isqrt,
     MessageInfo, StdResult, Uint128, Uint256,
 };
 use cw_utils::NativeBalance;
 use std::{
     cmp::min,
-    ops::{Add, Mul, Sub},
+    ops::{Add, Div, Mul, Sub},
 };
 
 use super::{strategy::Strategy, QuoteRequest, QuoteResponse};
@@ -19,7 +19,7 @@ pub struct Xyk {
 }
 
 #[cw_serde]
-struct Data {
+struct PoolState {
     x: Uint128,
     y: Uint128,
     k: Uint256,
@@ -32,7 +32,7 @@ impl Xyk {
             y: y.to_string(),
         }
     }
-    fn load_balances(&self, deps: Deps, env: Env) -> StdResult<Data> {
+    fn load(&self, deps: Deps, env: Env) -> StdResult<PoolState> {
         let x = deps
             .querier
             .query_balance(env.contract.address.clone(), self.x.clone())?;
@@ -40,7 +40,7 @@ impl Xyk {
             .querier
             .query_balance(env.contract.address, self.y.clone())?;
         let k = Uint256::from(x.amount) * Uint256::from(y.amount);
-        Ok(Data {
+        Ok(PoolState {
             x: x.amount,
             y: y.amount,
             k,
@@ -49,16 +49,16 @@ impl Xyk {
     /// Orientates X & Y into (Offer, Ask) for a given offer_denom
     fn direction_for(
         &self,
-        data: &Data,
+        state: &PoolState,
         offer: &str,
         ask: &str,
     ) -> Result<(Uint128, Uint128), StrategyError> {
         if offer == self.x && ask == self.y {
-            return Ok((data.x, data.y));
+            return Ok((state.x, state.y));
         };
 
         if offer == self.y && ask == self.x {
-            return Ok((data.y, data.x));
+            return Ok((state.y, state.x));
         };
         Err(StrategyError::InvalidPair {})
     }
@@ -66,13 +66,13 @@ impl Xyk {
 
 impl Strategy for Xyk {
     fn validate(&self, deps: Deps, env: Env, offer: Coin, ask: Coin) -> Result<(), StrategyError> {
-        let balances = self.load_balances(deps, env)?;
+        let state = self.load(deps, env)?;
         let (offer_balance, ask_balance) =
-            self.direction_for(&balances, offer.denom.as_str(), ask.denom.as_str())?;
+            self.direction_for(&state, offer.denom.as_str(), ask.denom.as_str())?;
         let new_offer = Uint256::from(offer_balance.add(offer.amount));
         let new_ask = Uint256::from(ask_balance.checked_sub(ask.amount)?);
         ensure!(
-            new_offer.mul(new_ask) >= balances.k,
+            new_offer.mul(new_ask) >= state.k,
             StrategyError::InsufficientReturn {}
         );
         Ok(())
@@ -84,29 +84,52 @@ impl Strategy for Xyk {
         env: Env,
         req: QuoteRequest,
     ) -> Result<Option<QuoteResponse>, StrategyError> {
-        let mut data: Data = match req.data {
+        let mut state: PoolState = match req.data {
             Some(binary) => from_json(binary)?,
-            None => self.load_balances(deps, env)?,
+            None => self.load(deps, env)?,
         };
-        if data.k.is_zero() {
+        if state.k.is_zero() {
             return Ok(None);
         }
 
         let (offer_balance, ask_balance) =
-            self.direction_for(&data, req.bid_denom.as_str(), req.ask_denom.as_str())?;
+            self.direction_for(&state, req.bid_denom.as_str(), req.ask_denom.as_str())?;
 
         match req.price {
-            Some(_) => Ok(None),
+            Some(price) => {
+                println!("k {}", state.k);
+
+                let offer_dec = Decimal::from_ratio(offer_balance, 1u128);
+                let ask_dec = Decimal::from_ratio(ask_balance, 1u128);
+                let offer_size = offer_dec.mul(price).sub(ask_dec).div(price).to_uint_floor();
+                let new_ask_balance = ask_balance - offer_size;
+                let ratio = Decimal256::from_ratio(state.k, new_ask_balance);
+                // Ceil the ask amount in order to ensure rounding keeps new K > K
+                let new_offer_balance: Uint128 =
+                    Decimal256::one().mul(ratio).to_uint_ceil().try_into()?;
+                let ask_size: Uint128 = new_offer_balance.sub(offer_balance);
+                let price_check = Decimal::from_ratio(offer_size, ask_size);
+
+                // TODO: Apply direction
+                state.x = new_offer_balance;
+                state.y = new_ask_balance;
+                state.k = Uint256::from(new_ask_balance) * Uint256::from(new_offer_balance);
+
+                Ok(Some(QuoteResponse {
+                    price: price_check,
+                    size: offer_size,
+                    data: Some(to_json_binary(&state)?),
+                }))
+            }
             None => {
                 // No price requested. Offer with 0.1% of total funds
-                // Following terminology from the perspective of the external query.
-                // i.e. offer == denom offered _to_ us, and increasing local balance
-                let offer_size = offer_balance.multiply_ratio(1u128, 1000u128);
-                let new_offer = offer_balance.sub(offer_size);
-                let ratio = Decimal256::from_ratio(data.k, new_offer);
+                let offer_size = ask_balance.multiply_ratio(1u128, 1000u128);
+                let new_ask_balance = ask_balance.sub(offer_size);
+                let ratio = Decimal256::from_ratio(state.k, new_ask_balance);
                 // Ceil the ask amount in order to ensure rounding keeps new K > K
-                let new_ask: Uint128 = Decimal256::one().mul(ratio).to_uint_ceil().try_into()?;
-                let ask_size = new_ask.sub(ask_balance);
+                let new_offer_balance: Uint128 =
+                    Decimal256::one().mul(ratio).to_uint_ceil().try_into()?;
+                let ask_size = new_offer_balance.sub(offer_balance);
                 let price = Decimal::from_ratio(offer_size, ask_size);
                 let size_min = Uint128::from(10000u128);
                 if ask_size.lt(&size_min) {
@@ -114,14 +137,14 @@ impl Strategy for Xyk {
                 }
 
                 // TODO: Apply direction
-                data.x += offer_size;
-                data.y -= ask_size;
-                data.k = Uint256::from(new_ask) * Uint256::from(new_offer);
+                state.x = new_offer_balance;
+                state.y = new_ask_balance;
+                state.k = Uint256::from(new_ask_balance) * Uint256::from(new_offer_balance);
 
                 Ok(Some(QuoteResponse {
                     price,
                     size: offer_size,
-                    data: Some(to_json_binary(&data)?),
+                    data: Some(to_json_binary(&state)?),
                 }))
             }
         }
@@ -147,7 +170,7 @@ impl Strategy for Xyk {
             .map(|x| x.amount)
             .unwrap_or_default();
 
-        let data = self.load_balances(deps, env)?;
+        let data = self.load(deps, env)?;
         Ok(if supply.is_zero() {
             Uint256::from(deposit_x)
                 .mul(Uint256::from(deposit_y))
@@ -171,7 +194,7 @@ impl Strategy for Xyk {
         if supply.is_zero() || balance.is_zero() {
             return Ok(NativeBalance::default());
         }
-        let data = self.load_balances(deps, env)?;
+        let data = self.load(deps, env)?;
         let mut balances = NativeBalance(vec![
             coin(
                 data.x.multiply_ratio(balance, supply).u128(),
@@ -412,7 +435,7 @@ mod test {
                 coin(2_000_000_000, "denom_y"),
             ],
         )]);
-        // Test iniital price
+        // Test initial price
         let quote = xyk
             .quote(
                 deps.as_ref(),
@@ -426,16 +449,40 @@ mod test {
             )
             .unwrap()
             .unwrap();
-        // Quote to sell when X/Y price = 0.5
+        // Request is to sell X for Y. Price should be lower than base price (2/1)
         assert_eq!(
             quote.price,
-            Decimal::from_str("0.499499750999374126").unwrap()
+            Decimal::from_str("1.997998005997990014").unwrap()
         );
-        assert_eq!(quote.size, Uint128::from(1000000u128));
-        let data: Data = from_json(quote.data.unwrap()).unwrap();
-        dbg!(&data);
-        assert_eq!(data.x, Uint128::from(1_001_000_000u128));
-        assert_eq!(data.y, Uint128::from(1_997_997_997u128));
-        assert_eq!(data.k, Uint256::from(2_000_000_000_997_000_000u128));
+        assert_eq!(quote.size, Uint128::from(2_000_000u128));
+        let data: PoolState = from_json(quote.data.clone().unwrap()).unwrap();
+        assert_eq!(data.x, Uint128::from(1_001_001_002u128));
+        assert_eq!(data.y, Uint128::from(1_998_000_000u128));
+        assert_eq!(data.k, Uint256::from(2_000_000_001_996_000_000u128));
+
+        // Test subsequent quote
+        let quote = xyk
+            .quote(
+                deps.as_ref(),
+                mock_env(),
+                QuoteRequest {
+                    // Request next tick
+                    price: Some(Decimal::from_str("1.9978").unwrap()),
+                    bid_denom: "denom_x".to_string(),
+                    ask_denom: "denom_y".to_string(),
+                    data: quote.data,
+                },
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            quote.price,
+            Decimal::from_str("1.995099124796258238").unwrap()
+        );
+        assert_eq!(quote.size, Uint128::from(900891u128));
+        let data: PoolState = from_json(quote.data.unwrap()).unwrap();
+        assert_eq!(data.x, Uint128::from(1_001_452_554u128));
+        assert_eq!(data.y, Uint128::from(1_997_099_109u128));
+        assert_eq!(data.k, Uint256::from(2_000_000_003_299_174_386u128));
     }
 }

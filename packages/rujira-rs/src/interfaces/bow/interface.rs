@@ -47,8 +47,8 @@ pub struct QuoteRequest {
     /// Denom that the Caller is bidding
     /// ie the token that will be sent by FIN to BOW
     /// Eg. if a market order USDC buy of RUJI on FIN is being
-    /// executed, the bid_denom here will be USDC and the ask_denom
-    /// RUJI
+    /// executed, FIN will require RUJI to execute the swap and so
+    /// the bid_denom here will be USDC and the ask_denom RUJI
     pub bid_denom: String,
 
     /// The denom that the Caller is asking for
