@@ -1,8 +1,9 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Attribute, Binary, Decimal, QuerierWrapper, Storage, Uint128};
 use rujira_rs::{
+    bow,
     exchange::{SwapCommit, SwapError, Swappable},
-    fin::{Denoms, MarketMakerQuery, MarketMakerResponse, Side, Tick},
+    fin::{Denoms, Side, Tick},
 };
 use std::{
     cmp::Ordering,
@@ -15,7 +16,6 @@ pub struct MarketMaker<'a> {
     side: Side,
     contract: Option<Addr>,
     tick: Tick,
-    last_price: Option<Decimal>,
     bid: Uint128,
     ask: Uint128,
     data: Option<Binary>,
@@ -35,7 +35,6 @@ impl<'a> MarketMaker<'a> {
             side,
             contract,
             tick,
-            last_price: None,
             bid: Uint128::zero(),
             ask: Uint128::zero(),
             data: None,
@@ -116,18 +115,13 @@ impl<'a> MarketMaker<'a> {
     }
 
     fn query_next(&mut self, contract: Addr) -> Option<MarketMakerOffer> {
-        let price = self.last_price;
-        let res: Option<MarketMakerResponse> = self
+        let res: Option<bow::QuoteResponse> = self
             .q
             .query_wasm_smart(
                 contract.to_string(),
-                &MarketMakerQuery {
+                &bow::QuoteRequest {
                     ask_denom: self.denoms.ask(&self.side).to_string(),
-                    ask_total: self.ask,
                     bid_denom: self.denoms.bid(&self.side).to_string(),
-                    bid_total: self.bid,
-                    last_price: price,
-                    tick: self.tick.clone(),
                     data: self.data.clone(),
                 },
             )
@@ -139,7 +133,6 @@ impl<'a> MarketMaker<'a> {
                     .mul(res.price)
                     .to_uint_ceil();
                 self.ask += res.size;
-                self.last_price = Some(res.price);
                 self.data = res.data;
                 Some(MarketMakerOffer {
                     price: res.price,
@@ -177,7 +170,7 @@ mod test {
         let mut q = MockQuerier::default();
         q.update_wasm(|x| match x {
             WasmQuery::Smart { msg, .. } => {
-                let query: MarketMakerQuery = from_json(msg).unwrap();
+                let query: bow::QuoteRequest = from_json(msg).unwrap();
                 // Double the order size until we run out of funds
                 if query.ask_total.gt(&Uint128::from(1000000u128)) {
                     return SystemResult::Err(SystemError::Unknown {});
@@ -190,7 +183,7 @@ mod test {
                 };
 
                 SystemResult::Ok(ContractResult::Ok(
-                    to_json_binary(&MarketMakerResponse {
+                    to_json_binary(&bow::QuoteResponse {
                         size,
                         data: None,
                         price: query

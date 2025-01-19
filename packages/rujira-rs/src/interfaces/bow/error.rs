@@ -1,4 +1,4 @@
-use cosmwasm_std::{OverflowError, StdError};
+use cosmwasm_std::{ConversionOverflowError, OverflowError, StdError};
 use cw_utils::PaymentError;
 use thiserror::Error;
 
@@ -12,6 +12,9 @@ pub enum StrategyError {
 
     #[error("{0}")]
     Payment(#[from] PaymentError),
+
+    #[error("{0}")]
+    ConversionOverflow(#[from] ConversionOverflowError),
 
     #[error("InvalidPair")]
     InvalidPair {},

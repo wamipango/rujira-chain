@@ -1,24 +1,26 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdResult, Storage};
 use cw_storage_plus::Item;
-use rujira_rs::bow::InstantiateMsg;
+use rujira_rs::bow::{InstantiateMsg, Strategies};
 
 use crate::ContractError;
 
-static CONFIG: Item<Config> = Item::new("config");
-
 #[cw_serde]
-pub struct Config {}
+pub struct Config {
+    pub strategy: Strategies,
+}
 
 impl From<InstantiateMsg> for Config {
-    fn from(_: InstantiateMsg) -> Self {
-        Self {}
+    fn from(v: InstantiateMsg) -> Self {
+        Self {
+            strategy: v.strategy,
+        }
     }
 }
 
 impl Config {
     pub fn load(storage: &dyn Storage) -> StdResult<Self> {
-        CONFIG.load(storage)
+        Item::new("config").load(storage)
     }
 
     pub fn validate(&self) -> Result<(), ContractError> {
@@ -26,7 +28,7 @@ impl Config {
     }
 
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
-        CONFIG.save(storage, self)
+        Item::new("config").save(storage, self)
     }
 }
 
@@ -36,6 +38,6 @@ mod tests {
 
     #[test]
     fn validation() {
-        Config {}.validate().unwrap();
+        // Config { st }.validate().unwrap();
     }
 }

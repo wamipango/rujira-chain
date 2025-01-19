@@ -1,6 +1,6 @@
 use cosmwasm_std::{CheckedFromRatioError, StdError};
 use cw_utils::PaymentError;
-use rujira_rs::SharePoolError;
+use rujira_rs::{bow::StrategyError, SharePoolError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -16,6 +16,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     SharePool(#[from] SharePoolError),
+
+    #[error("{0}")]
+    Strategy(#[from] StrategyError),
 
     #[error("Unauthorized")]
     Unauthorized {},

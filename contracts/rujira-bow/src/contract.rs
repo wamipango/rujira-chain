@@ -1,14 +1,17 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{
+    coin, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
+};
 use cw2::set_contract_version;
-use rujira_rs::bow::{ExecuteMsg, InstantiateMsg, QueryMsg, SudoMsg};
+use cw_utils::one_coin;
+use rujira_rs::bow::{ExecuteMsg, InstantiateMsg, QueryMsg, Strategy, SudoMsg};
 
 use crate::config::Config;
 use crate::error::ContractError;
 
 // version info for migration info
-const CONTRACT_NAME: &str = "crates.io:rujira-bow";
+const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -27,12 +30,37 @@ pub fn instantiate(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
-    _deps: DepsMut,
-    _env: Env,
-    _info: MessageInfo,
-    _msg: ExecuteMsg,
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    Ok(Response::default())
+    let config = Config::load(deps.storage)?;
+    match msg {
+        ExecuteMsg::Swap {
+            min_return,
+            to,
+            callback,
+        } => {
+            let offer = one_coin(&info)?;
+            let ask = coin(min_return.u128(), "TODO");
+            config
+                .strategy
+                .validate(deps.as_ref(), env, offer, ask.clone())?;
+            let to_address = to
+                .map(|x| deps.api.addr_validate(x.as_str()))
+                .transpose()?
+                .unwrap_or(info.sender);
+            Ok(
+                Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: to_address.to_string(),
+                    amount: vec![ask],
+                })),
+            )
+        }
+        ExecuteMsg::Deposit {} => todo!(),
+        ExecuteMsg::Withdraw {} => todo!(),
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -41,8 +69,11 @@ pub fn sudo(_deps: DepsMut, _env: Env, _msg: SudoMsg) -> Result<Response, Contra
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> Result<Binary, ContractError> {
-    Ok(to_json_binary(&())?)
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
+    let config = Config::load(deps.storage)?;
+    match msg {
+        QueryMsg::Quote(req) => Ok(to_json_binary(&config.strategy.quote(deps, env, req)?)?),
+    }
 }
 
 #[cfg(test)]
@@ -50,6 +81,7 @@ mod tests {
 
     use super::*;
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
+    use rujira_rs::bow::{Strategies, Xyk};
 
     #[test]
     fn instantiation() {
@@ -58,7 +90,16 @@ mod tests {
 
         let code = Box::new(ContractWrapper::new(execute, instantiate, query));
         let code_id = app.store_code(code);
-        app.instantiate_contract(code_id, owner, &InstantiateMsg {}, &[], "template", None)
-            .unwrap();
+        app.instantiate_contract(
+            code_id,
+            owner,
+            &InstantiateMsg {
+                strategy: Strategies::Xyk(Xyk::new("ruji", "usdc")),
+            },
+            &[],
+            "template",
+            None,
+        )
+        .unwrap();
     }
 }

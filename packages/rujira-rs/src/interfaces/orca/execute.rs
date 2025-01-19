@@ -2,7 +2,7 @@ use crate::{CallbackData, Layer1Asset};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal, Uint128};
 
-use super::{Denoms, MarketMakerCallback};
+use super::Denoms;
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -53,7 +53,4 @@ pub enum ExecuteMsg {
     /// Funds sent must be equal to the net change of balances. Funds withdrawn in step 0 and retracted in 1's,
     /// can be reused to fund orders in 1 and 3  
     Order(Vec<(u8, Uint128)>),
-
-    /// Must be called by the market maker contract with correct return amount
-    MarketMaker(MarketMakerCallback),
 }

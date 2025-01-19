@@ -1,19 +1,18 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut,
-    Env, MessageInfo, QuerierWrapper, Response, WasmMsg,
+    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
+    MessageInfo, QuerierWrapper, Response, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
 use itertools::{EitherOrBoth, Itertools};
 use rujira_rs::exchange::{SwapError, SwapResult, Swappable, Swapper};
 use rujira_rs::fin::{
-    BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg,
-    MarketMakerCallback, MarketMakerExecute, OrderResponse, OrdersResponse, Price, QueryMsg, Side,
-    SimulationResponse, StatusResponse, SudoMsg,
+    BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse,
+    OrdersResponse, Price, QueryMsg, Side, SimulationResponse, StatusResponse, SudoMsg,
 };
-use rujira_rs::query;
+use rujira_rs::{bow, query};
 
 use crate::arb::Arber;
 use crate::config::{Config, CONFIG};
@@ -68,11 +67,10 @@ pub fn execute(
                 if !commit.market_maker.1.is_zero() {
                     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                         contract_addr: mm.to_string(),
-                        msg: to_json_binary(&MarketMakerExecute {
-                            min_return: coin(
-                                commit.market_maker.0.u128(),
-                                config.denoms.bid(&side),
-                            ),
+                        msg: to_json_binary(&bow::ExecuteMsg::Swap {
+                            min_return: Some(commit.market_maker.0),
+                            to: None,
+                            callback: None,
                         })?,
                         funds: coins(commit.market_maker.1.u128(), config.denoms.ask(&side)),
                     }))
@@ -146,23 +144,6 @@ pub fn execute(
                 .add_messages(messages)
                 .add_events(res.events))
         }
-
-        ExecuteMsg::MarketMaker(MarketMakerCallback { min_return }) => match config.market_maker {
-            Some(mm) => {
-                ensure_eq!(mm, info.sender, ContractError::Unauthorized {});
-                let amount = one_coin(&info)?;
-                ensure_eq!(
-                    min_return,
-                    amount,
-                    ContractError::InsufficientFunds {
-                        expected: min_return,
-                        returned: amount
-                    }
-                );
-                Ok(Response::default())
-            }
-            None => Err(ContractError::Unauthorized {}),
-        },
     }
 }
 
