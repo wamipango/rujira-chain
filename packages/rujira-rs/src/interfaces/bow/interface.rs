@@ -1,12 +1,13 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 
-use crate::CallbackData;
+use crate::{CallbackData, TokenMetadata};
 
 use super::strategy::Strategies;
 
 #[cw_serde]
 pub struct InstantiateMsg {
+    pub metadata: TokenMetadata,
     pub strategy: Strategies,
 }
 

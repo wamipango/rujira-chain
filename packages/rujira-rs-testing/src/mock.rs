@@ -98,10 +98,10 @@ impl Stargate for RujiraStargate {
         match type_url.as_str() {
             "/thorchain.denom.MsgCreateDenom" => {
                 let sender = buf.string(1).unwrap();
-                let nonce = buf.string(2).unwrap();
+                let id = buf.string(2).unwrap();
                 let m = buf.message(3).unwrap();
                 let metadata = decode_metadata(m);
-                let full = format!("factory/{sender}/{nonce}");
+                let full = format!("x/{id}");
                 DENOM_ADMIN.save(storage, full.clone(), &sender)?;
                 DENOM_METADATA.save(storage, full, &metadata)?;
 

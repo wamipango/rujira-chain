@@ -21,7 +21,6 @@ use crate::state::{
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:rujira-staking";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-const SHARE_DENOM_NONCE: &str = "urcpt";
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -35,7 +34,7 @@ pub fn instantiate(
     config.validate()?;
     config.save(deps.storage)?;
     init(deps.storage)?;
-    let share_denom = TokenFactory::new(&env, SHARE_DENOM_NONCE);
+    let share_denom = TokenFactory::new(&env, format!("staking-{}", config.bond_denom).as_str());
     Ok(Response::default().add_message(share_denom.create_msg(msg.receipt_token_metadata)))
 }
 
@@ -156,7 +155,7 @@ fn execute_liquid(
     config: &Config,
     msg: LiquidMsg,
 ) -> Result<Response, ContractError> {
-    let share_denom = TokenFactory::new(env, SHARE_DENOM_NONCE);
+    let share_denom = TokenFactory::new(env, format!("staking-{}", config.bond_denom).as_str());
 
     match msg {
         LiquidMsg::Bond {} => {
@@ -303,10 +302,7 @@ mod tests {
 
         let share_balance = app
             .wrap()
-            .query_balance(
-                staker_liquid.to_string(),
-                format!("factory/{contract}/urcpt"),
-            )
+            .query_balance(staker_liquid.to_string(), format!("x/staking-uruji"))
             .unwrap();
         assert_eq!(share_balance.amount, Uint128::from(1_000u128));
 
@@ -439,14 +435,14 @@ mod tests {
                 staker_liquid.clone(),
                 contract.clone(),
                 &ExecuteMsg::Liquid(LiquidMsg::Unbond {}),
-                &coins(500, format!("factory/{contract}/urcpt")),
+                &coins(500, format!("x/staking-uruji")),
             )
             .unwrap();
 
         res.assert_event(
             &Event::new("burn")
                 .add_attribute("amount", "500")
-                .add_attribute("denom", format!("factory/{contract}/urcpt")),
+                .add_attribute("denom", format!("x/staging-uruji")),
         );
         // total distribution of 30 across 1000 shares, so withdrawal should be 515 uruji
         res.assert_event(

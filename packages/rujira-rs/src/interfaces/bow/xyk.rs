@@ -7,6 +7,7 @@ use cosmwasm_std::{
 use cw_utils::NativeBalance;
 use std::{
     cmp::min,
+    fmt,
     ops::{Add, Div, Mul, Sub},
 };
 
@@ -88,6 +89,10 @@ impl PoolState {
 }
 
 impl Strategy for Xyk {
+    fn denom(&self) -> String {
+        format!("bow-xyk-{}-{}", self.x, self.y)
+    }
+
     fn validate(&self, deps: Deps, env: Env, offer: Coin, ask: Coin) -> Result<(), StrategyError> {
         let mut state = self.state(deps, env, offer.denom.as_str(), ask.denom.as_str())?;
         let (return_amount, _) = state.swap(offer.amount)?;

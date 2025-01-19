@@ -20,7 +20,7 @@ impl TokenFactory {
     }
 
     pub fn denom(&self) -> String {
-        format!("factory/{}/{}", self.env.contract.address, self.id)
+        format!("x/{}", self.id)
     }
 
     pub fn supply(&self, q: QuerierWrapper) -> StdResult<Uint128> {

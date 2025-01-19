@@ -941,6 +941,7 @@ dependencies = [
  "cw-utils",
  "cw2",
  "rujira-rs",
+ "rujira-rs-testing",
  "schemars",
  "serde",
  "thiserror",

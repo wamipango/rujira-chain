@@ -19,15 +19,17 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::from(msg);
+    let config = Config::from(msg.clone());
     config.validate()?;
     config.save(deps.storage)?;
-    Ok(Response::default())
+    Ok(Response::default().add_message(
+        TokenFactory::new(&env, config.strategy.denom().as_str()).create_msg(msg.metadata),
+    ))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -56,7 +58,7 @@ pub fn execute(
             )
         }
         ExecuteMsg::Deposit {} => {
-            let t = token(&env);
+            let t = TokenFactory::new(&env, config.strategy.denom().as_str());
             let supply = t.supply(deps.querier)?;
             let (deposited, minted) =
                 config
@@ -71,7 +73,7 @@ pub fn execute(
                 )))
         }
         ExecuteMsg::Withdraw {} => {
-            let t = token(&env);
+            let t = TokenFactory::new(&env, config.strategy.denom().as_str());
             let supply = t.supply(deps.querier)?;
             let balance = must_pay(&info, t.denom().as_str())?;
             let withdrawn =
@@ -83,6 +85,7 @@ pub fn execute(
                     to_address: info.sender.to_string(),
                     amount: withdrawn.clone().into_vec(),
                 }))
+                .add_message(t.burn_msg(balance))
                 .add_event(event_withdraw(
                     info.sender,
                     coin(balance.u128(), t.denom()),
@@ -90,10 +93,6 @@ pub fn execute(
                 )))
         }
     }
-}
-
-fn token(env: &Env) -> TokenFactory {
-    TokenFactory::new(env, "ulp")
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -123,12 +122,16 @@ mod tests {
 
     use super::*;
     use cosmwasm_std::{Decimal, Uint256};
-    use cw_multi_test::{BasicApp, ContractWrapper, Executor};
-    use rujira_rs::bow::{Strategies, Xyk};
+    use cw_multi_test::{ContractWrapper, Executor};
+    use rujira_rs::{
+        bow::{Strategies, Xyk},
+        TokenMetadata,
+    };
+    use rujira_rs_testing::mock_rujira_app;
 
     #[test]
     fn instantiation() {
-        let mut app = BasicApp::default();
+        let mut app = mock_rujira_app();
         let owner = app.api().addr_make("owner");
 
         let code = Box::new(ContractWrapper::new(execute, instantiate, query));
@@ -137,6 +140,15 @@ mod tests {
             code_id,
             owner,
             &InstantiateMsg {
+                metadata: TokenMetadata {
+                    description: "RUJI-USDC XYK Liquidity Pool Token".to_string(),
+                    exponent: 6,
+                    display: "LP RUJI-USDC".to_string(),
+                    name: "LP RUJI-USDC".to_string(),
+                    symbol: "LP/RUJI-USDC".to_string(),
+                    uri: None,
+                    uri_hash: None,
+                },
                 strategy: Strategies::Xyk(Xyk::new(
                     "ruji".to_string(),
                     "usdc".to_string(),

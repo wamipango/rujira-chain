@@ -16,6 +16,9 @@ use super::{strategy::Strategy, QuoteRequest, QuoteResponse};
 pub struct Arbitrage {}
 
 impl Strategy for Arbitrage {
+    fn denom(&self) -> String {
+        todo!()
+    }
     fn validate(
         &self,
         _deps: Deps,
