@@ -31,7 +31,7 @@ impl Strategy for Arbitrage {
         _deps: Deps,
         _env: Env,
         _req: QuoteRequest,
-    ) -> Result<QuoteResponse, StrategyError> {
+    ) -> Result<Option<QuoteResponse>, StrategyError> {
         todo!()
     }
 

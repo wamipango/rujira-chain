@@ -37,18 +37,16 @@ pub enum QueryMsg {
     Quote(QuoteRequest),
 }
 
-/// FIN is configured with a privileged, passive market maker.
-///
 #[cw_serde]
 pub struct QuoteRequest {
-    /// Denom that the market maker should be bidding
-    /// ie the token that will be requested by FIN from BOW
+    /// Denom that the Caller is bidding
+    /// ie the token that will be sent by FIN to BOW
     /// Eg. if a market order USDC buy of RUJI on FIN is being
-    /// executed, the bid_denom here will be RUJI and the ask_denom
-    /// USDC
+    /// executed, the bid_denom here will be USDC and the ask_denom
+    /// RUJI
     pub bid_denom: String,
 
-    /// The denom that the market maker is asking for
+    /// The denom that the Caller is asking for
     pub ask_denom: String,
 
     /// Optional binary data that should be pass-through from QuoteResponse::data

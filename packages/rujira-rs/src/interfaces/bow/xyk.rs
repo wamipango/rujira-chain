@@ -74,18 +74,21 @@ impl Strategy for Xyk {
         deps: Deps,
         env: Env,
         req: QuoteRequest,
-    ) -> Result<QuoteResponse, StrategyError> {
+    ) -> Result<Option<QuoteResponse>, StrategyError> {
         let data: Data = match req.data {
             Some(binary) => from_json(binary)?,
             None => self.load_balances(deps, env)?,
         };
+        if data.k.is_zero() {
+            return Ok(None);
+        }
         let price = Decimal::one();
         let size = Uint128::one();
-        Ok(QuoteResponse {
+        Ok(Some(QuoteResponse {
             price,
             size,
             data: Some(to_json_binary(&data)?),
-        })
+        }))
     }
 
     fn calculate_share(
@@ -319,5 +322,36 @@ mod test {
             amount,
             NativeBalance(vec![coin(125, "denom_x"), coin(250, "denom_y")])
         );
+    }
+
+    #[test]
+    fn test_quote() {
+        let xyk = Xyk {
+            x: "denom_x".to_string(),
+            y: "denom_y".to_string(),
+        };
+
+        let deps = mock_dependencies();
+
+        // Check no quote returned when pool is empty
+        let quote = xyk
+            .quote(
+                deps.as_ref(),
+                mock_env(),
+                QuoteRequest {
+                    bid_denom: "denom_x".to_string(),
+                    ask_denom: "denom_y".to_string(),
+                    data: None,
+                },
+            )
+            .unwrap();
+        dbg!(&quote);
+        assert_eq!(quote, None);
+
+        // // Initial deposit. Share = sqrt(k)
+        // let deps = mock_dependencies_with_balances(&[(
+        //     MOCK_CONTRACT_ADDR,
+        //     &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
+        // )]);
     }
 }

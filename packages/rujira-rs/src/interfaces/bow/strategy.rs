@@ -13,7 +13,7 @@ pub trait Strategy {
         deps: Deps,
         env: Env,
         req: QuoteRequest,
-    ) -> Result<QuoteResponse, StrategyError>;
+    ) -> Result<Option<QuoteResponse>, StrategyError>;
     /// Calculates the number of share tokens to be minted for a new deposit
     fn calculate_share(
         &self,
@@ -58,7 +58,7 @@ impl Strategy for Strategies {
         deps: Deps,
         env: Env,
         req: QuoteRequest,
-    ) -> Result<QuoteResponse, StrategyError> {
+    ) -> Result<Option<QuoteResponse>, StrategyError> {
         delegate_strategy!(self, quote, deps, env, req)
     }
 
