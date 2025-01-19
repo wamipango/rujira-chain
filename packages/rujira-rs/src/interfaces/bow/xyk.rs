@@ -504,5 +504,44 @@ mod test {
         assert_eq!(data.x, Uint128::from(1_001_948_946u128));
         assert_eq!(data.y, Uint128::from(1_996_109_692u128));
         assert_eq!(data.k, Uint256::from(2_000_000_001_999_784_632u128));
+
+        // Test inverse
+        let quote = xyk
+            .quote(
+                deps.as_ref(),
+                mock_env(),
+                QuoteRequest {
+                    price: None,
+                    bid_denom: "denom_y".to_string(),
+                    ask_denom: "denom_x".to_string(),
+                    data: None,
+                },
+            )
+            .unwrap()
+            .unwrap();
+        // Check direction, poolstate tested above
+        assert_eq!(quote.price, Decimal::from_str("0.4995").unwrap());
+        assert_eq!(quote.size, Uint128::from(999_000u128));
+
+        // Test subsequent quote
+        let quote = xyk
+            .quote(
+                deps.as_ref(),
+                mock_env(),
+                QuoteRequest {
+                    // Request next tick
+                    price: Some(Decimal::from_str("0.4994").unwrap()),
+                    bid_denom: "denom_y".to_string(),
+                    ask_denom: "denom_x".to_string(),
+                    data: quote.data,
+                },
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            quote.price,
+            Decimal::from_str("0.49860314475526708").unwrap()
+        );
+        assert_eq!(quote.size, Uint128::from(796_527u128));
     }
 }
