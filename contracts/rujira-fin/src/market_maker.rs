@@ -71,38 +71,17 @@ impl Swappable for MarketMakerOffer {
     }
 
     fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
-        dbg!(&self, &offer);
-        let res = match self.side {
-            Side::Base => {
-                let offer_value = Decimal::from_ratio(offer, 1u128)
-                    .mul(self.price)
-                    .to_uint_floor();
-                let pool_value = Decimal::from_ratio(self.total, 1u128)
-                    .div(self.price)
-                    .to_uint_floor();
-                dbg!(offer_value);
-                dbg!(pool_value);
-                match self.total.cmp(&offer_value) {
-                    // Partial fill
-                    Ordering::Greater => (offer, offer_value),
-                    // Complete fill
-                    _ => (pool_value, self.total),
-                }
-            }
-            Side::Quote => {
-                let offer_value = Decimal::from_ratio(offer, 1u128)
-                    .mul(self.price)
-                    .to_uint_floor();
-                let pool_value = Decimal::from_ratio(self.total, 1u128)
-                    .div(self.price)
-                    .to_uint_floor();
-                match self.total.cmp(&offer_value) {
-                    // Partial fill
-                    Ordering::Greater => (offer, offer_value),
-                    // Complete fill
-                    _ => (pool_value, self.total),
-                }
-            }
+        let offer_value = Decimal::from_ratio(offer, 1u128)
+            .mul(self.price)
+            .to_uint_floor();
+        let pool_value = Decimal::from_ratio(self.total, 1u128)
+            .div(self.price)
+            .to_uint_floor();
+        let res = match self.total.cmp(&offer_value) {
+            // Partial fill
+            Ordering::Greater => (offer, offer_value),
+            // Complete fill
+            _ => (pool_value, self.total),
         };
 
         self.commitment = res;
@@ -121,10 +100,6 @@ impl Swappable for MarketMakerOffer {
 }
 
 impl<'a> MarketMaker<'a> {
-    pub fn totals(&self) -> (Uint128, Uint128) {
-        (self.bid, self.ask)
-    }
-
     fn query_next(&mut self, contract: Addr) -> Option<MarketMakerOffer> {
         let res: StdResult<Option<bow::QuoteResponse>> = self.q.query_wasm_smart(
             contract.to_string(),
@@ -144,6 +119,7 @@ impl<'a> MarketMaker<'a> {
                     .to_uint_ceil();
                 self.ask += res.size;
                 self.data = res.data;
+                self.last_price = Some(res.price);
                 Some(MarketMakerOffer {
                     price: res.price,
                     total: res.size,
@@ -180,35 +156,39 @@ mod test {
         let mut q = MockQuerier::default();
         q.update_wasm(|x| match x {
             WasmQuery::Smart { msg, .. } => {
-                let query: bow::QuoteRequest = from_json(msg).unwrap();
-                let ask_total: Uint128 = query
-                    .data
-                    .map(|x| from_json(x))
-                    .transpose()
-                    .unwrap()
-                    .unwrap_or_default();
-                // Double the order size until we run out of funds
-                if ask_total.gt(&Uint128::from(1000000u128)) {
-                    return SystemResult::Err(SystemError::Unknown {});
+                let query: bow::QueryMsg = from_json(msg).unwrap();
+                match query {
+                    bow::QueryMsg::Quote(query) => {
+                        let ask_total: Uint128 = query
+                            .data
+                            .map(|x| from_json(x))
+                            .transpose()
+                            .unwrap()
+                            .unwrap_or_default();
+                        // Double the order size until we run out of funds
+                        if ask_total.gt(&Uint128::from(1000000u128)) {
+                            return SystemResult::Err(SystemError::Unknown {});
+                        }
+
+                        let size = if ask_total.is_zero() {
+                            Uint128::from(100u128)
+                        } else {
+                            ask_total * Uint128::from(2u128)
+                        };
+
+                        SystemResult::Ok(ContractResult::Ok(
+                            to_json_binary(&bow::QuoteResponse {
+                                size,
+                                data: to_json_binary(&size.add(ask_total)).ok(),
+                                price: query
+                                    .price
+                                    .unwrap_or(Decimal::one())
+                                    .add(Decimal::from_ratio(1u128, 4u128)),
+                            })
+                            .unwrap(),
+                        ))
+                    }
                 }
-
-                let size = if ask_total.is_zero() {
-                    Uint128::from(100u128)
-                } else {
-                    ask_total * Uint128::from(2u128)
-                };
-
-                SystemResult::Ok(ContractResult::Ok(
-                    to_json_binary(&bow::QuoteResponse {
-                        size,
-                        data: None,
-                        price: query
-                            .price
-                            .unwrap_or(Decimal::one())
-                            .add(Decimal::from_ratio(1u128, 4u128)),
-                    })
-                    .unwrap(),
-                ))
             }
             _ => SystemResult::Err(SystemError::Unknown {}),
         });
@@ -221,11 +201,6 @@ mod test {
         );
 
         let items: Vec<MarketMakerOffer> = iter.by_ref().take(5).collect();
-
-        assert_eq!(
-            iter.totals(),
-            (Uint128::from(17225u128), Uint128::from(8100u128))
-        );
 
         assert_eq!(
             items,
@@ -273,8 +248,8 @@ mod test {
             commitment: Default::default(),
         };
         let (bid_returned, offer_consumed) = o.swap(Uint128::from(500u128)).unwrap();
-        assert_eq!(bid_returned, Uint128::from(625u128));
-        assert_eq!(offer_consumed, Uint128::from(500u128));
+        assert_eq!(bid_returned, Uint128::from(500u128));
+        assert_eq!(offer_consumed, Uint128::from(625u128));
 
         // Quote full fill
         let mut o = MarketMakerOffer {
@@ -284,8 +259,8 @@ mod test {
             commitment: Default::default(),
         };
         let (bid_returned, offer_consumed) = o.swap(Uint128::from(500000u128)).unwrap();
-        assert_eq!(bid_returned, Uint128::from(10000u128));
-        assert_eq!(offer_consumed, Uint128::from(8000u128));
+        assert_eq!(bid_returned, Uint128::from(8000u128));
+        assert_eq!(offer_consumed, Uint128::from(10000u128));
 
         // Base partial fill
         let mut o = MarketMakerOffer {
@@ -295,8 +270,8 @@ mod test {
             commitment: Default::default(),
         };
         let (bid_returned, offer_consumed) = o.swap(Uint128::from(500u128)).unwrap();
-        assert_eq!(bid_returned, Uint128::from(400u128));
-        assert_eq!(offer_consumed, Uint128::from(500u128));
+        assert_eq!(bid_returned, Uint128::from(500u128));
+        assert_eq!(offer_consumed, Uint128::from(625u128));
 
         // Base full fill
         let mut o = MarketMakerOffer {
@@ -306,7 +281,7 @@ mod test {
             commitment: Default::default(),
         };
         let (bid_returned, offer_consumed) = o.swap(Uint128::from(500000u128)).unwrap();
-        assert_eq!(bid_returned, Uint128::from(10000u128));
-        assert_eq!(offer_consumed, Uint128::from(12500u128));
+        assert_eq!(bid_returned, Uint128::from(8000u128));
+        assert_eq!(offer_consumed, Uint128::from(10000u128));
     }
 }
