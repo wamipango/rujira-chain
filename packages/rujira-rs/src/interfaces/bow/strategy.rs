@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Coins, Deps, Env, MessageInfo, Storage, Uint128};
+use cosmwasm_std::{Coin, Coins, Deps, Env, MessageInfo, Uint128};
 use cw_utils::NativeBalance;
 
 use super::{arbitrage::Arbitrage, error::StrategyError, xyk::Xyk, QuoteRequest, QuoteResponse};

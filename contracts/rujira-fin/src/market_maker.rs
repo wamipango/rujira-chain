@@ -211,7 +211,7 @@ mod test {
             Denoms::new("btc", "usdc"),
             Side::Quote,
             Some(Addr::unchecked("bow")),
-            Tick::new(2),
+            Tick::new(3),
         );
 
         let items: Vec<MarketMakerOffer> = iter.by_ref().take(5).collect();
