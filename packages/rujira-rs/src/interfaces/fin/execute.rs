@@ -9,7 +9,7 @@ pub struct InstantiateMsg {
     /// The denoms of the pair. The second denom is the quote denom
     pub denoms: Denoms,
 
-    pub oracles: [Layer1Asset; 2],
+    pub oracles: Option<[Layer1Asset; 2]>,
 
     /// The address of the market maker contract. Must implement [crate::market_maker::MarketMakerQuery],
     /// and return funds with [CallbackMsg::MarketMaker]

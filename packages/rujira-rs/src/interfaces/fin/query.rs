@@ -44,7 +44,7 @@ pub struct ConfigResponse {
     pub denoms: Denoms,
 
     /// See [InstantiateMsg::oracles]
-    pub oracles: [Layer1Asset; 2],
+    pub oracles: Option<[Layer1Asset; 2]>,
 
     /// See [InstantiateMsg::tick]
     pub tick: Tick,

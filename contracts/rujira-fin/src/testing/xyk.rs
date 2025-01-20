@@ -59,13 +59,13 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
             owner.clone(),
             &InstantiateMsg {
                 denoms: Denoms::new("btc", "usdc"),
-                oracles: [
+                oracles: Some([
                     Layer1Asset::new(Chain::Btc, "BTC"),
                     Layer1Asset::new(
                         Chain::Eth,
                         "USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
                     ),
-                ],
+                ]),
                 market_maker: Some(bow.to_string()),
                 tick: Tick::new(8),
                 fee_taker: Decimal::from_ratio(15u128, 1000u128),

@@ -48,7 +48,11 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let oracle = Oracle::load(deps.querier, &config.oracles)?;
+    let oracle = config
+        .oracles
+        .clone()
+        .map(|x| Oracle::load(deps.querier, &x))
+        .transpose()?;
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut arb = Arber::new(&config.denoms);
     let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
@@ -183,7 +187,11 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let oracle = Oracle::load(deps.querier, &config.oracles)?;
+    let oracle = config
+        .oracles
+        .clone()
+        .map(|x| Oracle::load(deps.querier, &x))
+        .transpose()?;
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
         QueryMsg::Order((owner, side, price)) => {
@@ -314,13 +322,13 @@ mod tests {
                 &InstantiateMsg {
                     denoms: Denoms::new("btc-btc", "eth-usdc"),
                     market_maker: None,
-                    oracles: [
+                    oracles: Some([
                         Layer1Asset::try_from("BTC.BTC").unwrap(),
                         Layer1Asset::try_from(
                             "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
                         )
                         .unwrap(),
-                    ],
+                    ]),
                     tick: Tick::new(6u8),
                     fee_taker: Decimal::zero(),
                     fee_maker: Decimal::zero(),
@@ -347,10 +355,10 @@ mod tests {
             owner,
             &InstantiateMsg {
                 denoms: Denoms::new("ruji", "eth-usdc"),
-                oracles: [
+                oracles: Some([
                     Layer1Asset::try_from("THOR.RUJI").unwrap(),
                     Layer1Asset::try_from("ETH.USDC").unwrap(),
-                ],
+                ]),
                 market_maker: None,
                 tick: Tick::new(4u8),
                 fee_taker: Decimal::zero(),

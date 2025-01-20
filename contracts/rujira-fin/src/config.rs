@@ -11,7 +11,7 @@ pub static CONFIG: Item<Config> = Item::new("config");
 #[cw_serde]
 pub struct Config {
     pub denoms: Denoms,
-    pub oracles: [Layer1Asset; 2],
+    pub oracles: Option<[Layer1Asset; 2]>,
     pub market_maker: Option<Addr>,
     pub tick: Tick,
     pub fee_maker: Decimal,
