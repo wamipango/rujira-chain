@@ -34,8 +34,6 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn validation() {
         // Config { st }.validate().unwrap();
