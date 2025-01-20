@@ -426,17 +426,17 @@ mod tests {
             .unwrap();
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
             ("offer", "100"),
-            ("bid", "9000000"),
-            ("rate", "90000"),
+            ("bid", "90000"),
+            ("rate", "900"),
             ("premium", "10"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "9000000eth-usdc"),
+            ("amount", "90000eth-usdc"),
         ]));
 
-        assert_eq!(sim.returned, Uint128::from(9000000u128));
+        assert_eq!(sim.returned, Uint128::from(90000u128));
 
         let res = app
             .execute_contract(
@@ -447,28 +447,28 @@ mod tests {
                     to: None,
                     callback: None,
                 },
-                &coins(300, "btc-btc"),
+                &coins(30000, "btc-btc"),
             )
             .unwrap();
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
-            ("offer", "12"),
-            ("bid", "1000000"),
-            ("rate", "90000"),
+            ("offer", "11012"),
+            ("bid", "9910000"),
+            ("rate", "900"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
-            ("offer", "148"),
+            ("offer", "14706"),
             ("bid", "12500000"),
-            ("rate", "85000"),
+            ("rate", "850"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
-            ("offer", "140"),
-            ("bid", "11200000"),
-            ("rate", "80000"),
+            ("offer", "4282"),
+            ("bid", "3425600"),
+            ("rate", "800"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "24700000eth-usdc"),
+            ("amount", "25835600eth-usdc"),
         ]));
 
         let res = app
@@ -480,19 +480,20 @@ mod tests {
                     to: None,
                     callback: None,
                 },
-                &coins(1000, "btc-btc"),
+                &coins(100000, "btc-btc"),
             )
             .unwrap();
+
         // Check that any unused funds are returned
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
-            ("offer", "498"),
-            ("bid", "39800000"),
-            ("rate", "80000"),
+            ("offer", "59468"),
+            ("bid", "47574400"),
+            ("rate", "800"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "502btc-btc,39800000eth-usdc"),
+            ("amount", "40532btc-btc,47574400eth-usdc"),
         ]));
     }
 }

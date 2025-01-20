@@ -7,8 +7,7 @@ use rujira_rs::template::{ExecuteMsg, InstantiateMsg, QueryMsg, SudoMsg};
 use crate::config::Config;
 use crate::error::ContractError;
 
-// version info for migration info
-const CONTRACT_NAME: &str = "crates.io:rujira-template";
+const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]

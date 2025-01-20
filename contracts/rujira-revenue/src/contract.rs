@@ -1,19 +1,19 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, Addr, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, Event,
+    coins, to_json_binary, Addr, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
     MessageInfo, QuerierWrapper, Reply, Response, StdResult, Storage, SubMsg,
 };
 
 use crate::error::ContractError;
+use crate::events::event_run;
 use crate::state::{Action, Config};
 use rujira_rs::revenue::{
     ActionResponse, ActionsResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
     StatusResponse, SudoMsg,
 };
 
-// version info for migration info
-const CONTRACT_NAME: &str = "crates.io:rujira-revenue";
+const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -45,13 +45,9 @@ pub fn execute(
             let action_msg = get_action_msg(deps.storage, deps.querier, &env.contract.address)?;
 
             match action_msg {
-                Some((action, msg)) => {
-                    let event =
-                        Event::new("revenue/run").add_attribute("denom", action.denom.to_string());
-                    Ok(Response::default()
-                        .add_event(event)
-                        .add_submessage(SubMsg::reply_always(msg, 0)))
-                }
+                Some((action, msg)) => Ok(Response::default()
+                    .add_event(event_run(action.denom))
+                    .add_submessage(SubMsg::reply_always(msg, 0))),
                 // If there's no compatible action, skip to the reply
                 None => {
                     let mut sends: Vec<CosmosMsg> = vec![];

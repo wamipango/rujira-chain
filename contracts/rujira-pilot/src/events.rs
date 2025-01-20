@@ -1,6 +1,6 @@
-use cosmwasm_std::{Attribute, Event, Uint128};
+use cosmwasm_std::{Event, Uint128};
 
-use crate::{order::Order, pool::Pool, ContractError};
+use crate::{order::Order, pool::Pool};
 
 pub fn event_create_order(pool: &Pool, order: &Order) -> Event {
     Event::new("rujira-orca/order.create")

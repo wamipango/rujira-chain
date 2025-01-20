@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    ensure_eq, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, Event,
-    MessageInfo, Response,
+    ensure_eq, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
+    Response,
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, nonpayable};
@@ -12,10 +12,10 @@ use rujira_rs::merge::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::config::Config;
 use crate::error::ContractError;
+use crate::events::{event_deposit, event_withdraw};
 use crate::state::{account, execute_deposit, execute_withdraw, init, status};
 
-// version info for migration info
-const CONTRACT_NAME: &str = "crates.io:rujira-merge";
+const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -51,12 +51,7 @@ pub fn execute(
         ExecuteMsg::Deposit {} => {
             let amount = must_pay(&info, &config.merge_denom)?;
             let shares = execute_deposit(deps.storage, &config, time, &info.sender, amount)?;
-            Ok(Response::default().add_event(
-                Event::new("merge/deposit")
-                    .add_attribute("account", info.sender)
-                    .add_attribute("amount", amount)
-                    .add_attribute("shares", shares),
-            ))
+            Ok(Response::default().add_event(event_deposit(info.sender, amount, shares)))
         }
         ExecuteMsg::Withdraw { share_amount } => {
             nonpayable(&info)?;
@@ -65,12 +60,9 @@ pub fn execute(
                 to_address: info.sender.to_string(),
                 amount: vec![Coin::new(amount, config.ruji_denom)],
             });
-            Ok(Response::default().add_message(msg).add_event(
-                Event::new("merge/withdraw")
-                    .add_attribute("account", info.sender)
-                    .add_attribute("shares", share_amount)
-                    .add_attribute("amount", amount),
-            ))
+            Ok(Response::default()
+                .add_message(msg)
+                .add_event(event_withdraw(info.sender, share_amount, amount)))
         }
     }
 }
@@ -98,7 +90,7 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractE
 #[cfg(test)]
 mod tests {
 
-    use cosmwasm_std::{coin, coins, BlockInfo, Timestamp, Uint128};
+    use cosmwasm_std::{coin, coins, BlockInfo, Event, Timestamp, Uint128};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
     use rujira_rs::merge::{AccountResponse, StatusResponse};
 

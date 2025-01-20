@@ -367,7 +367,7 @@ mod tests {
                 (15, Uint128::from(12500000u128)),
                 (20, Uint128::from(51000000u128)),
             ]),
-            &funds,
+            &coins(73500000, "eth-usdc"),
         )
         .unwrap();
         let swap_amount = coin(100, "btc-btc");

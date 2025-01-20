@@ -1,7 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{
-    Addr, Attribute, Binary, Decimal, Fraction, QuerierWrapper, StdResult, Storage, Uint128,
-};
+use cosmwasm_std::{Addr, Attribute, Binary, Decimal, QuerierWrapper, StdResult, Storage, Uint128};
 use rujira_rs::{
     bow,
     exchange::{SwapCommit, SwapError, Swappable},

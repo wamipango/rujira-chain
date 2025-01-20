@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, Event,
-    MessageInfo, Response, StdResult, Storage, Uint128, WasmMsg,
+    coins, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
+    Response, StdResult, Storage, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
@@ -13,13 +13,16 @@ use rujira_rs::TokenFactory;
 
 use crate::config::Config;
 use crate::error::ContractError;
+use crate::events::{
+    event_account_bond, event_account_claim, event_account_withdraw, event_liquid_bond,
+    event_liquid_unbond,
+};
 use crate::state::{
     account, distribute, execute_account_bond, execute_account_claim, execute_account_withdraw,
     execute_liquid_bond, execute_liquid_unbond, init, status,
 };
 
-// version info for migration info
-const CONTRACT_NAME: &str = "crates.io:rujira-staking";
+const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -93,11 +96,8 @@ fn execute_account(
         AccountMsg::Bond {} => {
             let amount = must_pay(&info, config.bond_denom.as_str())?;
             let reward_amount = execute_account_bond(storage, &info.sender, amount)?;
-            let mut response = Response::default().add_event(
-                Event::new("staking/account/bond")
-                    .add_attribute("owner", info.sender.clone())
-                    .add_attribute("amount", amount),
-            );
+            let mut response =
+                Response::default().add_event(event_account_bond(info.sender.clone(), amount));
             if reward_amount.gt(&Uint128::zero()) {
                 response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),
@@ -109,11 +109,8 @@ fn execute_account(
         AccountMsg::Claim {} => {
             nonpayable(&info)?;
             let reward_amount = execute_account_claim(storage, &info.sender)?;
-            let mut response = Response::default().add_event(
-                Event::new("staking/account/claim")
-                    .add_attribute("owner", info.sender.clone())
-                    .add_attribute("amount", reward_amount),
-            );
+            let mut response = Response::default()
+                .add_event(event_account_claim(info.sender.clone(), reward_amount));
             if reward_amount.gt(&Uint128::zero()) {
                 response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),
@@ -131,12 +128,11 @@ fn execute_account(
             ]);
             send.normalize();
 
-            let mut response = Response::default().add_event(
-                Event::new("staking/account/withdraw")
-                    .add_attribute("owner", info.sender.clone())
-                    .add_attribute("amount", amount)
-                    .add_attribute("rewards", rewards),
-            );
+            let mut response = Response::default().add_event(event_account_withdraw(
+                info.sender.clone(),
+                amount,
+                rewards,
+            ));
             if !send.is_empty() {
                 response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),
@@ -162,24 +158,14 @@ fn execute_liquid(
             let amount = must_pay(&info, config.bond_denom.as_str())?;
             let shares = execute_liquid_bond(storage, amount)?;
             Ok(Response::default()
-                .add_event(
-                    Event::new("staking/liquid/bond")
-                        .add_attribute("owner", info.sender.clone())
-                        .add_attribute("amount", amount)
-                        .add_attribute("shares", shares),
-                )
+                .add_event(event_liquid_bond(info.sender.clone(), amount, shares))
                 .add_message(share_denom.mint_msg(shares, info.sender)))
         }
         LiquidMsg::Unbond {} => {
             let shares = must_pay(&info, share_denom.denom().as_str())?;
             let returned = execute_liquid_unbond(storage, shares)?;
             Ok(Response::default()
-                .add_event(
-                    Event::new("staking/liquid/unbond")
-                        .add_attribute("owner", info.sender.clone())
-                        .add_attribute("shares", shares)
-                        .add_attribute("returned", returned),
-                )
+                .add_event(event_liquid_unbond(info.sender.clone(), shares, returned))
                 .add_message(share_denom.burn_msg(shares))
                 .add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),
@@ -204,7 +190,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::coin;
+    use cosmwasm_std::{coin, Event};
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{
         staking::{AccountResponse, StatusResponse},
