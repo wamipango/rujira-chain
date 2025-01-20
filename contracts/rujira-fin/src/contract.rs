@@ -314,7 +314,7 @@ mod tests {
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
     use rujira_rs::{
         fin::{Denoms, Tick},
-        Chain, Layer1Asset,
+        Layer1Asset,
     };
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};
 

@@ -95,7 +95,8 @@ impl<'a> MarketMaker<'a> {
         let res: StdResult<Option<bow::QuoteResponse>> = self.q.query_wasm_smart(
             contract.to_string(),
             &bow::QueryMsg::Quote(bow::QuoteRequest {
-                price: self.last_price,
+                // TODO: Calculate price of next premium
+                min_price: self.last_price,
                 ask_denom: self.denoms.ask().to_string(),
                 offer_denom: self.denoms.bid().to_string(),
                 data: self.data.clone(),

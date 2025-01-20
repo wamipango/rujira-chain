@@ -109,7 +109,7 @@ impl<'a> MarketMaker<'a> {
         let res: StdResult<Option<bow::QuoteResponse>> = self.q.query_wasm_smart(
             contract.to_string(),
             &bow::QueryMsg::Quote(bow::QuoteRequest {
-                price: self.last_price,
+                min_price: self.last_price,
                 ask_denom: self.denoms.bid(&self.side).to_string(),
                 offer_denom: self.denoms.ask(&self.side).to_string(),
                 data: self.data.clone(),
@@ -195,7 +195,7 @@ mod test {
                                 size,
                                 data: to_json_binary(&size.add(ask_total)).ok(),
                                 price: query
-                                    .price
+                                    .min_price
                                     .unwrap_or(Decimal::one())
                                     .add(Decimal::from_ratio(1u128, 4u128)),
                             })

@@ -152,7 +152,7 @@ impl Strategy for Xyk {
             return Ok(None);
         }
 
-        let offer_size = match req.price {
+        let offer_size = match req.min_price {
             Some(price) => {
                 let offer_dec = Decimal::from_ratio(state.x, 1u128);
                 let ask_dec = Decimal::from_ratio(state.y, 1u128);
@@ -482,7 +482,7 @@ mod test {
                 deps.as_ref(),
                 mock_env(),
                 QuoteRequest {
-                    price: None,
+                    min_price: None,
                     offer_denom: "denom_x".to_string(),
                     ask_denom: "denom_y".to_string(),
                     data: None,
@@ -501,7 +501,7 @@ mod test {
                 deps.as_ref(),
                 mock_env(),
                 QuoteRequest {
-                    price: None,
+                    min_price: None,
                     offer_denom: "denom_x".to_string(),
                     ask_denom: "denom_y".to_string(),
                     data: None,
@@ -523,7 +523,7 @@ mod test {
                 deps.as_ref(),
                 mock_env(),
                 QuoteRequest {
-                    price: None,
+                    min_price: None,
                     offer_denom: "denom_x".to_string(),
                     ask_denom: "denom_y".to_string(),
                     data: None,
@@ -546,7 +546,7 @@ mod test {
                 mock_env(),
                 QuoteRequest {
                     // Request next tick
-                    price: Some(Decimal::from_str("1.9979").unwrap()),
+                    min_price: Some(Decimal::from_str("1.9979").unwrap()),
                     offer_denom: "denom_x".to_string(),
                     ask_denom: "denom_y".to_string(),
                     data: quote.data,
@@ -570,7 +570,7 @@ mod test {
                 deps.as_ref(),
                 mock_env(),
                 QuoteRequest {
-                    price: None,
+                    min_price: None,
                     offer_denom: "denom_y".to_string(),
                     ask_denom: "denom_x".to_string(),
                     data: None,
@@ -589,7 +589,7 @@ mod test {
                 mock_env(),
                 QuoteRequest {
                     // Request next tick
-                    price: Some(Decimal::from_str("0.4994").unwrap()),
+                    min_price: Some(Decimal::from_str("0.4994").unwrap()),
                     offer_denom: "denom_y".to_string(),
                     ask_denom: "denom_x".to_string(),
                     data: quote.data,
@@ -624,7 +624,7 @@ mod test {
                 deps.as_ref(),
                 mock_env(),
                 QuoteRequest {
-                    price: None,
+                    min_price: None,
                     offer_denom: "btc".to_string(),
                     ask_denom: "usdc".to_string(),
                     data: None,
@@ -641,7 +641,7 @@ mod test {
                 deps.as_ref(),
                 mock_env(),
                 QuoteRequest {
-                    price: Some(quote.price),
+                    min_price: Some(quote.price),
                     offer_denom: "btc".to_string(),
                     ask_denom: "usdc".to_string(),
                     data: quote.data,
@@ -661,7 +661,7 @@ mod test {
                 deps.as_ref(),
                 mock_env(),
                 QuoteRequest {
-                    price: Some(quote.price),
+                    min_price: Some(quote.price),
                     offer_denom: "btc".to_string(),
                     ask_denom: "usdc".to_string(),
                     data: quote.data,

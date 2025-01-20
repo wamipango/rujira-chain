@@ -41,10 +41,10 @@ pub enum QueryMsg {
 
 #[cw_serde]
 pub struct QuoteRequest {
-    /// An optional price that should be honoured when present, and set in QuoteResponse::price
-    /// Allows consumers to request prices that match specific ticks (eg Orca requesting prices at a given premium)
-    /// but also allows a Strategy to set its own best price (eg when market making on FIN)
-    pub price: Option<Decimal>,
+    /// The minimum price that BOW must respond with
+    /// This is used eg in FIN to reay the previous price quoted for and in
+    /// ORCA to set the min price of the next premium
+    pub min_price: Option<Decimal>,
 
     /// Denom that the Caller is offering
     /// ie the token that will be sent by FIN to BOW
