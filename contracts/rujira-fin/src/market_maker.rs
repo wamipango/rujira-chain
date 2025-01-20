@@ -1,5 +1,7 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Attribute, Binary, Decimal, QuerierWrapper, Storage, Uint128};
+use cosmwasm_std::{
+    Addr, Attribute, Binary, Decimal, Fraction, QuerierWrapper, StdResult, Storage, Uint128,
+};
 use rujira_rs::{
     bow,
     exchange::{SwapCommit, SwapError, Swappable},
@@ -54,7 +56,10 @@ pub struct MarketMakerOffer {
 
 impl Swappable for MarketMakerOffer {
     fn rate(&self) -> Decimal {
-        self.price
+        match self.side {
+            Side::Base => self.price.inv().unwrap(),
+            Side::Quote => self.price,
+        }
     }
 
     fn attributes(&self) -> Vec<Attribute> {
@@ -117,22 +122,19 @@ impl<'a> MarketMaker<'a> {
     }
 
     fn query_next(&mut self, contract: Addr) -> Option<MarketMakerOffer> {
-        let res: Option<bow::QuoteResponse> = self
-            .q
-            .query_wasm_smart(
-                contract.to_string(),
-                &bow::QuoteRequest {
-                    // TODO: Add Tick
-                    price: self.last_price,
-                    ask_denom: self.denoms.ask(&self.side).to_string(),
-                    bid_denom: self.denoms.bid(&self.side).to_string(),
-                    data: self.data.clone(),
-                },
-            )
-            .ok();
+        let res: StdResult<Option<bow::QuoteResponse>> = self.q.query_wasm_smart(
+            contract.to_string(),
+            &bow::QueryMsg::Quote(bow::QuoteRequest {
+                // TODO: Add Tick
+                price: self.last_price,
+                ask_denom: self.denoms.bid(&self.side).to_string(),
+                bid_denom: self.denoms.ask(&self.side).to_string(),
+                data: self.data.clone(),
+            }),
+        );
 
         match res {
-            Some(res) => {
+            Ok(Some(res)) => {
                 self.bid += Decimal::from_ratio(res.size, 1u128)
                     .mul(res.price)
                     .to_uint_ceil();
@@ -145,7 +147,7 @@ impl<'a> MarketMaker<'a> {
                     commitment: Default::default(),
                 })
             }
-            None => None,
+            _ => None,
         }
     }
 }

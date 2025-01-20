@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
+    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, Fraction,
     MessageInfo, QuerierWrapper, Response, WasmMsg,
 };
 use cw2::set_contract_version;
@@ -212,8 +212,24 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
         QueryMsg::Book { limit, offset } => {
             let limit = limit.unwrap_or(100);
             let offset = offset.unwrap_or(0);
+            let mm_base = MarketMaker::new(
+                deps.querier,
+                config.denoms.clone(),
+                Side::Base,
+                config.market_maker.clone(),
+                config.tick.clone(),
+            );
+
+            let mm_quote = MarketMaker::new(
+                deps.querier,
+                config.denoms,
+                Side::Quote,
+                config.market_maker,
+                config.tick,
+            );
 
             let base = Pool::side(deps.storage, &Side::Base, &oracle)
+                .merge_join_by(mm_base, |x, y| x.rate().cmp(&y.price))
                 .skip(offset as usize)
                 .take(limit as usize)
                 .map(|v| BookItemResponse {
@@ -223,6 +239,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                 .collect();
 
             let quote = Pool::side(deps.storage, &Side::Quote, &oracle)
+                .merge_join_by(mm_quote, |x, y| x.rate().cmp(&y.price))
                 .skip(offset as usize)
                 .take(limit as usize)
                 .map(|v| BookItemResponse {

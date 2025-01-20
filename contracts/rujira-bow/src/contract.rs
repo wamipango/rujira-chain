@@ -113,7 +113,10 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let config = Config::load(deps.storage)?;
     match msg {
-        QueryMsg::Quote(req) => Ok(to_json_binary(&config.strategy.quote(deps, env, req)?)?),
+        QueryMsg::Quote(req) => {
+            let q = config.strategy.quote(deps, env, req)?;
+            Ok(to_json_binary(&q)?)
+        }
     }
 }
 

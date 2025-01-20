@@ -1,10 +1,12 @@
+use std::str::FromStr;
+
 use crate::contract::{execute, instantiate, query};
-use cosmwasm_std::{coin, Decimal, Uint256};
+use cosmwasm_std::{coin, Decimal, Uint128, Uint256};
 use cw_multi_test::{ContractWrapper, Executor};
 use rujira_bow::contract as bow_contract;
 use rujira_rs::{
     bow::{self, Xyk},
-    fin::{BookResponse, Denoms, InstantiateMsg, QueryMsg, Tick},
+    fin::{BookItemResponse, BookResponse, Denoms, InstantiateMsg, QueryMsg, Tick},
     Chain, Layer1Asset, TokenMetadata,
 };
 use rujira_rs_testing::mock_rujira_app;
@@ -23,6 +25,7 @@ fn complete_book_query() {
     let fin_code_id = app.store_code(fin_code);
     let bow_code_id = app.store_code(bow_code);
 
+    let min_k = Uint256::from(10u128).pow(19);
     let bow = app
         .instantiate_contract(
             bow_code_id,
@@ -42,7 +45,7 @@ fn complete_book_query() {
                     "usdc".to_string(),
                     Decimal::from_ratio(1u128, 1000u128),
                     // Requires at least 1 BTC @ 100k, BTC - 8dp, USDC - 6dp
-                    Uint256::from(10u128).pow(20),
+                    min_k.clone(),
                 )),
             },
             &vec![],
@@ -107,7 +110,7 @@ fn complete_book_query() {
         bow.clone(),
         &bow::ExecuteMsg::Deposit {},
         // 2 BTC @ 100k USDC
-        &vec![coin(200_000_000, "btc"), coin(100_000_000_000, "usdc")],
+        &vec![coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
     )
     .unwrap();
 
@@ -124,4 +127,40 @@ fn complete_book_query() {
 
     assert_eq!(book.base.len(), 100);
     assert_eq!(book.quote.len(), 100);
+
+    assert_side(
+        book.quote,
+        vec![
+            // 2 decimal delta, so 999 price = 99,900
+            ("999.000995000000000000", 199_800_199u128),
+            ("997.005989010989010989", 199_600_599u128),
+            ("995.014965069860279441", 199_400_999u128),
+            ("993.027916251246261216", 199_201_400u128),
+            ("991.044840414141363837", 199_002_795u128),
+            ("989.065720739097123411", 198_804_188u128),
+            ("987.090555309811483924", 198_605_581u128),
+        ],
+    );
+
+    assert_side(
+        book.base,
+        vec![
+            ("1001.001001001001001001", 199_800u128),
+            ("1003.006012024048099207", 199_600u128),
+            ("1005.011007968866806376", 199_401u128),
+            ("1007.026069146239244151", 199_201u128),
+            ("1009.041115164672016687", 199_002u128),
+            ("1011.056125631275042328", 198_804u128),
+            ("1013.08126180106245211", 198_605u128),
+        ],
+    );
+}
+
+fn assert_side(side: Vec<BookItemResponse>, items: Vec<(&str, u128)>) {
+    for ((price, amount), item) in items.iter().zip(side) {
+        let price = Decimal::from_str(price).unwrap();
+        let amount = Uint128::from(*amount);
+        assert_eq!(price, item.price);
+        assert_eq!(amount, item.total);
+    }
 }
