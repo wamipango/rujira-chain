@@ -167,8 +167,10 @@ fn complete_book_query() {
     // Single trade in first MM pool
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "1001.0011"),
+        ("price", "1001.001001001001001001"),
         ("offer", "100000000"),
         ("bid", "99900"),
+        ("side", "base"),
     ]));
 
     // BOW returns the BTC for the trade
@@ -229,6 +231,65 @@ fn complete_book_query() {
             ("1006.0017", 197_515u128),
         ],
     );
+
+    // Larger swap, opposite direction
+    let res = app
+        .execute_contract(
+            owner.clone(),
+            fin.clone(),
+            &ExecuteMsg::Swap {
+                min_return: None,
+                to: None,
+                callback: None,
+            },
+            &coins(500_000, "btc"),
+        )
+        .unwrap();
+
+    // 3 trade events
+    res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+        ("rate", "1000"),
+        ("price", "1000"),
+        ("offer", "199900"),
+        ("bid", "199900000"),
+        ("side", "quote"),
+    ]));
+
+    res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+        ("rate", "998.00399"),
+        ("price", "998.003991995997998999"),
+        ("offer", "199900"),
+        ("bid", "199500998"),
+        ("side", "quote"),
+    ]));
+    res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+        ("rate", "996.01395"),
+        ("price", "996.013957048309396245"),
+        ("offer", "100200"),
+        ("bid", "99800599"),
+        ("side", "quote"),
+    ]));
+
+    // BOW returns the USDC for the trade
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", fin.to_string()),
+        ("sender", bow.to_string()),
+        ("amount", "499201597usdc".to_string()),
+    ]));
+
+    // Returns the amount less fees to the buyer
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", owner.to_string()),
+        ("sender", fin.to_string()),
+        ("amount", "491713573usdc".to_string()),
+    ]));
+
+    // And the fees to the fee address
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", fees.to_string()),
+        ("sender", fin.to_string()),
+        ("amount", "7488024usdc".to_string()),
+    ]));
 }
 
 fn assert_side(side: Vec<BookItemResponse>, items: Vec<(&str, u128)>) {

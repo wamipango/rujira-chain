@@ -23,6 +23,7 @@ impl Strategy for Arbitrage {
         &self,
         _deps: Deps,
         _env: Env,
+        _info: MessageInfo,
         _offer: Coin,
         _ask: Coin,
     ) -> Result<(), StrategyError> {
@@ -53,6 +54,7 @@ impl Strategy for Arbitrage {
         &self,
         _deps: Deps,
         _env: Env,
+        _info: MessageInfo,
         _supply: Uint128,
         _balance: Uint128,
     ) -> Result<NativeBalance, StrategyError> {

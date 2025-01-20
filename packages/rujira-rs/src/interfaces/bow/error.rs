@@ -1,4 +1,4 @@
-use cosmwasm_std::{ConversionOverflowError, OverflowError, StdError};
+use cosmwasm_std::{ConversionOverflowError, OverflowError, StdError, Uint128};
 use cw_utils::PaymentError;
 use thiserror::Error;
 
@@ -22,6 +22,12 @@ pub enum StrategyError {
     #[error("InvalidDeposit")]
     InvalidDeposit {},
 
-    #[error("InsufficientReturn")]
-    InsufficientReturn {},
+    #[error("Underflow")]
+    Underflow {},
+
+    #[error("InsufficientReturn expected {expected} got {returned}")]
+    InsufficientReturn {
+        expected: Uint128,
+        returned: Uint128,
+    },
 }

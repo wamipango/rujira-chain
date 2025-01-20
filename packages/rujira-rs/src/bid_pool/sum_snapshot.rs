@@ -2,7 +2,6 @@ use crate::decimal_scaled::DecimalScaled;
 
 use super::pool::Pool;
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Decimal256;
 use cw_storage_plus::{Key, KeyDeserialize, Prefixer, PrimaryKey};
 
 #[cw_serde]

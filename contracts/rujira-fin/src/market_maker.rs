@@ -61,7 +61,16 @@ impl Swappable for MarketMakerOffer {
     }
 
     fn attributes(&self) -> Vec<Attribute> {
-        vec![]
+        vec![
+            Attribute::new(
+                "price",
+                match self.side {
+                    Side::Base => self.price.inv().unwrap().to_string(),
+                    Side::Quote => self.price.to_string(),
+                },
+            ),
+            Attribute::new("side", self.side.to_string()),
+        ]
     }
 
     fn total(&self) -> Uint128 {
@@ -71,7 +80,7 @@ impl Swappable for MarketMakerOffer {
     fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
         let offer_value = Decimal::from_ratio(offer, 1u128)
             .mul(self.price)
-            .to_uint_floor();
+            .to_uint_ceil();
         let pool_value = Decimal::from_ratio(self.total, 1u128)
             .div(self.price)
             .to_uint_floor();
@@ -104,7 +113,7 @@ impl<'a> MarketMaker<'a> {
             &bow::QueryMsg::Quote(bow::QuoteRequest {
                 price: self.last_price,
                 ask_denom: self.denoms.bid(&self.side).to_string(),
-                bid_denom: self.denoms.ask(&self.side).to_string(),
+                offer_denom: self.denoms.ask(&self.side).to_string(),
                 data: self.data.clone(),
             }),
         );

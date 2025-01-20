@@ -1,8 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Timestamp, Uint128};
 
-use crate::Layer1Asset;
-
 use super::Denoms;
 
 /// Standard interface to query contract state

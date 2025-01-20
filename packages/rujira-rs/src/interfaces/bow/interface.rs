@@ -47,12 +47,12 @@ pub struct QuoteRequest {
     /// but also allows a Strategy to set its own best price (eg when market making on FIN)
     pub price: Option<Decimal>,
 
-    /// Denom that the Caller is bidding
+    /// Denom that the Caller is offering
     /// ie the token that will be sent by FIN to BOW
     /// Eg. if a market order USDC buy of RUJI on FIN is being
     /// executed, FIN will require RUJI to execute the swap and so
-    /// the bid_denom here will be USDC and the ask_denom RUJI
-    pub bid_denom: String,
+    /// the offer_denom here will be USDC and the ask_denom RUJI
+    pub offer_denom: String,
 
     /// The denom that the Caller is asking for
     pub ask_denom: String,
@@ -65,13 +65,13 @@ pub struct QuoteRequest {
 pub struct QuoteResponse {
     /// The price of the offer
     /// Quoted in ask_denom, so eg for RUIJ @ $5,
-    /// a bid of RUJI for ask of USDC, price = 5
-    /// a bid of USDC for ask of RUJI, price = 0.2
+    /// an offer of RUJI for ask of USDC, price = 5
+    /// an offer of USDC for ask of RUJI, price = 0.2
     ///
     pub price: Decimal,
 
-    /// The size of the ask_denom that the market maker is willing to make
-    /// at the given price
+    /// The size of the ask_denom that the market maker is willing to accept
+    /// at the QuoteResponse::price
     pub size: Uint128,
 
     /// Optionally provide arbitrary binary data that is returned in subsequent QuoteQuery's

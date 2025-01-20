@@ -43,9 +43,13 @@ pub fn execute(
     match msg {
         ExecuteMsg::Swap { min_return, to, .. } => {
             let offer = one_coin(&info)?;
-            config
-                .strategy
-                .validate(deps.as_ref(), env, offer, min_return.clone())?;
+            config.strategy.validate(
+                deps.as_ref(),
+                env,
+                info.clone(),
+                offer,
+                min_return.clone(),
+            )?;
             let to_address = to
                 .map(|x| deps.api.addr_validate(x.as_str()))
                 .transpose()?
@@ -76,10 +80,13 @@ pub fn execute(
             let t = TokenFactory::new(&env, config.strategy.denom().as_str());
             let supply = t.supply(deps.querier)?;
             let balance = must_pay(&info, t.denom().as_str())?;
-            let withdrawn =
-                config
-                    .strategy
-                    .calculate_ownership(deps.as_ref(), env, supply, balance)?;
+            let withdrawn = config.strategy.calculate_ownership(
+                deps.as_ref(),
+                env,
+                info.clone(),
+                supply,
+                balance,
+            )?;
             Ok(Response::default()
                 .add_message(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),

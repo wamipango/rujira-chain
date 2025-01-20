@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Coins, Deps, Env, MessageInfo, Uint128};
+use cosmwasm_std::{Coin, Coins, Deps, Env, MessageInfo, Storage, Uint128};
 use cw_utils::NativeBalance;
 
 use super::{arbitrage::Arbitrage, error::StrategyError, xyk::Xyk, QuoteRequest, QuoteResponse};
@@ -10,7 +10,14 @@ pub trait Strategy {
     /// Validates a swap size against the strategy
     /// Offer is the amount offered _to_ the strategy (ie increase in local balance)
     /// and Ask is amount requested _from_ the strategy (decrease)
-    fn validate(&self, deps: Deps, env: Env, offer: Coin, ask: Coin) -> Result<(), StrategyError>;
+    fn validate(
+        &self,
+        deps: Deps,
+        env: Env,
+        info: MessageInfo,
+        offer: Coin,
+        ask: Coin,
+    ) -> Result<(), StrategyError>;
 
     /// Quotes for a FIN market maker request
     fn quote(
@@ -35,6 +42,7 @@ pub trait Strategy {
         &self,
         deps: Deps,
         env: Env,
+        info: MessageInfo,
         supply: Uint128,
         balance: Uint128,
     ) -> Result<NativeBalance, StrategyError>;
@@ -60,8 +68,15 @@ impl Strategy for Strategies {
         delegate_strategy!(self, denom)
     }
 
-    fn validate(&self, deps: Deps, env: Env, offer: Coin, ask: Coin) -> Result<(), StrategyError> {
-        delegate_strategy!(self, validate, deps, env, offer, ask)
+    fn validate(
+        &self,
+        deps: Deps,
+        env: Env,
+        info: MessageInfo,
+        offer: Coin,
+        ask: Coin,
+    ) -> Result<(), StrategyError> {
+        delegate_strategy!(self, validate, deps, env, info, offer, ask)
     }
 
     fn quote(
@@ -87,9 +102,10 @@ impl Strategy for Strategies {
         &self,
         deps: Deps,
         env: Env,
+        info: MessageInfo,
         supply: Uint128,
         balance: Uint128,
     ) -> Result<NativeBalance, StrategyError> {
-        delegate_strategy!(self, calculate_ownership, deps, env, supply, balance)
+        delegate_strategy!(self, calculate_ownership, deps, env, info, supply, balance)
     }
 }

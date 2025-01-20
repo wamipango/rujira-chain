@@ -7,7 +7,6 @@ use cosmwasm_std::{
 use cw_utils::NativeBalance;
 use std::{
     cmp::min,
-    fmt,
     ops::{Add, Div, Mul, Sub},
 };
 
@@ -38,25 +37,37 @@ impl Xyk {
         &self,
         deps: Deps,
         env: Env,
+        funds: Vec<Coin>,
         offer: &str,
         ask: &str,
     ) -> Result<PoolState, StrategyError> {
-        let x = deps
-            .querier
-            .query_balance(env.contract.address.clone(), self.x.clone())?;
-        let y = deps
-            .querier
-            .query_balance(env.contract.address, self.y.clone())?;
+        // Funds deposited in the tx need to be removed from the current balances to get the correct state
+        let mut balances = NativeBalance(deps.querier.query_all_balances(env.contract.address)?);
+        for c in funds {
+            balances = (balances - c)?;
+        }
+
+        let vec = balances.into_vec();
+        let x = vec
+            .iter()
+            .find(|x| x.denom == self.x)
+            .map(|x| x.amount)
+            .unwrap_or_default();
+        let y = vec
+            .iter()
+            .find(|y| y.denom == self.y)
+            .map(|y| y.amount)
+            .unwrap_or_default();
 
         if offer == self.x && ask == self.y {
-            return Ok(PoolState::new(x.amount, y.amount));
-        };
+            return Ok(PoolState::new(x, y));
+        }
 
         // Invert the balances at load time, so all subsequent operations
         // are agnostic to the sale direction
         if offer == self.y && ask == self.x {
-            return Ok(PoolState::new(y.amount, x.amount));
-        };
+            return Ok(PoolState::new(y, x));
+        }
         Err(StrategyError::InvalidPair {})
     }
 }
@@ -74,7 +85,7 @@ impl PoolState {
         let return_amount = y.sub(self.y);
         let price: Decimal = Decimal::from_ratio(return_amount, offer_amount);
         self.k = Uint256::from(self.x) * Uint256::from(self.y);
-        ensure!(self.k >= k, StrategyError::InsufficientReturn {});
+        ensure!(self.k >= k, StrategyError::Underflow {});
         Ok((return_amount, price))
     }
 
@@ -93,12 +104,28 @@ impl Strategy for Xyk {
         format!("bow-xyk-{}-{}", self.x, self.y)
     }
 
-    fn validate(&self, deps: Deps, env: Env, offer: Coin, ask: Coin) -> Result<(), StrategyError> {
-        let mut state = self.state(deps, env, offer.denom.as_str(), ask.denom.as_str())?;
+    fn validate(
+        &self,
+        deps: Deps,
+        env: Env,
+        info: MessageInfo,
+        offer: Coin,
+        ask: Coin,
+    ) -> Result<(), StrategyError> {
+        let mut state = self.state(
+            deps,
+            env,
+            info.funds,
+            offer.denom.as_str(),
+            ask.denom.as_str(),
+        )?;
         let (return_amount, _) = state.swap(offer.amount)?;
         ensure!(
             return_amount >= ask.amount,
-            StrategyError::InsufficientReturn {}
+            StrategyError::InsufficientReturn {
+                expected: ask.amount,
+                returned: return_amount,
+            }
         );
 
         Ok(())
@@ -112,7 +139,14 @@ impl Strategy for Xyk {
     ) -> Result<Option<QuoteResponse>, StrategyError> {
         let mut state: PoolState = match req.data {
             Some(binary) => from_json(binary)?,
-            None => self.state(deps, env, req.bid_denom.as_str(), req.ask_denom.as_str())?,
+            None => self.state(
+                deps,
+                env,
+                // Quote is always a query, no need for info.funds
+                vec![],
+                req.offer_denom.as_str(),
+                req.ask_denom.as_str(),
+            )?,
         };
         if state.k.lt(&self.min_k) {
             return Ok(None);
@@ -131,6 +165,7 @@ impl Strategy for Xyk {
 
         let current_price = state.price();
         let (ask_size, price) = state.swap(offer_size)?;
+
         if price.ge(&current_price) {
             return Ok(None);
         }
@@ -158,7 +193,13 @@ impl Strategy for Xyk {
                 deposited.add(x.clone())?;
                 deposited.add(y.clone())?;
 
-                let data = self.state(deps, env, self.x.as_str(), self.y.as_str())?;
+                let data = self.state(
+                    deps,
+                    env,
+                    info.funds.clone(),
+                    self.x.as_str(),
+                    self.y.as_str(),
+                )?;
                 let minted = if supply.is_zero() {
                     Uint256::from(x.amount).mul(Uint256::from(y.amount)).isqrt()
                 } else {
@@ -179,13 +220,14 @@ impl Strategy for Xyk {
         &self,
         deps: Deps,
         env: Env,
+        info: MessageInfo,
         supply: Uint128,
         balance: Uint128,
     ) -> Result<NativeBalance, StrategyError> {
         if supply.is_zero() || balance.is_zero() {
             return Ok(NativeBalance::default());
         }
-        let state = self.state(deps, env, self.x.as_str(), self.y.as_str())?;
+        let state = self.state(deps, env, info.funds, self.x.as_str(), self.y.as_str())?;
         if supply == balance {
             let mut balances = NativeBalance(vec![
                 coin(state.x.u128(), self.x.as_str()),
@@ -237,10 +279,12 @@ mod test {
             MOCK_CONTRACT_ADDR,
             &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
         )]);
+        let sender = Addr::unchecked("sender");
 
         xyk.validate(
             deps.as_ref(),
             mock_env(),
+            message_info(&sender, &vec![]),
             coin(50, "denom_x"),
             coin(95, "denom_y"),
         )
@@ -249,6 +293,7 @@ mod test {
         xyk.validate(
             deps.as_ref(),
             mock_env(),
+            message_info(&sender, &vec![]),
             coin(50, "denom_x"),
             coin(96, "denom_y"),
         )
@@ -257,6 +302,7 @@ mod test {
         xyk.validate(
             deps.as_ref(),
             mock_env(),
+            message_info(&sender, &vec![]),
             coin(100, "denom_y"),
             coin(47, "denom_x"),
         )
@@ -265,6 +311,7 @@ mod test {
         xyk.validate(
             deps.as_ref(),
             mock_env(),
+            message_info(&sender, &vec![]),
             coin(100, "denom_y"),
             coin(48, "denom_x"),
         )
@@ -360,7 +407,13 @@ mod test {
         )]);
 
         let amount = xyk
-            .calculate_ownership(deps.as_ref(), mock_env(), Uint128::zero(), Uint128::zero())
+            .calculate_ownership(
+                deps.as_ref(),
+                mock_env(),
+                message_info(&Addr::unchecked("sender"), &vec![]),
+                Uint128::zero(),
+                Uint128::zero(),
+            )
             .unwrap();
 
         assert_eq!(amount, NativeBalance::default());
@@ -369,6 +422,7 @@ mod test {
             .calculate_ownership(
                 deps.as_ref(),
                 mock_env(),
+                message_info(&Addr::unchecked("sender"), &vec![]),
                 Uint128::from(1000u128),
                 Uint128::zero(),
             )
@@ -380,6 +434,7 @@ mod test {
             .calculate_ownership(
                 deps.as_ref(),
                 mock_env(),
+                message_info(&Addr::unchecked("sender"), &vec![]),
                 Uint128::from(1000u128),
                 Uint128::from(125u128),
             )
@@ -428,7 +483,7 @@ mod test {
                 mock_env(),
                 QuoteRequest {
                     price: None,
-                    bid_denom: "denom_x".to_string(),
+                    offer_denom: "denom_x".to_string(),
                     ask_denom: "denom_y".to_string(),
                     data: None,
                 },
@@ -447,7 +502,7 @@ mod test {
                 mock_env(),
                 QuoteRequest {
                     price: None,
-                    bid_denom: "denom_x".to_string(),
+                    offer_denom: "denom_x".to_string(),
                     ask_denom: "denom_y".to_string(),
                     data: None,
                 },
@@ -469,7 +524,7 @@ mod test {
                 mock_env(),
                 QuoteRequest {
                     price: None,
-                    bid_denom: "denom_x".to_string(),
+                    offer_denom: "denom_x".to_string(),
                     ask_denom: "denom_y".to_string(),
                     data: None,
                 },
@@ -492,7 +547,7 @@ mod test {
                 QuoteRequest {
                     // Request next tick
                     price: Some(Decimal::from_str("1.9979").unwrap()),
-                    bid_denom: "denom_x".to_string(),
+                    offer_denom: "denom_x".to_string(),
                     ask_denom: "denom_y".to_string(),
                     data: quote.data,
                 },
@@ -516,7 +571,7 @@ mod test {
                 mock_env(),
                 QuoteRequest {
                     price: None,
-                    bid_denom: "denom_y".to_string(),
+                    offer_denom: "denom_y".to_string(),
                     ask_denom: "denom_x".to_string(),
                     data: None,
                 },
@@ -535,7 +590,7 @@ mod test {
                 QuoteRequest {
                     // Request next tick
                     price: Some(Decimal::from_str("0.4994").unwrap()),
-                    bid_denom: "denom_y".to_string(),
+                    offer_denom: "denom_y".to_string(),
                     ask_denom: "denom_x".to_string(),
                     data: quote.data,
                 },
@@ -548,4 +603,117 @@ mod test {
         );
         assert_eq!(quote.size, Uint128::from(796_527u128));
     }
+
+    #[test]
+    fn test_quote_2() {
+        let xyk = Xyk {
+            x: "btc".to_string(),
+            y: "usdc".to_string(),
+            min_k: Uint256::from(2_000_001u128),
+            step: Decimal::from_ratio(1u128, 1000u128),
+        };
+        let sender = Addr::unchecked("sender");
+
+        let deps = mock_dependencies_with_balances(&[(
+            MOCK_CONTRACT_ADDR,
+            &vec![coin(199900100, "btc"), coin(200100000000, "usdc")],
+        )]);
+
+        let quote = xyk
+            .quote(
+                deps.as_ref(),
+                mock_env(),
+                QuoteRequest {
+                    price: None,
+                    offer_denom: "btc".to_string(),
+                    ask_denom: "usdc".to_string(),
+                    data: None,
+                },
+            )
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(quote.price, Decimal::from_str("1000").unwrap());
+        assert_eq!(quote.size, Uint128::from(199900000u128));
+
+        let quote = xyk
+            .quote(
+                deps.as_ref(),
+                mock_env(),
+                QuoteRequest {
+                    price: Some(quote.price),
+                    offer_denom: "btc".to_string(),
+                    ask_denom: "usdc".to_string(),
+                    data: quote.data,
+                },
+            )
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            quote.price,
+            Decimal::from_str("998.003991995997998999").unwrap()
+        );
+        assert_eq!(quote.size, Uint128::from(199500998u128));
+
+        let quote = xyk
+            .quote(
+                deps.as_ref(),
+                mock_env(),
+                QuoteRequest {
+                    price: Some(quote.price),
+                    offer_denom: "btc".to_string(),
+                    ask_denom: "usdc".to_string(),
+                    data: quote.data,
+                },
+            )
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            quote.price,
+            Decimal::from_str("996.013957048309396245").unwrap()
+        );
+        assert_eq!(quote.size, Uint128::from(199102194u128));
+
+        // Simulate a swap of 500_000 of btc to usdc across these bids
+        // 199900000 for 199900 @ 1000
+        // 199500998 for 199900 @ 998.003991995997998999
+        // 99800599 for 100200 @ 996.01396207585
+
+        xyk.validate(
+            deps.as_ref(),
+            mock_env(),
+            message_info(&sender, &vec![]),
+            coin(500_000, "btc"),
+            coin(499_201_597, "usdc"),
+        )
+        .unwrap();
+    }
 }
+// ---- interfaces::bow::xyk::test::test_quote_2 stdout ----
+// [packages/rujira-rs/src/interfaces/bow/xyk.rs:97:9] &state = PoolState {
+//     x: Uint128(
+//         199900100,
+//     ),
+//     y: Uint128(
+//         200100000000,
+//     ),
+//     k: Uint256(
+//         40000010010000000000,
+//     ),
+// }
+// offer 500000btc
+// ask 499201597usdc
+// return_amount 499251247
+// [packages/rujira-rs/src/interfaces/bow/xyk.rs:102:9] &state = PoolState {
+//     x: Uint128(
+//         200400100,
+//     ),
+//     y: Uint128(
+//         199600748753,
+//     ),
+//     k: Uint256(
+//         40000010010176075300,
+//     ),
+// }

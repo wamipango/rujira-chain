@@ -67,12 +67,12 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(
-            tick.truncate(&Decimal::from_str("0.00000123").unwrap()),
+            tick.truncate_floor(&Decimal::from_str("0.00000123").unwrap()),
             Decimal::from_str("0.0000012").unwrap()
         );
 
         assert_eq!(
-            tick.truncate(&Decimal::from_str("0.00000129").unwrap()),
+            tick.truncate_floor(&Decimal::from_str("0.00000129").unwrap()),
             Decimal::from_str("0.0000012").unwrap()
         );
 
