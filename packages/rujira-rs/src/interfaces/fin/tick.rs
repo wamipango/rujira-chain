@@ -11,18 +11,29 @@ impl Tick {
     }
 
     pub fn validate(&self, v: &Decimal) -> Result<(), TickError> {
-        if v == self.truncate(v) {
+        if v == self.truncate_floor(v) {
             return Ok(());
         }
         Err(TickError::Invalid { v: *v })
     }
 
-    fn truncate(&self, v: &Decimal) -> Decimal {
+    pub fn truncate_floor(&self, v: &Decimal) -> Decimal {
+        self.do_truncate(v, |x, y| x.mul_floor(y))
+    }
+
+    pub fn truncate_ceil(&self, v: &Decimal) -> Decimal {
+        self.do_truncate(v, |x, y| x.mul_ceil(y))
+    }
+
+    fn do_truncate<F>(&self, v: &Decimal, fn_trunc: F) -> Decimal
+    where
+        F: Fn(Uint128, Decimal) -> Uint128,
+    {
         let int = v.numerator();
         let len = int.to_string().as_str().bytes().len() as u32;
         let decimals: u32 = len - self.0 as u32;
         let pow = Uint128::from(10u128).pow(decimals);
-        let truncated = Uint128::one().mul_floor(Decimal::from_ratio(int, pow));
+        let truncated = fn_trunc(Uint128::one(), Decimal::from_ratio(int, pow));
         Decimal::from_ratio(truncated * pow, v.denominator())
     }
 }

@@ -51,15 +51,13 @@ pub struct MarketMakerOffer {
     pub price: Decimal,
     pub total: Uint128,
     side: Side,
+    rate: Decimal,
     commitment: (Uint128, Uint128),
 }
 
 impl Swappable for MarketMakerOffer {
     fn rate(&self) -> Decimal {
-        match self.side {
-            Side::Base => self.price.inv().unwrap(),
-            Side::Quote => self.price,
-        }
+        self.rate
     }
 
     fn attributes(&self) -> Vec<Attribute> {
@@ -104,7 +102,6 @@ impl<'a> MarketMaker<'a> {
         let res: StdResult<Option<bow::QuoteResponse>> = self.q.query_wasm_smart(
             contract.to_string(),
             &bow::QueryMsg::Quote(bow::QuoteRequest {
-                // TODO: Add Tick
                 price: self.last_price,
                 ask_denom: self.denoms.bid(&self.side).to_string(),
                 bid_denom: self.denoms.ask(&self.side).to_string(),
@@ -119,9 +116,19 @@ impl<'a> MarketMaker<'a> {
                     .to_uint_ceil();
                 self.ask += res.size;
                 self.data = res.data;
-                self.last_price = Some(res.price);
+                let price = res.price;
+                self.last_price = Some(price);
+                // Rate is used for presentation, and for sorting and grouping `Iter<impl Swappable>`
+                // Truncate to "worse" price so that execution price is fractionally better than
+                // the price rendered
+                let rate = match self.side {
+                    Side::Base => self.tick.truncate_ceil(&res.price.inv().unwrap()),
+                    Side::Quote => self.tick.truncate_floor(&res.price),
+                };
+
                 Some(MarketMakerOffer {
-                    price: res.price,
+                    price,
+                    rate,
                     total: res.size,
                     side: self.side.clone(),
                     commitment: Default::default(),
@@ -207,30 +214,35 @@ mod test {
             vec![
                 MarketMakerOffer {
                     price: Decimal::from_str("1.25").unwrap(),
+                    rate: Decimal::from_str("1.25").unwrap(),
                     total: Uint128::from(100u128),
                     side: Side::Quote,
                     commitment: Default::default()
                 },
                 MarketMakerOffer {
                     price: Decimal::from_str("1.5").unwrap(),
+                    rate: Decimal::from_str("1.5").unwrap(),
                     total: Uint128::from(200u128),
                     side: Side::Quote,
                     commitment: Default::default()
                 },
                 MarketMakerOffer {
                     price: Decimal::from_str("1.75").unwrap(),
+                    rate: Decimal::from_str("1.75").unwrap(),
                     total: Uint128::from(600u128),
                     side: Side::Quote,
                     commitment: Default::default()
                 },
                 MarketMakerOffer {
                     price: Decimal::from_str("2").unwrap(),
+                    rate: Decimal::from_str("2").unwrap(),
                     total: Uint128::from(1800u128),
                     side: Side::Quote,
                     commitment: Default::default()
                 },
                 MarketMakerOffer {
                     price: Decimal::from_str("2.25").unwrap(),
+                    rate: Decimal::from_str("2.25").unwrap(),
                     total: Uint128::from(5400u128),
                     side: Side::Quote,
                     commitment: Default::default()
@@ -243,6 +255,7 @@ mod test {
         // Quote partial fill
         let mut o = MarketMakerOffer {
             price: Decimal::from_str("1.25").unwrap(),
+            rate: Decimal::from_str("1.25").unwrap(),
             total: Uint128::from(10000u128),
             side: Side::Quote,
             commitment: Default::default(),
@@ -254,6 +267,7 @@ mod test {
         // Quote full fill
         let mut o = MarketMakerOffer {
             price: Decimal::from_str("1.25").unwrap(),
+            rate: Decimal::from_str("1.25").unwrap(),
             total: Uint128::from(10000u128),
             side: Side::Quote,
             commitment: Default::default(),
@@ -265,6 +279,7 @@ mod test {
         // Base partial fill
         let mut o = MarketMakerOffer {
             price: Decimal::from_str("1.25").unwrap(),
+            rate: Decimal::from_str("0.8").unwrap(),
             total: Uint128::from(10000u128),
             side: Side::Base,
             commitment: Default::default(),
@@ -276,6 +291,7 @@ mod test {
         // Base full fill
         let mut o = MarketMakerOffer {
             price: Decimal::from_str("1.25").unwrap(),
+            rate: Decimal::from_str("0.8").unwrap(),
             total: Uint128::from(10000u128),
             side: Side::Base,
             commitment: Default::default(),
