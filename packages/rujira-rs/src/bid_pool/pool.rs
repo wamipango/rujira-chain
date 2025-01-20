@@ -105,9 +105,8 @@ impl Pool {
         // If sum is not incremented, bids are not filled.
         // Eg     sum = 0.99999999999999999999999999999999999999999999999999992559979936021098395430438
         //    product = 0.0000000000000000000000000000000000000000000000000000000000000000000000000000000006226962958147167932332866989055998293039199447359426092824598426728536322091
-        // And so the scale of rthe product is too small to increment the sum. At this point the pool
+        // And so the scale of the product is too small to increment the sum. At this point the pool
         // has scaled too much and we can't execute a distribution
-        // TODO: Can we "cancel" the bids?
         let sum = self.sum + self.product * ratio;
         if sum == self.sum {
             return Err(BidPoolError::DistributionError {});
