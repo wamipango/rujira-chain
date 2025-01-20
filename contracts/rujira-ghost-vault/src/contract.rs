@@ -10,7 +10,7 @@ use rujira_rs::{SharePool, TokenFactory};
 
 use crate::config::Config;
 use crate::error::ContractError;
-use crate::state::{DEBT_POOL, DEPOSIT_POOL};
+use crate::state::{update_interest, DEBT_POOL, DEPOSIT_POOL, MARKETS};
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -41,6 +41,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
+    update_interest(deps.storage, &config)?;
     let rcpt = TokenFactory::new(&env, format!("ghost-vault-{}-rcpt", config.denom).as_str());
     let debt = TokenFactory::new(&env, format!("ghost-vault-{}-debt", config.denom).as_str());
     match msg {
@@ -64,6 +65,8 @@ pub fn execute(
                 }))
         }
         ExecuteMsg::Borrow { amount } => {
+            MARKETS.load(deps.storage, info.sender.clone())?;
+
             let mut pool = DEBT_POOL.load(deps.storage)?;
             let mint = pool.join(amount)?;
             DEPOSIT_POOL.save(deps.storage, &pool)?;
@@ -79,6 +82,8 @@ pub fn execute(
                 }))
         }
         ExecuteMsg::Repay {} => {
+            MARKETS.load(deps.storage, info.sender.clone())?;
+
             // TODO: Fetch the debt token + deposit token
             let amount = must_pay(&info, config.denom.as_str())?;
             let debt_amount = must_pay(&info, debt.denom().as_str())?;
