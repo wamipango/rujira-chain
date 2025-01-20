@@ -50,6 +50,7 @@ impl Config {
         fee_taker: Option<Decimal>,
         fee_maker: Option<Decimal>,
         fee_address: Option<Addr>,
+        oracles: Option<[Layer1Asset; 2]>,
     ) {
         if let Some(tick) = tick {
             self.tick = tick;
@@ -66,6 +67,9 @@ impl Config {
         if let Some(fee_address) = fee_address {
             self.fee_address = fee_address;
         }
+        if let Some(oracles) = oracles {
+            self.oracles = Some(oracles);
+        }
     }
 }
 
@@ -74,6 +78,7 @@ impl From<Config> for ConfigResponse {
         Self {
             denoms: value.denoms,
             oracles: value.oracles,
+            market_maker: value.market_maker.map(|x| x.to_string()),
             tick: value.tick,
             fee_maker: value.fee_maker,
             fee_taker: value.fee_taker,

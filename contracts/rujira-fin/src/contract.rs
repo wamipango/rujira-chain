@@ -169,6 +169,7 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             fee_maker,
             fee_address,
             market_maker,
+            oracles,
         } => {
             let fee_address = fee_address
                 .map(|x| deps.api.addr_validate(&x))
@@ -179,7 +180,14 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
                 .transpose()?;
             let mut config = CONFIG.load(deps.storage)?;
 
-            config.update(tick, market_maker, fee_taker, fee_maker, fee_address);
+            config.update(
+                tick,
+                market_maker,
+                fee_taker,
+                fee_maker,
+                fee_address,
+                oracles,
+            );
             config.save(deps.storage)?;
             Ok(Response::default())
         }
@@ -306,7 +314,7 @@ mod tests {
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
     use rujira_rs::{
         fin::{Denoms, Tick},
-        Layer1Asset,
+        Chain, Layer1Asset,
     };
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};
 
@@ -315,7 +323,7 @@ mod tests {
 
         let owner = app.api().addr_make("owner");
 
-        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query).with_sudo(sudo));
         let code_id = app.store_code(code);
         let contract = app
             .instantiate_contract(
@@ -623,5 +631,48 @@ mod tests {
             ("sender", contract.as_str()),
             ("amount", "46978btc-btc,46605879eth-usdc"),
         ]));
+    }
+
+    #[test]
+    fn update_config() {
+        let (mut app, contract) = setup();
+        app.wasm_sudo(
+            contract.clone(),
+            &SudoMsg::UpdateConfig {
+                tick: Some(Tick::new(8)),
+                fee_taker: Some(Decimal::from_ratio(1u128, 100u128)),
+                fee_maker: Some(Decimal::from_ratio(2u128, 100u128)),
+                fee_address: Some(app.api().addr_make("fees2").to_string()),
+                market_maker: Some(app.api().addr_make("mm2").to_string()),
+                oracles: Some([
+                    Layer1Asset::try_from("ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48")
+                        .unwrap(),
+                    Layer1Asset::try_from("BTC.BTC").unwrap(),
+                ]),
+            },
+        )
+        .unwrap();
+
+        let config: ConfigResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Config {})
+            .unwrap();
+
+        assert_eq!(config.tick, Tick::new(8));
+        assert_eq!(config.fee_taker, Decimal::from_ratio(1u128, 100u128));
+        assert_eq!(config.fee_maker, Decimal::from_ratio(2u128, 100u128));
+        assert_eq!(config.fee_address, app.api().addr_make("fees2").to_string());
+        assert_eq!(
+            config.market_maker,
+            Some(app.api().addr_make("mm2").to_string())
+        );
+        assert_eq!(
+            config.oracles,
+            Some([
+                Layer1Asset::try_from("ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",)
+                    .unwrap(),
+                Layer1Asset::try_from("BTC.BTC").unwrap(),
+            ])
+        );
     }
 }

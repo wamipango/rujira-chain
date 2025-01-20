@@ -46,6 +46,9 @@ pub struct ConfigResponse {
     /// See [InstantiateMsg::oracles]
     pub oracles: Option<[Layer1Asset; 2]>,
 
+    /// See [InstantiateMsg::market_maker]
+    pub market_maker: Option<String>,
+
     /// See [InstantiateMsg::tick]
     pub tick: Tick,
 
