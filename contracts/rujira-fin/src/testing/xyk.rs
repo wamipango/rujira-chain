@@ -297,6 +297,19 @@ fn mm_book() {
         ("sender", fin.to_string()),
         ("amount", "7488024usdc".to_string()),
     ]));
+
+    // Check large in first dfirection succeeds
+    app.execute_contract(
+        owner.clone(),
+        fin.clone(),
+        &ExecuteMsg::Swap {
+            min_return: None,
+            to: None,
+            callback: None,
+        },
+        &coins(600_000_000, "usdc"),
+    )
+    .unwrap();
 }
 
 #[test]
