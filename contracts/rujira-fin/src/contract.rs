@@ -262,7 +262,7 @@ fn swap_iter<'a>(
         config.tick.clone(),
     );
 
-    Pool::iter(deps.storage, &side, oracle).merge_join_by(market_maker, move |x, y| match side {
+    Pool::iter(deps.storage, side, oracle).merge_join_by(market_maker, move |x, y| match side {
         Side::Base => x.rate().cmp(&y.rate()),
         Side::Quote => y.rate().cmp(&x.rate()),
     })
@@ -533,7 +533,7 @@ mod tests {
                     to: None,
                     callback: None,
                 },
-                &vec![swap_amount],
+                &[swap_amount],
             )
             .unwrap();
 

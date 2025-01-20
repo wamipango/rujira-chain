@@ -150,7 +150,7 @@ impl Iterator for MarketMaker<'_> {
     type Item = MarketMakerOffer;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.contract.clone().map(|x| self.query_next(x)).flatten()
+        self.contract.clone().and_then(|x| self.query_next(x))
     }
 }
 
@@ -175,7 +175,7 @@ mod test {
                     bow::QueryMsg::Quote(query) => {
                         let ask_total: Uint128 = query
                             .data
-                            .map(|x| from_json(x))
+                            .map(from_json)
                             .transpose()
                             .unwrap()
                             .unwrap_or_default();

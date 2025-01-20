@@ -1,6 +1,5 @@
 use std::cmp::Ordering;
 use std::fmt::Write;
-use std::i64;
 use std::ops::{Add, Div, Mul};
 use std::{fmt, ops::Sub};
 
@@ -41,13 +40,13 @@ impl DecimalScaled {
             return;
         }
         while self.0 .0 % Uint256::from(10u64) == Uint256::zero() && !self.is_zero() {
-            self.0 .0 = self.0 .0 / Uint256::from(10u64);
+            self.0 .0 /= Uint256::from(10u64);
             self.0 .1 -= 1;
         }
     }
 
     pub fn to_uint_floor(&self) -> Uint256 {
-        match Uint256::from(10u128).checked_pow(self.0 .1.abs() as u32) {
+        match Uint256::from(10u128).checked_pow(self.0 .1.unsigned_abs() as u32) {
             Ok(v) => {
                 if self.0 .1 < 0 {
                     self.0 .0.mul(v)
@@ -98,7 +97,7 @@ impl DecimalScaled {
                     Ok(v) => f(v, other.0 .0, other.0 .1),
                     Err(OverflowError { .. }) => {
                         // Shave an order of precision off and try again
-                        g(self.clone(), other.truncate(1))
+                        g(*self, other.truncate(1))
                     }
                 }
             }
@@ -133,7 +132,7 @@ impl From<Decimal256> for DecimalScaled {
         let mut decimals = Decimal256::DECIMAL_PLACES as i64;
 
         while val % Uint256::from(10u64) == Uint256::zero() {
-            val = val / Uint256::from(10u64);
+            val /= Uint256::from(10u64);
             decimals -= 1;
         }
 
@@ -211,7 +210,7 @@ impl Fraction<Uint256> for DecimalScaled {
         if self.0 .1 < 0 {
             self.0
                  .0
-                .mul(Uint256::from(10u128).pow(self.0 .1.abs() as u32))
+                .mul(Uint256::from(10u128).pow(self.0 .1.unsigned_abs() as u32))
         } else {
             self.0 .0
         }
@@ -221,7 +220,7 @@ impl Fraction<Uint256> for DecimalScaled {
         if self.0 .1 <= 0 {
             Uint256::one()
         } else {
-            Uint256::from(10u128).pow(self.0 .1.abs() as u32)
+            Uint256::from(10u128).pow(self.0 .1.unsigned_abs() as u32)
         }
     }
 
@@ -280,15 +279,7 @@ impl fmt::Display for DecimalScaled {
 
             Ok(())
         } else {
-            write!(
-                f,
-                "0.{}",
-                format!(
-                    "{:0>width$}",
-                    self.0 .0.to_string(),
-                    width = self.0 .1 as usize
-                )
-            )
+            write!(f, "0.{:0>width$}", self.0 .0, width = self.0 .1 as usize)
         }
     }
 }

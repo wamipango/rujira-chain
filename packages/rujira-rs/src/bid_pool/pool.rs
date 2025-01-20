@@ -1,4 +1,4 @@
-use std::ops::{Div, Mul};
+use std::ops::{Div, Mul, Sub};
 
 use super::{bid::Bid, BidPoolError, SumSnapshot};
 use crate::decimal_scaled::DecimalScaled;
@@ -36,7 +36,7 @@ impl Pool {
         Bid {
             amount,
             filled: Uint256::zero(),
-            product_snapshot: self.product.clone(),
+            product_snapshot: self.product,
             sum_snapshot: self.sum,
             epoch_snapshot: self.epoch,
         }
@@ -151,7 +151,8 @@ impl Pool {
             return Ok(Uint256::zero());
         }
         let reference_ss = sum_snapshot.unwrap_or(bid.sum_snapshot);
-        let res = DecimalScaled::from(reference_ss - bid.sum_snapshot)
+        let res = reference_ss
+            .sub(bid.sum_snapshot)
             .mul(bid.amount)
             .div(bid.product_snapshot)
             .to_uint_floor();

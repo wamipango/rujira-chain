@@ -66,7 +66,7 @@ impl Order {
             .sub_prefix(owner.clone())
             .range(storage, None, None, cosmwasm_std::Order::Ascending)
             .skip(offset)
-            .take(limit as usize)
+            .take(limit)
             .map(|x| {
                 x.map(|(k, (updated_at, offer, bid))| {
                     (

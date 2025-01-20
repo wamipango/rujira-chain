@@ -35,7 +35,6 @@ pub enum SudoMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
-    ///
     #[returns(QuoteResponse)]
     Quote(QuoteRequest),
 }

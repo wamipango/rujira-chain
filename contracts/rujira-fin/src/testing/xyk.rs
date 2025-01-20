@@ -44,10 +44,10 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
                     "usdc".to_string(),
                     Decimal::from_ratio(1u128, 1000u128),
                     // Requires at least 1 BTC @ 100k, BTC - 8dp, USDC - 6dp
-                    min_k.clone(),
+                    min_k,
                 )),
             },
-            &vec![],
+            &[],
             "bow",
             None,
         )
@@ -72,7 +72,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
                 fee_maker: Decimal::from_ratio(30u128, 1000u128),
                 fee_address: fees.to_string(),
             },
-            &vec![],
+            &[],
             "fin",
             None,
         )
@@ -118,7 +118,7 @@ fn mm_book() {
         bow.clone(),
         &bow::ExecuteMsg::Deposit {},
         // 2 BTC @ 100k USDC
-        &vec![coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
+        &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
     )
     .unwrap();
 
@@ -346,7 +346,7 @@ fn combined_book() {
         bow.clone(),
         &bow::ExecuteMsg::Deposit {},
         // 2 BTC @ 100k USDC
-        &vec![coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
+        &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
     )
     .unwrap();
 

@@ -102,7 +102,7 @@ mod tests {
         let mut storage = MockStorage::new();
         let oracle = TestOracle(Decimal::one());
         let mut base = Pool::load(
-            &mut storage,
+            &storage,
             &Price::Fixed(Decimal::from_str("1.15").unwrap()),
             &Side::Base,
             &oracle,
@@ -143,7 +143,7 @@ mod tests {
 
         let mut storage = MockStorage::new();
         let mut base = Pool::load(
-            &mut storage,
+            &storage,
             &Price::Fixed(Decimal::from_str("1.15").unwrap()),
             &Side::Base,
             &oracle,
@@ -157,7 +157,7 @@ mod tests {
         .unwrap();
 
         let mut quote = Pool::load(
-            &mut storage,
+            &storage,
             &Price::Fixed(Decimal::from_str("1.5").unwrap()),
             &Side::Quote,
             &oracle,
@@ -230,7 +230,7 @@ mod tests {
         assert_eq!(res, NativeBalance(coins(599u128, "usdc")));
 
         let base = Pool::load(
-            &mut storage,
+            &storage,
             &Price::Fixed(Decimal::from_str("1.15").unwrap()),
             &Side::Base,
             &oracle,
@@ -239,7 +239,7 @@ mod tests {
         assert_eq!(base.total(), Uint128::zero());
 
         let base = Pool::load(
-            &mut storage,
+            &storage,
             &Price::Fixed(Decimal::from_str("1.25").unwrap()),
             &Side::Base,
             &oracle,

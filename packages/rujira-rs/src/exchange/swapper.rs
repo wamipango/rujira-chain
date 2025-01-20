@@ -72,18 +72,13 @@ impl<T: Swappable> Swapper<T> {
     }
 }
 
-pub fn event<T: Swappable>(
-    s: &T,
-    offer: Uint128,
-    bid: Uint128,
-    attributes: &Vec<Attribute>,
-) -> Event {
+pub fn event<T: Swappable>(s: &T, offer: Uint128, bid: Uint128, attributes: &[Attribute]) -> Event {
     let prefix = s.prefix();
     Event::new(format!("{prefix}/trade"))
         .add_attribute("rate", s.rate().to_string())
         .add_attribute("offer", offer.to_string())
         .add_attribute("bid", bid.to_string())
-        .add_attributes(attributes.clone())
+        .add_attributes(attributes.to_owned())
 }
 
 #[derive(Debug)]
