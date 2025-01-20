@@ -10,3 +10,6 @@ pub mod pool;
 pub mod pool_key;
 
 pub use crate::error::ContractError;
+
+#[cfg(test)]
+mod testing;

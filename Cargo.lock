@@ -974,6 +974,7 @@ dependencies = [
  "cw-utils",
  "cw2",
  "itertools 0.14.0",
+ "rujira-bow",
  "rujira-rs",
  "rujira-rs-testing",
  "schemars",

@@ -24,6 +24,7 @@ schemars = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 itertools = { workspace = true }
+rujira-bow = { path = "../rujira-bow" }
 
 [dev-dependencies]
 cw-multi-test = { workspace = true }
