@@ -71,19 +71,22 @@ impl Swappable for MarketMakerOffer {
     }
 
     fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
+        dbg!(&self, &offer);
         let res = match self.side {
             Side::Base => {
                 let offer_value = Decimal::from_ratio(offer, 1u128)
-                    .div(self.price)
-                    .to_uint_floor();
-                let pool_value = Decimal::from_ratio(self.total, 1u128)
                     .mul(self.price)
                     .to_uint_floor();
+                let pool_value = Decimal::from_ratio(self.total, 1u128)
+                    .div(self.price)
+                    .to_uint_floor();
+                dbg!(offer_value);
+                dbg!(pool_value);
                 match self.total.cmp(&offer_value) {
                     // Partial fill
-                    Ordering::Greater => (offer_value, offer),
+                    Ordering::Greater => (offer, offer_value),
                     // Complete fill
-                    _ => (self.total, pool_value),
+                    _ => (pool_value, self.total),
                 }
             }
             Side::Quote => {
@@ -95,12 +98,13 @@ impl Swappable for MarketMakerOffer {
                     .to_uint_floor();
                 match self.total.cmp(&offer_value) {
                     // Partial fill
-                    Ordering::Greater => (offer_value, offer),
+                    Ordering::Greater => (offer, offer_value),
                     // Complete fill
-                    _ => (self.total, pool_value),
+                    _ => (pool_value, self.total),
                 }
             }
         };
+
         self.commitment = res;
         Ok(res)
     }
@@ -112,7 +116,7 @@ impl Swappable for MarketMakerOffer {
     }
 
     fn prefix(&self) -> &str {
-        todo!()
+        env!("CARGO_PKG_NAME")
     }
 }
 

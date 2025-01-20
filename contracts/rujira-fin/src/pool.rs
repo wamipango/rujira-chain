@@ -231,7 +231,7 @@ impl Swappable for Pool {
     }
 
     fn prefix(&self) -> &str {
-        "rujira-fin"
+        env!("CARGO_PKG_NAME")
     }
 }
 

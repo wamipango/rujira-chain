@@ -65,7 +65,7 @@ pub fn execute(
 
             if let Some(mm) = config.market_maker {
                 if !commit.market_maker.1.is_zero() {
-                    let min_return = coin(commit.market_maker.0.u128(), config.denoms.bid(&side));
+                    let min_return = coin(commit.market_maker.1.u128(), config.denoms.bid(&side));
 
                     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                         contract_addr: mm.to_string(),
@@ -74,7 +74,7 @@ pub fn execute(
                             to: None,
                             callback: None,
                         })?,
-                        funds: coins(commit.market_maker.1.u128(), config.denoms.ask(&side)),
+                        funds: coins(commit.market_maker.0.u128(), config.denoms.ask(&side)),
                     }))
                 }
             }
