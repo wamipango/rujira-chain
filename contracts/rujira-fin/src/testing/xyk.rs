@@ -374,8 +374,9 @@ fn combined_book() {
                 Price::Fixed(Decimal::from_str("996").unwrap()),
                 Uint128::from(5_000_000u128),
             ),
+            (Side::Quote, Price::Oracle(0), Uint128::from(5_000_000u128)),
         ]),
-        &coins(10_000_000, "usdc"),
+        &coins(15_000_000, "usdc"),
     )
     .unwrap();
 
@@ -384,7 +385,7 @@ fn combined_book() {
         .query_wasm_smart(
             fin.clone(),
             &QueryMsg::Book {
-                limit: Some(4),
+                limit: Some(5),
                 offset: None,
             },
         )
@@ -392,6 +393,7 @@ fn combined_book() {
     assert_side(
         book.quote,
         vec![
+            ("1000", 5_000_000u128),
             ("999.00099", 199_800_199u128),
             ("997.00698", 204_400_400u128),
             ("996", 5_000_000u128),
@@ -409,9 +411,17 @@ fn combined_book() {
                 to: None,
                 callback: None,
             },
-            &coins(450_000, "btc"),
+            &coins(455_000, "btc"),
         )
         .unwrap();
+
+    res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+        ("rate", "1000"),
+        ("price", "oracle:0"),
+        ("offer", "5000"),
+        ("bid", "5000000"),
+        ("side", "quote"),
+    ]));
 
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "999.00099"),

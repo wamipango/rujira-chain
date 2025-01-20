@@ -1,3 +1,10 @@
+use crate::arb::Arber;
+use crate::config::{Config, CONFIG};
+use crate::error::ContractError;
+use crate::market_maker::{MarketMaker, MarketMakerOffer};
+use crate::order::Order;
+use crate::order_manager::OrderManager;
+use crate::pool::Pool;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
@@ -13,14 +20,7 @@ use rujira_rs::fin::{
     OrdersResponse, Price, QueryMsg, Side, SimulationResponse, StatusResponse, SudoMsg,
 };
 use rujira_rs::{bow, query};
-
-use crate::arb::Arber;
-use crate::config::{Config, CONFIG};
-use crate::error::ContractError;
-use crate::market_maker::{MarketMaker, MarketMakerOffer};
-use crate::order::Order;
-use crate::order_manager::OrderManager;
-use crate::pool::Pool;
+use std::ops::Mul;
 
 // version info for migration info
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -288,9 +288,11 @@ fn simulate_swap(
 }
 
 fn load_oracle_price(q: QuerierWrapper, config: &Config) -> Result<Decimal, ContractError> {
-    let a = query::Pool::load(q, &config.oracles[0])?.asset_tor_price;
-    let b = query::Pool::load(q, &config.oracles[1])?.asset_tor_price;
-    Ok(a / b)
+    let a = query::Pool::load(q, &config.oracles[0])?;
+    let b = query::Pool::load(q, &config.oracles[1])?;
+    let ten = Decimal::from_ratio(10u128, 1u128);
+    Ok(a.asset_tor_price.mul(ten.pow(b.clone().decimals as u32))
+        / b.asset_tor_price.mul(ten.pow(a.clone().decimals as u32)))
 }
 
 fn order_response(order: &Order, side: &Side, price: &Price, oracle: &Decimal) -> OrderResponse {
