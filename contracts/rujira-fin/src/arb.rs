@@ -1,21 +1,20 @@
 use cosmwasm_std::{coin, Storage, Uint128};
 use cw_utils::NativeBalance;
-use itertools::EitherOrBoth;
 use rujira_rs::{
     exchange::{SwapError, Swappable},
     fin::{Denoms, Side},
 };
 use std::ops::Sub;
 
-use crate::{market_maker::MarketMakerOffer, pool::Pool, ContractError};
+use crate::ContractError;
 
 /// Utility to capture arbitrage from overlapping orders
-pub struct Arber {
-    pending: Vec<EitherOrBoth<EitherOrBoth<Pool>, MarketMakerOffer>>,
+pub struct Arber<T> {
+    pending: Vec<T>,
     denoms: Denoms,
 }
 
-impl Arber {
+impl<T: Arbitrage + Clone> Arber<T> {
     pub fn new(denoms: &Denoms) -> Self {
         Self {
             denoms: denoms.clone(),
@@ -24,8 +23,8 @@ impl Arber {
     }
     pub fn run(
         &mut self,
-        mut base_iter: impl Iterator<Item = EitherOrBoth<EitherOrBoth<Pool>, MarketMakerOffer>>,
-        mut quote_iter: impl Iterator<Item = EitherOrBoth<EitherOrBoth<Pool>, MarketMakerOffer>>,
+        mut base_iter: impl Iterator<Item = T>,
+        mut quote_iter: impl Iterator<Item = T>,
     ) -> Result<NativeBalance, ContractError> {
         let mut base = base_iter.next();
         let mut quote = quote_iter.next();
@@ -93,7 +92,7 @@ mod tests {
     use cw_utils::NativeBalance;
     use rujira_rs::fin::{Denoms, Price, Tick};
 
-    use crate::{order_manager::OrderManager, testing::TestOracle};
+    use crate::{order_manager::OrderManager, pool::Pool, testing::TestOracle};
 
     use super::*;
 
@@ -222,8 +221,8 @@ mod tests {
         )
         .unwrap();
         let mut arb = Arber::new(&denoms);
-        let base_iter = Pool::iter(&mut storage, &Side::Base, &oracle);
-        let quote_iter = Pool::iter(&mut storage, &Side::Quote, &oracle);
+        let base_iter = Pool::iter(&storage, &Side::Base, &oracle);
+        let quote_iter = Pool::iter(&storage, &Side::Quote, &oracle);
         let res = arb.run(base_iter, quote_iter).unwrap();
         arb.commit(&mut storage).unwrap();
         // 350 (349 with rounding) profit from arb 1

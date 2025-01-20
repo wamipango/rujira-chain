@@ -117,7 +117,7 @@ pub fn execute(
             let mut e = OrderManager::new(
                 config.denoms.clone(),
                 config.fee_maker,
-                config.tick,
+                config.tick.clone(),
                 info.sender.clone(),
                 env.block.time,
                 NativeBalance(info.funds),
@@ -125,6 +125,11 @@ pub fn execute(
 
             let res = e.execute_orders(deps.storage, vec, &oracle)?;
             fees += res.fees;
+
+            let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
+            let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
+            fees += arb.run(base_iter, quote_iter)?;
+            arb.commit(deps.storage)?;
 
             if !res.withdraw.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
