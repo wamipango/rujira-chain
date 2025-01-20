@@ -1,6 +1,6 @@
 use cosmwasm_std::{coin, Addr, Decimal, Event, Storage, Timestamp, Uint128};
 use cw_utils::NativeBalance;
-use rujira_rs::fin::{Denoms, Price, Side, Tick};
+use rujira_rs::fin::{Denoms, OraclePrice, Price, Side, Tick};
 use std::cmp::Ordering;
 use std::ops::{Mul, Sub};
 
@@ -17,7 +17,6 @@ pub struct OrderManager {
     tick: Tick,
     owner: Addr,
     timestamp: Timestamp,
-    oracle: Decimal,
     // NativeBalance can't be negative. Store in and out separately and we'll validate
     // no negative balances at the end
     // What we receive from the user and withdrawn and retracted orders
@@ -35,7 +34,6 @@ impl OrderManager {
         tick: Tick,
         owner: Addr,
         timestamp: Timestamp,
-        oracle: Decimal,
         funds: NativeBalance,
     ) -> Self {
         Self {
@@ -44,7 +42,6 @@ impl OrderManager {
             tick,
             owner,
             timestamp,
-            oracle,
             receive: funds,
             send: NativeBalance::default(),
             fees: NativeBalance::default(),
@@ -56,12 +53,13 @@ impl OrderManager {
         &mut self,
         storage: &mut dyn Storage,
         o: Vec<(Side, Price, Uint128)>,
+        oracle: &impl OraclePrice,
     ) -> Result<ExecutionResult, ContractError> {
         for (side, price, target) in o {
             if let Price::Fixed(x) = price {
                 self.tick.validate(&x)?;
             }
-            let mut pool = Pool::load(storage, &price, &side, &self.oracle);
+            let mut pool = Pool::load(storage, &price, &side, oracle);
             match pool.load_order(storage, &self.owner) {
                 Ok(mut order) => {
                     self.execute_existing_order(storage, &mut pool, &mut order, &side, target)?
@@ -171,6 +169,8 @@ pub struct ExecutionResult {
 #[cfg(test)]
 
 mod tests {
+    use crate::testing::TestOracle;
+
     use super::*;
     use cosmwasm_std::{
         coins,
@@ -184,7 +184,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
         let tick = Tick::new(4);
@@ -196,7 +196,6 @@ mod tests {
             tick,
             info.sender,
             env.block.time,
-            oracle,
             funds,
         );
 
@@ -208,6 +207,7 @@ mod tests {
                     Price::Fixed(Decimal::from_str("1.0").unwrap()),
                     Uint128::from(1000u128),
                 )],
+                &oracle,
             )
             .unwrap();
 
@@ -232,7 +232,7 @@ mod tests {
         let tick = Tick::new(4);
         let fee = Decimal::from_str("0.001").unwrap();
 
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(10000, "usdc");
         funds += coin(10000, "ruji");
@@ -243,7 +243,6 @@ mod tests {
             tick,
             info.sender,
             env.block.time,
-            oracle,
             funds,
         );
 
@@ -264,6 +263,7 @@ mod tests {
                         Uint128::from(1300u128),
                     ),
                 ],
+                &oracle,
             )
             .unwrap();
         let returned = NativeBalance(vec![coin(7500, "ruji"), coin(7000, "usdc")]);
@@ -321,7 +321,7 @@ mod tests {
         let tick = Tick::new(4);
         let fee = Decimal::from_str("0.001").unwrap();
 
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
         let funds = NativeBalance::default();
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
@@ -329,7 +329,6 @@ mod tests {
             tick,
             info.sender,
             env.block.time,
-            oracle,
             funds,
         );
 
@@ -340,6 +339,7 @@ mod tests {
                 Price::Fixed(Decimal::from_str("1.0").unwrap()),
                 Uint128::from(1000u128),
             )],
+            &oracle,
         )
         .unwrap_err();
     }
@@ -352,7 +352,7 @@ mod tests {
         let tick = Tick::new(4);
         let fee = Decimal::from_str("0.001").unwrap();
 
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(10000, "usdc");
         funds += coin(10000, "ruji");
@@ -362,7 +362,6 @@ mod tests {
             tick.clone(),
             info.sender.clone(),
             env.block.time,
-            oracle,
             funds,
         );
 
@@ -383,6 +382,7 @@ mod tests {
                     Uint128::from(1300u128),
                 ),
             ],
+            &oracle,
         )
         .unwrap();
 
@@ -392,7 +392,6 @@ mod tests {
             tick.clone(),
             info.sender.clone(),
             env.block.time,
-            oracle,
             NativeBalance::default(),
         );
 
@@ -414,6 +413,7 @@ mod tests {
                     (Side::Base, Price::Oracle(0), Uint128::from(600u128)),
                     (Side::Base, Price::Oracle(10), Uint128::from(600u128)),
                 ],
+                &oracle,
             )
             .unwrap();
 
@@ -471,7 +471,6 @@ mod tests {
             tick,
             info.sender.clone(),
             env.block.time,
-            oracle,
             NativeBalance(coins(300, "ruji")),
         );
 
@@ -483,6 +482,7 @@ mod tests {
                     (Side::Base, Price::Oracle(0), Uint128::from(300u128)),
                     (Side::Base, Price::Oracle(10), Uint128::from(1200u128)),
                 ],
+                &oracle,
             )
             .unwrap();
 
@@ -518,7 +518,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
         let tick = Tick::new(2);
@@ -530,7 +530,6 @@ mod tests {
             tick,
             info.sender,
             env.block.time,
-            oracle,
             funds,
         );
 
@@ -541,6 +540,7 @@ mod tests {
                 Price::Fixed(Decimal::from_str("1.001").unwrap()),
                 Uint128::from(1000u128),
             )],
+            &oracle,
         )
         .unwrap_err();
     }

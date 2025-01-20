@@ -5,8 +5,6 @@ use super::Tick;
 
 #[cw_serde]
 pub enum SudoMsg {
-    Pause {},
-    Resume {},
     UpdateConfig {
         tick: Option<Tick>,
         fee_taker: Option<Decimal>,

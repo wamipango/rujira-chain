@@ -20,18 +20,24 @@ impl Display for Price {
 }
 
 impl Price {
-    pub fn to_rate(&self, oracle: &Decimal) -> Decimal {
+    pub fn to_rate(&self, oracle: &impl OraclePrice) -> Decimal {
         match self {
             Price::Fixed(fixed) => *fixed,
-            Price::Oracle(deviation) => match deviation {
-                i16::MIN..=-1 => {
-                    oracle * Decimal::from_ratio(10000u16 - deviation.unsigned_abs(), 10000u16)
-                }
-                0 => *oracle,
-                1..=i16::MAX => {
-                    oracle * Decimal::from_ratio(deviation.unsigned_abs() + 10000u16, 10000u16)
-                }
-            },
+            Price::Oracle(bps) => oracle.adjust(bps),
+        }
+    }
+}
+
+// Provided as a Trait so that tests can mock an oracle price source
+pub trait OraclePrice {
+    fn adjust(&self, bps: &i16) -> Decimal;
+}
+
+impl<T: OraclePrice> OraclePrice for Option<T> {
+    fn adjust(&self, bps: &i16) -> Decimal {
+        match self {
+            Some(x) => x.adjust(bps),
+            None => panic!("None OraclePrice"),
         }
     }
 }

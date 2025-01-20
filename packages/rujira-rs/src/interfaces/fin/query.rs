@@ -12,9 +12,6 @@ pub enum QueryMsg {
     #[returns(ConfigResponse)]
     Config {},
 
-    #[returns(StatusResponse)]
-    Status {},
-
     #[returns(SimulationResponse)]
     Simulate(Coin),
 
@@ -60,12 +57,6 @@ pub struct ConfigResponse {
 
     /// See [InstantiateMsg::fee_address]
     pub fee_address: String,
-}
-
-#[cw_serde]
-pub enum StatusResponse {
-    Active { price: Decimal },
-    Paused,
 }
 
 #[cw_serde]

@@ -1,33 +1,32 @@
-use cosmwasm_std::{coin, Decimal, Storage, Uint128};
+use cosmwasm_std::{coin, Storage, Uint128};
 use cw_utils::NativeBalance;
 use itertools::EitherOrBoth;
 use rujira_rs::{
     exchange::{SwapError, Swappable},
     fin::{Denoms, Side},
 };
-use std::fmt::Debug;
 use std::ops::Sub;
 
-use crate::{pool::Pool, ContractError};
+use crate::{market_maker::MarketMakerOffer, pool::Pool, ContractError};
 
 /// Utility to capture arbitrage from overlapping orders
 pub struct Arber {
-    oracle: Decimal,
-    pending: Vec<EitherOrBoth<Pool>>,
+    pending: Vec<EitherOrBoth<EitherOrBoth<Pool>, MarketMakerOffer>>,
     denoms: Denoms,
 }
 
 impl Arber {
-    pub fn new(oracle: &Decimal, denoms: &Denoms) -> Self {
+    pub fn new(denoms: &Denoms) -> Self {
         Self {
-            oracle: *oracle,
             denoms: denoms.clone(),
             pending: vec![],
         }
     }
-    pub fn run(&mut self, storage: &dyn Storage) -> Result<NativeBalance, ContractError> {
-        let mut base_iter = Pool::side(storage, &Side::Base, &self.oracle);
-        let mut quote_iter = Pool::side(storage, &Side::Quote, &self.oracle);
+    pub fn run(
+        &mut self,
+        mut base_iter: impl Iterator<Item = EitherOrBoth<EitherOrBoth<Pool>, MarketMakerOffer>>,
+        mut quote_iter: impl Iterator<Item = EitherOrBoth<EitherOrBoth<Pool>, MarketMakerOffer>>,
+    ) -> Result<NativeBalance, ContractError> {
         let mut base = base_iter.next();
         let mut quote = quote_iter.next();
         let mut profit = NativeBalance::default();
@@ -71,7 +70,7 @@ pub trait Arbitrage: Swappable + Sized {
 
 impl<T> Arbitrage for T
 where
-    T: Swappable + Clone + Debug,
+    T: Swappable + Clone,
 {
     fn arbitrage(&mut self, other: &mut Self) -> Result<(Uint128, Uint128), ContractError> {
         let float = self.total();
@@ -83,17 +82,18 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use std::str::FromStr;
 
     use cosmwasm_std::{
         coin, coins,
         testing::{message_info, mock_env, MockStorage},
-        Addr, Timestamp, Uint128,
+        Addr, Decimal, Timestamp, Uint128,
     };
     use cw_utils::NativeBalance;
     use rujira_rs::fin::{Denoms, Price, Tick};
 
-    use crate::order_manager::OrderManager;
+    use crate::{order_manager::OrderManager, testing::TestOracle};
 
     use super::*;
 
@@ -101,7 +101,7 @@ mod tests {
 
     fn test_aribtrage() {
         let mut storage = MockStorage::new();
-        let oracle = Decimal::one();
+        let oracle = TestOracle(Decimal::one());
         let mut base = Pool::load(
             &mut storage,
             &Price::Fixed(Decimal::from_str("1.15").unwrap()),
@@ -185,7 +185,7 @@ mod tests {
         let mut storage = MockStorage::new();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
         let funds = NativeBalance(vec![coin(1_000_000, "ruji"), coin(1_000_000, "usdc")]);
         let denoms = Denoms::new("ruji", "usdc");
         let tick = Tick::new(4);
@@ -196,7 +196,6 @@ mod tests {
             tick,
             info.sender,
             env.block.time,
-            oracle,
             funds,
         );
 
@@ -219,10 +218,13 @@ mod tests {
                     Uint128::from(3000u128),
                 ),
             ],
+            &oracle,
         )
         .unwrap();
-        let mut arb = Arber::new(&oracle, &denoms);
-        let res = arb.run(&mut storage).unwrap();
+        let mut arb = Arber::new(&denoms);
+        let base_iter = Pool::iter(&mut storage, &Side::Base, &oracle);
+        let quote_iter = Pool::iter(&mut storage, &Side::Quote, &oracle);
+        let res = arb.run(base_iter, quote_iter).unwrap();
         arb.commit(&mut storage).unwrap();
         // 350 (349 with rounding) profit from arb 1
         // 250 from arb 2
