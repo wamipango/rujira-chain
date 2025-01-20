@@ -92,8 +92,9 @@ mod tests {
     };
     use cw_utils::NativeBalance;
     use rujira_rs::fin::{Denoms, Price, Tick};
+    use rujira_rs_testing::oracle::TestOracle;
 
-    use crate::{order_manager::OrderManager, pool::Pool, testing::TestOracle};
+    use crate::{order_manager::OrderManager, pool::Pool};
 
     use super::*;
 

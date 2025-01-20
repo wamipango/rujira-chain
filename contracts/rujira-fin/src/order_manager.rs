@@ -169,7 +169,6 @@ pub struct ExecutionResult {
 #[cfg(test)]
 
 mod tests {
-    use crate::testing::TestOracle;
 
     use super::*;
     use cosmwasm_std::{
@@ -177,6 +176,7 @@ mod tests {
         testing::{message_info, mock_dependencies, mock_env},
     };
     use rujira_rs::fin::Price;
+    use rujira_rs_testing::oracle::TestOracle;
     use std::str::FromStr;
 
     #[test]

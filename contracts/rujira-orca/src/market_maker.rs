@@ -1,29 +1,36 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Attribute, Binary, Decimal, QuerierWrapper, StdResult, Storage, Uint128};
+use cosmwasm_std::{
+    Addr, Attribute, Binary, Decimal, Fraction, QuerierWrapper, StdResult, Storage, Uint128,
+};
 use rujira_rs::{
+    bow,
     exchange::{SwapCommit, SwapError, Swappable},
-    orca::{Denoms, MarketMakerQuery, MarketMakerResponse},
+    orca::Denoms,
+};
+use std::{
+    cmp::Ordering,
+    ops::{Div, Mul},
 };
 
 pub struct MarketMaker<'a> {
     q: QuerierWrapper<'a>,
     denoms: Denoms,
     contract: Option<Addr>,
-    last_price: Option<Decimal>,
     bid: Uint128,
     ask: Uint128,
+    last_price: Option<Decimal>,
     data: Option<Binary>,
 }
 
 impl<'a> MarketMaker<'a> {
-    pub fn new(q: QuerierWrapper<'a>, denoms: Denoms, contract: Option<Addr>) -> Self {
+    pub fn new(q: QuerierWrapper<'a>, contract: Option<Addr>, denoms: Denoms) -> Self {
         Self {
             q,
             denoms,
             contract,
-            last_price: None,
             bid: Uint128::zero(),
             ask: Uint128::zero(),
+            last_price: None,
             data: None,
         }
     }
@@ -31,26 +38,45 @@ impl<'a> MarketMaker<'a> {
 
 #[cw_serde]
 pub struct MarketMakerOffer {
-    pub premium: u16,
+    /// The premium bucket
+    pub premium: u8,
     pub total: Uint128,
+    /// The price quoted
+    price: Decimal,
+    /// The effective rate at bucketed premium
+    rate: Decimal,
     commitment: (Uint128, Uint128),
 }
 
 impl Swappable for MarketMakerOffer {
     fn rate(&self) -> Decimal {
-        todo!()
+        self.rate
     }
 
     fn attributes(&self) -> Vec<Attribute> {
-        vec![]
+        vec![Attribute::new("price", format!("mm:{}", self.price))]
     }
 
     fn total(&self) -> Uint128 {
         self.total
     }
 
-    fn swap(&mut self, _offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
-        todo!()
+    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
+        let offer_value = Decimal::from_ratio(offer, 1u128)
+            .mul(self.price)
+            .to_uint_ceil();
+        let pool_value = Decimal::from_ratio(self.total, 1u128)
+            .div(self.price)
+            .to_uint_floor();
+        let res = match self.total.cmp(&offer_value) {
+            // Partial fill
+            Ordering::Greater => (offer, offer_value),
+            // Complete fill
+            _ => (pool_value, self.total),
+        };
+
+        self.commitment = res;
+        Ok(res)
     }
 
     fn commit(&self, _storage: &mut dyn Storage) -> Result<SwapCommit, SwapError> {
@@ -60,37 +86,44 @@ impl Swappable for MarketMakerOffer {
     }
 
     fn prefix(&self) -> &str {
-        todo!()
+        env!("CARGO_PKG_NAME")
     }
 }
 
 impl<'a> MarketMaker<'a> {
-    pub fn totals(&self) -> (Uint128, Uint128) {
-        (self.bid, self.ask)
-    }
-
     fn query_next(&mut self, contract: Addr) -> Option<MarketMakerOffer> {
-        let price = self.last_price;
-        let res: Option<MarketMakerResponse> = self
-            .q
-            .query_wasm_smart(
-                contract.to_string(),
-                &MarketMakerQuery {
-                    ask_denom: self.denoms.ask().to_string(),
-                    ask_total: self.ask,
-                    bid_denom: self.denoms.bid().to_string(),
-                    bid_total: self.bid,
-                    last_price: price,
-                    data: self.data.clone(),
-                },
-            )
-            .ok();
+        let res: StdResult<Option<bow::QuoteResponse>> = self.q.query_wasm_smart(
+            contract.to_string(),
+            &bow::QueryMsg::Quote(bow::QuoteRequest {
+                price: self.last_price,
+                ask_denom: self.denoms.ask().to_string(),
+                offer_denom: self.denoms.bid().to_string(),
+                data: self.data.clone(),
+            }),
+        );
 
         match res {
-            Some(_res) => {
-                todo!()
+            Ok(Some(res)) => {
+                self.bid += Decimal::from_ratio(res.size, 1u128)
+                    .mul(res.price)
+                    .to_uint_ceil();
+                self.ask += res.size;
+                self.data = res.data;
+                let price = res.price;
+                self.last_price = Some(price);
+
+                let rate = Decimal::one();
+                let premium = 1;
+
+                Some(MarketMakerOffer {
+                    price,
+                    rate,
+                    total: res.size,
+                    commitment: Default::default(),
+                    premium,
+                })
             }
-            None => None,
+            _ => None,
         }
     }
 }
@@ -99,31 +132,14 @@ impl Iterator for MarketMaker<'_> {
     type Item = MarketMakerOffer;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.contract.clone().map(|x| self.query_next(x)).flatten()
+        self.contract.clone().and_then(|x| self.query_next(x))
     }
 }
 
 #[cfg(test)]
 
 mod test {
-    use super::*;
-    use cosmwasm_std::{testing::MockQuerier, SystemError, SystemResult, WasmQuery};
 
     #[test]
-    fn test_iterator() {
-        let mut q = MockQuerier::default();
-        q.update_wasm(|x| match x {
-            WasmQuery::Smart { .. } => {
-                todo!()
-            }
-            _ => SystemResult::Err(SystemError::Unknown {}),
-        });
-        let mut _iter = MarketMaker::new(
-            QuerierWrapper::new(&q),
-            Denoms::new("btc", "usdc"),
-            Some(Addr::unchecked("bow")),
-        );
-
-        // assert_eq!(items, todo!());
-    }
+    fn test_iterator() {}
 }

@@ -151,8 +151,9 @@ mod tests {
         exchange::Swappable,
         fin::{Price, Side},
     };
+    use rujira_rs_testing::oracle::TestOracle;
 
-    use crate::{pool::Pool, testing::TestOracle};
+    use crate::pool::Pool;
 
     #[test]
     fn query_order() {

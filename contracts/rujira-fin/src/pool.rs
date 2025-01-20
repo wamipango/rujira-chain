@@ -237,13 +237,14 @@ impl Swappable for Pool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{pool_key::PoolType, testing::TestOracle};
+    use crate::pool_key::PoolType;
 
     use super::*;
     use cosmwasm_std::{testing::MockStorage, Decimal};
     use cw_storage_plus::Bound;
     use itertools::EitherOrBoth;
     use rujira_rs::fin::{Price, Side};
+    use rujira_rs_testing::oracle::TestOracle;
     use std::str::FromStr;
 
     #[test]

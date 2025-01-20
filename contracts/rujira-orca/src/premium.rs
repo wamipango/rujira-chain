@@ -1,11 +1,12 @@
 use cosmwasm_std::Decimal;
+use rujira_rs::fin::OraclePrice;
 
 pub trait Premium {
-    fn to_rate(&self, oracle: &Decimal) -> Decimal;
+    fn to_rate(&self, oracle: &impl OraclePrice) -> Decimal;
 }
 
 impl Premium for u8 {
-    fn to_rate(&self, oracle: &Decimal) -> Decimal {
-        oracle * Decimal::from_ratio(100 - self, 100u16)
+    fn to_rate(&self, oracle: &impl OraclePrice) -> Decimal {
+        oracle.adjust(&((*self as i16) * -100))
     }
 }

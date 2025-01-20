@@ -1,5 +1,6 @@
 use cosmwasm_std::{coin, Addr, Decimal, Event, Storage, Timestamp, Uint128};
 use cw_utils::NativeBalance;
+use rujira_rs::fin::OraclePrice;
 use rujira_rs::orca::Denoms;
 use std::cmp::Ordering;
 use std::ops::{Mul, Sub};
@@ -16,7 +17,6 @@ pub struct OrderManager {
     fee: Decimal,
     owner: Addr,
     timestamp: Timestamp,
-    oracle: Decimal,
     max_premium: u8,
     // NativeBalance can't be negative. Store in and out separately and we'll validate
     // no negative balances at the end
@@ -35,7 +35,6 @@ impl OrderManager {
         max_premium: u8,
         owner: Addr,
         timestamp: Timestamp,
-        oracle: Decimal,
         funds: NativeBalance,
     ) -> Self {
         Self {
@@ -44,7 +43,6 @@ impl OrderManager {
             max_premium,
             owner,
             timestamp,
-            oracle,
             receive: funds,
             send: NativeBalance::default(),
             fees: NativeBalance::default(),
@@ -56,12 +54,13 @@ impl OrderManager {
         &mut self,
         storage: &mut dyn Storage,
         o: Vec<(u8, Uint128)>,
+        oracle: &impl OraclePrice,
     ) -> Result<ExecutionResult, ContractError> {
         for (premium, target) in o {
             if premium > self.max_premium {
                 return Err(ContractError::InvalidPremium { premium });
             }
-            let mut pool = Pool::load(storage, &premium, &self.oracle);
+            let mut pool = Pool::load(storage, &premium, oracle);
             match pool.load_order(storage, &self.owner) {
                 Ok(mut order) => {
                     self.execute_existing_order(storage, &mut pool, &mut order, target)?
@@ -174,6 +173,7 @@ mod tests {
         coins,
         testing::{message_info, mock_dependencies, mock_env},
     };
+    use rujira_rs_testing::oracle::TestOracle;
     use std::str::FromStr;
 
     #[test]
@@ -181,7 +181,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
         let fee = Decimal::from_str("0.001").unwrap();
@@ -192,12 +192,15 @@ mod tests {
             30,
             info.sender,
             env.block.time,
-            oracle,
             funds,
         );
 
         let res = e
-            .execute_orders(&mut deps.storage, vec![(1, Uint128::from(1000u128))])
+            .execute_orders(
+                &mut deps.storage,
+                vec![(1, Uint128::from(1000u128))],
+                &oracle,
+            )
             .unwrap();
 
         assert_eq!(res.withdraw, NativeBalance::default());
@@ -218,7 +221,7 @@ mod tests {
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
         let fee = Decimal::from_str("0.001").unwrap();
 
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(10000, "usdc");
         funds += coin(10000, "ruji");
@@ -229,7 +232,6 @@ mod tests {
             30,
             info.sender,
             env.block.time,
-            oracle,
             funds,
         );
 
@@ -242,6 +244,7 @@ mod tests {
                     (2, Uint128::from(1200u128)),
                     (14, Uint128::from(1300u128)),
                 ],
+                &oracle,
             )
             .unwrap();
         let returned = NativeBalance(vec![coin(10000, "ruji"), coin(4500, "usdc")]);
@@ -290,20 +293,23 @@ mod tests {
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
         let fee = Decimal::from_str("0.001").unwrap();
 
-        let oracle = Decimal::from_str("1.0").unwrap();
-        let funds = NativeBalance::default();
+        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
+        let funds: NativeBalance = NativeBalance::default();
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
             fee,
             30,
             info.sender,
             env.block.time,
-            oracle,
             funds,
         );
 
-        e.execute_orders(&mut deps.storage, vec![(0, Uint128::from(1000u128))])
-            .unwrap_err();
+        e.execute_orders(
+            &mut deps.storage,
+            vec![(0, Uint128::from(1000u128))],
+            &oracle,
+        )
+        .unwrap_err();
     }
 
     #[test]
@@ -313,7 +319,7 @@ mod tests {
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
         let fee = Decimal::from_str("0.001").unwrap();
 
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(10000, "usdc");
         funds += coin(10000, "ruji");
@@ -323,7 +329,6 @@ mod tests {
             30,
             info.sender.clone(),
             env.block.time,
-            oracle,
             funds,
         );
 
@@ -336,6 +341,7 @@ mod tests {
                 (2, Uint128::from(1200u128)),
                 (10, Uint128::from(1300u128)),
             ],
+            &oracle,
         )
         .unwrap();
 
@@ -345,7 +351,6 @@ mod tests {
             30,
             info.sender.clone(),
             env.block.time,
-            oracle,
             NativeBalance::default(),
         );
 
@@ -360,6 +365,7 @@ mod tests {
                     (9, Uint128::from(1300u128)),
                     (10, Uint128::zero()),
                 ],
+                &oracle,
             )
             .unwrap();
 
@@ -409,7 +415,6 @@ mod tests {
             30,
             info.sender.clone(),
             env.block.time,
-            oracle,
             NativeBalance(coins(300, "usdc")),
         );
 
@@ -417,6 +422,7 @@ mod tests {
             .execute_orders(
                 &mut deps.storage,
                 vec![(1, Uint128::from(300u128)), (10, Uint128::from(2000u128))],
+                &oracle,
             )
             .unwrap();
 

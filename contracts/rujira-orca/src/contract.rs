@@ -1,6 +1,7 @@
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
 use crate::market_maker::{MarketMaker, MarketMakerOffer};
+use crate::oracle::Oracle;
 use crate::order::Order;
 use crate::order_manager::OrderManager;
 use crate::pool::Pool;
@@ -8,19 +9,19 @@ use crate::premium::Premium;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut,
-    Env, MessageInfo, QuerierWrapper, Response, WasmMsg,
+    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
+    Response, WasmMsg,
 };
 use cw2::set_contract_version;
-use cw_utils::{must_pay, one_coin, NativeBalance};
+use cw_utils::{must_pay, NativeBalance};
 use itertools::{EitherOrBoth, Itertools};
+use rujira_rs::bow;
 use rujira_rs::exchange::{SwapError, SwapResult, Swappable, Swapper};
+use rujira_rs::fin::OraclePrice;
 use rujira_rs::orca::{
-    ConfigResponse, ExecuteMsg, InstantiateMsg, MarketMakerCallback, MarketMakerExecute,
-    OrderResponse, OrdersResponse, PoolResponse, PoolsResponse, QueryMsg, SimulationResponse,
-    StatusResponse, SudoMsg,
+    ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, PoolResponse,
+    PoolsResponse, QueryMsg, SimulationResponse, SudoMsg,
 };
-use rujira_rs::query;
 
 // version info for migration info
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -48,7 +49,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let oracle = load_oracle_price(deps.querier, &config)?;
+    let oracle = Oracle::load(deps.querier, &config.oracles)?;
     let mut fees = NativeBalance::default();
     let mut messages: Vec<CosmosMsg> = vec![];
 
@@ -64,8 +65,10 @@ pub fn execute(
                 if !commit.market_maker.1.is_zero() {
                     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                         contract_addr: mm.to_string(),
-                        msg: to_json_binary(&MarketMakerExecute {
+                        msg: to_json_binary(&bow::ExecuteMsg::Swap {
                             min_return: coin(commit.market_maker.0.u128(), config.denoms.bid()),
+                            to: None,
+                            callback: None,
                         })?,
                         funds: coins(commit.market_maker.1.u128(), config.denoms.ask()),
                     }))
@@ -108,11 +111,10 @@ pub fn execute(
                 config.max_premium,
                 info.sender.clone(),
                 env.block.time,
-                oracle,
                 NativeBalance(info.funds),
             );
 
-            let res = e.execute_orders(deps.storage, vec)?;
+            let res = e.execute_orders(deps.storage, vec, &oracle)?;
             fees += res.fees;
 
             if !res.withdraw.is_empty() {
@@ -135,23 +137,6 @@ pub fn execute(
                 .add_messages(messages)
                 .add_events(res.events))
         }
-
-        ExecuteMsg::MarketMaker(MarketMakerCallback { min_return }) => match config.market_maker {
-            Some(mm) => {
-                ensure_eq!(mm, info.sender, ContractError::Unauthorized {});
-                let amount = one_coin(&info)?;
-                ensure_eq!(
-                    min_return,
-                    amount,
-                    ContractError::InsufficientFunds {
-                        expected: min_return,
-                        returned: amount
-                    }
-                );
-                Ok(Response::default())
-            }
-            None => Err(ContractError::Unauthorized {}),
-        },
     }
 }
 
@@ -183,10 +168,9 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let oracle = load_oracle_price(deps.querier, &config)?;
+    let oracle = Oracle::load(deps.querier, &config.oracles)?;
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
-        QueryMsg::Status {} => to_json_binary(&StatusResponse::Active { price: oracle }),
         QueryMsg::Order((owner, premium)) => {
             let addr = deps.api.addr_validate(&owner)?;
             let pool = Pool::load(deps.storage, &premium, &oracle);
@@ -243,28 +227,22 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 fn simulate_swap(
     swapper: &mut Swapper<EitherOrBoth<Pool, MarketMakerOffer>>,
     deps: Deps,
-    oracle: &Decimal,
+    oracle: &impl OraclePrice,
     config: &Config,
 ) -> Result<SwapResult, SwapError> {
     let market_maker = MarketMaker::new(
         deps.querier,
-        config.denoms.clone(),
         config.market_maker.clone(),
+        config.denoms.clone(),
     );
 
-    let mut iter = Pool::iter(deps.storage, &oracle)
-        .merge_join_by(market_maker, |x, y| x.rate().cmp(&y.rate()));
+    let mut iter = Pool::iter(deps.storage, oracle)
+        .merge_join_by(market_maker, |x, y| x.premium.cmp(&y.premium));
 
     swapper.swap(&mut iter)
 }
 
-fn load_oracle_price(q: QuerierWrapper, config: &Config) -> Result<Decimal, ContractError> {
-    let a = query::Pool::load(q, &config.oracles[0])?.asset_tor_price;
-    let b = query::Pool::load(q, &config.oracles[1])?.asset_tor_price;
-    Ok(a / b)
-}
-
-fn order_response(order: &Order, premium: &u8, oracle: &Decimal) -> OrderResponse {
+fn order_response(order: &Order, premium: &u8, oracle: &Oracle) -> OrderResponse {
     OrderResponse {
         owner: order.owner.to_string(),
         premium: *premium,
@@ -352,51 +330,6 @@ mod tests {
     }
 
     #[test]
-    fn oracle_price() {
-        let mut app = mock_rujira_app();
-        let owner = app.api().addr_make("owner");
-
-        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
-        let code_id = app.store_code(code);
-        let contract = app
-            .instantiate_contract(
-                code_id,
-                owner,
-                &InstantiateMsg {
-                    denoms: Denoms::new("btc-btc", "eth-usdc"),
-                    oracles: [
-                        Layer1Asset::try_from("BTC.BTC").unwrap(),
-                        Layer1Asset::try_from(
-                            "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
-                        )
-                        .unwrap(),
-                    ],
-                    max_premium: 30,
-                    market_maker: None,
-                    fee_taker: Decimal::zero(),
-                    fee_maker: Decimal::zero(),
-                    fee_address: app.api().addr_make("fee").to_string(),
-                },
-                &[],
-                "template",
-                None,
-            )
-            .unwrap();
-
-        let status: StatusResponse = app
-            .wrap()
-            .query_wasm_smart(contract, &QueryMsg::Status {})
-            .unwrap();
-
-        assert_eq!(
-            status,
-            StatusResponse::Active {
-                price: Decimal::from_str("100000").unwrap()
-            }
-        );
-    }
-
-    #[test]
     fn query_pools() {
         let (mut app, contract) = setup();
         let owner = app.api().addr_make("owner");
@@ -433,10 +366,10 @@ mod tests {
 
         assert_eq!(pools.pools.len(), 3);
         let entry = pools.pools[0].clone();
-        assert_eq!(entry.price, Decimal::from_str("99000").unwrap());
+        assert_eq!(entry.price, Decimal::from_str("990").unwrap());
         assert_eq!(entry.total, Uint128::from(10000u128));
         let entry = pools.pools[1].clone();
-        assert_eq!(entry.price, Decimal::from_str("90000").unwrap());
+        assert_eq!(entry.price, Decimal::from_str("900").unwrap());
         assert_eq!(entry.total, Uint128::from(12500u128));
 
         let balance = app.wrap().query_all_balances(owner.to_string()).unwrap();
