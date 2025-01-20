@@ -61,14 +61,12 @@ impl Swappable for MarketMakerOffer {
     }
 
     fn attributes(&self) -> Vec<Attribute> {
+        let price = match self.side {
+            Side::Base => self.price.inv().unwrap().to_string(),
+            Side::Quote => self.price.to_string(),
+        };
         vec![
-            Attribute::new(
-                "price",
-                match self.side {
-                    Side::Base => self.price.inv().unwrap().to_string(),
-                    Side::Quote => self.price.to_string(),
-                },
-            ),
+            Attribute::new("price", format!("mm:{price}")),
             Attribute::new("side", self.side.to_string()),
         ]
     }

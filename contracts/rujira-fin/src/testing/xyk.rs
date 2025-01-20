@@ -1,21 +1,20 @@
 use std::str::FromStr;
 
 use crate::contract::{execute, instantiate, query};
-use cosmwasm_std::{coin, coins, Decimal, Event, Uint128, Uint256};
+use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128, Uint256};
 use cw_multi_test::{ContractWrapper, Executor};
 use rujira_bow::contract as bow_contract;
 use rujira_rs::{
     bow::{self, Xyk},
-    fin::{BookItemResponse, BookResponse, Denoms, ExecuteMsg, InstantiateMsg, QueryMsg, Tick},
+    fin::{
+        BookItemResponse, BookResponse, Denoms, ExecuteMsg, InstantiateMsg, Price, QueryMsg, Side,
+        Tick,
+    },
     Chain, Layer1Asset, TokenMetadata,
 };
-use rujira_rs_testing::mock_rujira_app;
+use rujira_rs_testing::{mock_rujira_app, RujiraApp};
 
-#[test]
-fn complete_book_query() {
-    let mut app = mock_rujira_app();
-    let owner = app.api().addr_make("owner");
-    let fees = app.api().addr_make("fees");
+fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
     let fin_code = Box::new(ContractWrapper::new(execute, instantiate, query));
     let bow_code = Box::new(ContractWrapper::new(
         bow_contract::execute,
@@ -78,7 +77,15 @@ fn complete_book_query() {
             None,
         )
         .unwrap();
+    (fin, bow)
+}
 
+#[test]
+fn mm_book() {
+    let mut app = mock_rujira_app();
+    let owner = app.api().addr_make("owner");
+    let fees = app.api().addr_make("fees");
+    let (fin, bow) = setup(&mut app, &owner, &fees);
     let book: BookResponse = app
         .wrap()
         .query_wasm_smart(
@@ -167,7 +174,7 @@ fn complete_book_query() {
     // Single trade in first MM pool
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "1001.0011"),
-        ("price", "1001.001001001001001001"),
+        ("price", "mm:1001.001001001001001001"),
         ("offer", "100000000"),
         ("bid", "99900"),
         ("side", "base"),
@@ -249,7 +256,7 @@ fn complete_book_query() {
     // 3 trade events
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "1000"),
-        ("price", "1000"),
+        ("price", "mm:1000"),
         ("offer", "199900"),
         ("bid", "199900000"),
         ("side", "quote"),
@@ -257,14 +264,14 @@ fn complete_book_query() {
 
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "998.00399"),
-        ("price", "998.003991995997998999"),
+        ("price", "mm:998.003991995997998999"),
         ("offer", "199900"),
         ("bid", "199500998"),
         ("side", "quote"),
     ]));
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "996.01395"),
-        ("price", "996.013957048309396245"),
+        ("price", "mm:996.013957048309396245"),
         ("offer", "100200"),
         ("bid", "99800599"),
         ("side", "quote"),
@@ -289,6 +296,139 @@ fn complete_book_query() {
         ("recipient", fees.to_string()),
         ("sender", fin.to_string()),
         ("amount", "7488024usdc".to_string()),
+    ]));
+}
+
+#[test]
+fn combined_book() {
+    let mut app = mock_rujira_app();
+    let owner = app.api().addr_make("owner");
+    let fees = app.api().addr_make("fees");
+    let (fin, bow) = setup(&mut app, &owner, &fees);
+    app.init_modules(|router, _, storage| {
+        router.bank.init_balance(
+            storage,
+            &owner,
+            vec![
+                coin(1_000_000_000_000, "btc"),
+                coin(1_000_000_000_000, "usdc"),
+            ],
+        )
+    })
+    .unwrap();
+
+    let book: BookResponse = app
+        .wrap()
+        .query_wasm_smart(
+            fin.clone(),
+            &QueryMsg::Book {
+                limit: Some(10),
+                offset: None,
+            },
+        )
+        .unwrap();
+
+    app.execute_contract(
+        owner.clone(),
+        bow.clone(),
+        &bow::ExecuteMsg::Deposit {},
+        // 2 BTC @ 100k USDC
+        &vec![coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
+    )
+    .unwrap();
+
+    assert_side(
+        book.quote,
+        vec![
+            ("999.00099", 199_800_199u128),
+            ("997.00698", 199_400_400u128),
+            ("995.01895", 199_000_806u128),
+        ],
+    );
+    // Now let's add some user orders
+
+    app.execute_contract(
+        owner.clone(),
+        fin.clone(),
+        &ExecuteMsg::Order(vec![
+            (
+                Side::Quote,
+                Price::Fixed(Decimal::from_str("997.00698").unwrap()),
+                Uint128::from(5_000_000u128),
+            ),
+            (
+                Side::Quote,
+                Price::Fixed(Decimal::from_str("996").unwrap()),
+                Uint128::from(5_000_000u128),
+            ),
+        ]),
+        &coins(10_000_000, "usdc"),
+    )
+    .unwrap();
+
+    let book: BookResponse = app
+        .wrap()
+        .query_wasm_smart(
+            fin.clone(),
+            &QueryMsg::Book {
+                limit: Some(4),
+                offset: None,
+            },
+        )
+        .unwrap();
+    assert_side(
+        book.quote,
+        vec![
+            ("999.00099", 199_800_199u128),
+            ("997.00698", 204_400_400u128),
+            ("996", 5_000_000u128),
+            ("995.01895", 199_000_806u128),
+        ],
+    );
+
+    // Swap across them all
+    let res = app
+        .execute_contract(
+            owner.clone(),
+            fin.clone(),
+            &ExecuteMsg::Swap {
+                min_return: None,
+                to: None,
+                callback: None,
+            },
+            &coins(450_000, "btc"),
+        )
+        .unwrap();
+
+    res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+        ("rate", "999.00099"),
+        ("price", "mm:999.000995"),
+        ("offer", "200000"),
+        ("bid", "199800199"),
+        ("side", "quote"),
+    ]));
+
+    res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+        ("rate", "997.00698"),
+        ("offer", "205015"),
+        ("bid", "204400400"),
+        ("price", "fixed:997.00698"),
+        ("price", "mm:997.006985034925174625"),
+        ("side", "quote"),
+    ]));
+    res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+        ("rate", "996"),
+        ("price", "fixed:996"),
+        ("offer", "5021"),
+        ("bid", "5000000"),
+        ("side", "quote"),
+    ]));
+    res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+        ("rate", "995.01895"),
+        ("price", "mm:995.018955284329264938"),
+        ("offer", "39964"),
+        ("bid", "39764938"),
+        ("side", "quote"),
     ]));
 }
 

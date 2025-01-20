@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, Fraction,
+    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
     MessageInfo, QuerierWrapper, Response, WasmMsg,
 };
 use cw2::set_contract_version;
@@ -229,7 +229,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
             );
 
             let base = Pool::side(deps.storage, &Side::Base, &oracle)
-                .merge_join_by(mm_base, |x, y| x.rate().cmp(&y.price))
+                .merge_join_by(mm_base, |x, y| x.rate().cmp(&y.rate()))
                 .skip(offset as usize)
                 .take(limit as usize)
                 .map(|v| BookItemResponse {
@@ -239,7 +239,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                 .collect();
 
             let quote = Pool::side(deps.storage, &Side::Quote, &oracle)
-                .merge_join_by(mm_quote, |x, y| x.rate().cmp(&y.price))
+                .merge_join_by(mm_quote, |x, y| y.rate().cmp(&x.rate()))
                 .skip(offset as usize)
                 .take(limit as usize)
                 .map(|v| BookItemResponse {
@@ -278,8 +278,11 @@ fn simulate_swap(
         config.tick.clone(),
     );
 
-    let mut iter = Pool::side(deps.storage, &side, &oracle)
-        .merge_join_by(market_maker, |x, y| x.rate().cmp(&y.price));
+    let mut iter =
+        Pool::side(deps.storage, &side, &oracle).merge_join_by(market_maker, |x, y| match side {
+            Side::Base => x.rate().cmp(&y.rate()),
+            Side::Quote => y.rate().cmp(&x.rate()),
+        });
 
     swapper.swap(&mut iter)
 }
