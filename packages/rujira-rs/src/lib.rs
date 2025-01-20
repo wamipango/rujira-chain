@@ -12,6 +12,7 @@ mod memoed;
 mod msg;
 pub mod proto;
 pub mod query;
+pub mod schema;
 mod share_pool;
 mod token_factory;
 

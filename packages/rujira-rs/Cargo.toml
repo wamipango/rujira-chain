@@ -16,3 +16,6 @@ regex = { workspace = true }
 schemars = { workspace = true }
 cw-storage-plus = { workspace = true }
 itertools = { workspace = true }
+postcard = { workspace = true }
+cosmwasm-schema-derive = { workspace = true }
+serde = { workspace = true }

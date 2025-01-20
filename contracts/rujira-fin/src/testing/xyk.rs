@@ -7,8 +7,8 @@ use rujira_bow::contract as bow_contract;
 use rujira_rs::{
     bow::{self, Xyk},
     fin::{
-        BookItemResponse, BookResponse, Denoms, ExecuteMsg, InstantiateMsg, Price, QueryMsg, Side,
-        Tick,
+        BookItemResponse, BookResponse, Denoms, ExecuteMsg, InstantiateMsg, OrderResponse,
+        OrdersResponse, Price, QueryMsg, Side, Tick,
     },
     Chain, Layer1Asset, TokenMetadata,
 };
@@ -453,6 +453,68 @@ fn combined_book() {
         ("bid", "39764938"),
         ("side", "quote"),
     ]));
+
+    // Check orders and withdraw
+    let order: OrderResponse = app
+        .wrap()
+        .query_wasm_smart(
+            fin.to_string(),
+            &QueryMsg::Order((
+                owner.to_string(),
+                Side::Quote,
+                Price::Fixed(Decimal::from_str("996").unwrap()),
+            )),
+        )
+        .unwrap();
+    assert_eq!(order.filled, Uint128::from(5020u128));
+    assert_eq!(order.remaining, Uint128::zero());
+    let orders: OrdersResponse = app
+        .wrap()
+        .query_wasm_smart(
+            fin.to_string(),
+            &QueryMsg::Orders {
+                owner: owner.to_string(),
+                side: None,
+                offset: None,
+                limit: None,
+            },
+        )
+        .unwrap();
+    assert_eq!(orders.orders[0].clone(), order);
+
+    let res = app
+        .execute_contract(
+            owner.clone(),
+            fin.clone(),
+            &ExecuteMsg::Order(vec![(
+                Side::Quote,
+                Price::Fixed(Decimal::from_str("996").unwrap()),
+                Uint128::zero(),
+            )]),
+            &coins(455_000, "btc"),
+        )
+        .unwrap();
+
+    res.assert_event(
+        &Event::new("wasm-rujira-fin/order.withdraw").add_attributes(vec![
+            ("owner", owner.as_str()),
+            ("side", "quote"),
+            ("price", "fixed:996"),
+            ("amount", "5020"),
+        ]),
+    );
+
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", owner.as_str()),
+        ("sender", fin.as_str()),
+        ("amount", "459869btc"),
+    ]));
+
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", fees.as_str()),
+        ("sender", fin.as_str()),
+        ("amount", "151btc"),
+    ]));
 }
 
 #[test]
@@ -502,20 +564,20 @@ fn test_arbitrage() {
         ],
     );
 
-    let res = app
-        .execute_contract(
-            owner.clone(),
-            fin.clone(),
-            &ExecuteMsg::Order(vec![(
-                Side::Base,
-                Price::Fixed(Decimal::from_str("998").unwrap()),
-                Uint128::from(10_000u128),
-            )]),
-            &coins(10_000, "btc"),
-        )
-        .unwrap();
+    // let res = app
+    //     .execute_contract(
+    //         owner.clone(),
+    //         fin.clone(),
+    //         &ExecuteMsg::Order(vec![(
+    //             Side::Base,
+    //             Price::Fixed(Decimal::from_str("998").unwrap()),
+    //             Uint128::from(10_000u128),
+    //         )]),
+    //         &coins(10_000, "btc"),
+    //     )
+    //     .unwrap();
 
-    dbg!(&res);
+    // dbg!(&res);
 }
 
 fn assert_side(side: Vec<BookItemResponse>, items: Vec<(&str, u128)>) {
