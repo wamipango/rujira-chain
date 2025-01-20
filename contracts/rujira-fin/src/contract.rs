@@ -58,7 +58,7 @@ pub fn execute(
     let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
     let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
     let mut fees = arb.run(base_iter, quote_iter)?;
-    arb.commit(deps.storage)?;
+    let _commit = arb.commit(deps.storage)?;
 
     match msg {
         ExecuteMsg::Swap { min_return, to, .. } => {
@@ -133,7 +133,8 @@ pub fn execute(
             let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
             let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
             fees += arb.run(base_iter, quote_iter)?;
-            arb.commit(deps.storage)?;
+            let commit = arb.commit(deps.storage)?;
+            dbg!(commit);
 
             if !res.withdraw.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
@@ -143,6 +144,7 @@ pub fn execute(
             }
 
             fees.normalize();
+            dbg!(&fees);
 
             if !fees.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {

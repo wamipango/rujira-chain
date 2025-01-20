@@ -1,7 +1,7 @@
 use cosmwasm_std::{coin, Storage, Uint128};
 use cw_utils::NativeBalance;
 use rujira_rs::{
-    exchange::{SwapError, Swappable},
+    exchange::{SwapCommit, SwapError, Swappable},
     fin::{Denoms, Side},
 };
 use std::ops::Sub;
@@ -53,12 +53,13 @@ impl<T: Arbitrage + Clone> Arber<T> {
         Ok(profit)
     }
 
-    pub fn commit(&mut self, storage: &mut dyn Storage) -> Result<(), SwapError> {
+    pub fn commit(&mut self, storage: &mut dyn Storage) -> Result<SwapCommit, SwapError> {
+        let mut commit = SwapCommit::default();
         for x in self.pending.iter_mut() {
-            x.commit(storage)?;
+            commit += x.commit(storage)?;
         }
 
-        Ok(())
+        Ok(commit)
     }
 }
 

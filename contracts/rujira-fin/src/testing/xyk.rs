@@ -330,6 +330,15 @@ fn combined_book() {
     })
     .unwrap();
 
+    app.execute_contract(
+        owner.clone(),
+        bow.clone(),
+        &bow::ExecuteMsg::Deposit {},
+        // 2 BTC @ 100k USDC
+        &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
+    )
+    .unwrap();
+
     let book: BookResponse = app
         .wrap()
         .query_wasm_smart(
@@ -340,15 +349,6 @@ fn combined_book() {
             },
         )
         .unwrap();
-
-    app.execute_contract(
-        owner.clone(),
-        bow.clone(),
-        &bow::ExecuteMsg::Deposit {},
-        // 2 BTC @ 100k USDC
-        &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
-    )
-    .unwrap();
 
     assert_side(
         book.quote,
@@ -455,7 +455,71 @@ fn combined_book() {
     ]));
 }
 
+#[test]
+fn test_arbitrage() {
+    let mut app = mock_rujira_app();
+    let owner = app.api().addr_make("owner");
+    let fees = app.api().addr_make("fees");
+    let (fin, bow) = setup(&mut app, &owner, &fees);
+    app.init_modules(|router, _, storage| {
+        router.bank.init_balance(
+            storage,
+            &owner,
+            vec![
+                coin(1_000_000_000_000, "btc"),
+                coin(1_000_000_000_000, "usdc"),
+            ],
+        )
+    })
+    .unwrap();
+
+    app.execute_contract(
+        owner.clone(),
+        bow.clone(),
+        &bow::ExecuteMsg::Deposit {},
+        // 2 BTC @ 100k USDC
+        &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
+    )
+    .unwrap();
+
+    let book: BookResponse = app
+        .wrap()
+        .query_wasm_smart(
+            fin.clone(),
+            &QueryMsg::Book {
+                limit: Some(10),
+                offset: None,
+            },
+        )
+        .unwrap();
+
+    assert_side(
+        book.quote,
+        vec![
+            ("999.00099", 199_800_199u128),
+            ("997.00698", 199_400_400u128),
+            ("995.01895", 199_000_806u128),
+        ],
+    );
+
+    let res = app
+        .execute_contract(
+            owner.clone(),
+            fin.clone(),
+            &ExecuteMsg::Order(vec![(
+                Side::Base,
+                Price::Fixed(Decimal::from_str("998").unwrap()),
+                Uint128::from(10_000u128),
+            )]),
+            &coins(10_000, "btc"),
+        )
+        .unwrap();
+
+    dbg!(&res);
+}
+
 fn assert_side(side: Vec<BookItemResponse>, items: Vec<(&str, u128)>) {
+    assert!(side.len().ge(&items.len()));
     for ((price, amount), item) in items.iter().zip(side) {
         let price = Decimal::from_str(price).unwrap();
         let amount = Uint128::from(*amount);
