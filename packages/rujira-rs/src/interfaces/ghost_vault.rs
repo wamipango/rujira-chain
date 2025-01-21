@@ -1,10 +1,14 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Uint128;
 
+use crate::TokenMetadata;
+
 #[cw_serde]
 pub struct InstantiateMsg {
     /// The denom string that can be deposited and lent
     pub denom: String,
+    pub receipt: TokenMetadata,
+    pub debt: TokenMetadata,
 }
 
 #[cw_serde]

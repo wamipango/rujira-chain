@@ -6,11 +6,11 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::must_pay;
 use rujira_rs::ghost_vault::{ExecuteMsg, InstantiateMsg, QueryMsg, SudoMsg};
-use rujira_rs::{SharePool, TokenFactory};
+use rujira_rs::TokenFactory;
 
 use crate::config::Config;
 use crate::error::ContractError;
-use crate::state::{update_interest, DEBT_POOL, DEPOSIT_POOL, MARKETS};
+use crate::state::{State, DEPOSIT_POOL, MARKETS};
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -18,19 +18,21 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::from(msg);
+    let config = Config::from(msg.clone());
     config.validate()?;
     config.save(deps.storage)?;
+    State::init(deps.storage, &env)?;
+    let rcpt = TokenFactory::new(&env, format!("ghost-vault-{}-rcpt", config.denom).as_str());
+    let debt = TokenFactory::new(&env, format!("ghost-vault-{}-debt", config.denom).as_str());
 
-    DEPOSIT_POOL.save(deps.storage, &SharePool::default())?;
-    DEBT_POOL.save(deps.storage, &SharePool::default())?;
-
-    Ok(Response::default())
+    Ok(Response::default()
+        .add_message(rcpt.create_msg(msg.receipt))
+        .add_message(debt.create_msg(msg.debt)))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -41,36 +43,34 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
-    update_interest(deps.storage, &config)?;
+    let mut state = State::load(deps.storage)?;
+    state.distribute_interest(deps.storage, &env, &config)?;
     let rcpt = TokenFactory::new(&env, format!("ghost-vault-{}-rcpt", config.denom).as_str());
     let debt = TokenFactory::new(&env, format!("ghost-vault-{}-debt", config.denom).as_str());
-    match msg {
+    let response = match msg {
         ExecuteMsg::Deposit {} => {
             let amount = must_pay(&info, config.denom.as_str())?;
             let mut pool = DEPOSIT_POOL.load(deps.storage)?;
             let mint = pool.join(amount)?;
             DEPOSIT_POOL.save(deps.storage, &pool)?;
-            Ok(Response::default().add_message(rcpt.mint_msg(mint, info.sender)))
+            Response::default().add_message(rcpt.mint_msg(mint, info.sender))
         }
         ExecuteMsg::Withdraw {} => {
             let amount = must_pay(&info, rcpt.denom().as_str())?;
             let mut pool = DEPOSIT_POOL.load(deps.storage)?;
             let withdrawn = pool.leave(amount)?;
             DEPOSIT_POOL.save(deps.storage, &pool)?;
-            Ok(Response::default()
+            Response::default()
                 .add_message(rcpt.burn_msg(amount))
                 .add_message(BankMsg::Send {
                     to_address: info.sender.to_string(),
                     amount: coins(withdrawn.u128(), config.denom),
-                }))
+                })
         }
         ExecuteMsg::Borrow { amount } => {
             MARKETS.load(deps.storage, info.sender.clone())?;
-
-            let mut pool = DEBT_POOL.load(deps.storage)?;
-            let mint = pool.join(amount)?;
-            DEPOSIT_POOL.save(deps.storage, &pool)?;
-            Ok(Response::default()
+            let mint = state.borrow(amount)?;
+            Response::default()
                 // Mint to contract and send both together for clarity
                 .add_message(debt.mint_msg(mint, env.contract.address.clone()))
                 .add_message(BankMsg::Send {
@@ -79,29 +79,19 @@ pub fn execute(
                         coin(amount.u128(), config.denom),
                         coin(mint.u128(), rcpt.denom()),
                     ],
-                }))
+                })
         }
         ExecuteMsg::Repay {} => {
             MARKETS.load(deps.storage, info.sender.clone())?;
-
             // TODO: Fetch the debt token + deposit token
             let amount = must_pay(&info, config.denom.as_str())?;
             let debt_amount = must_pay(&info, debt.denom().as_str())?;
-            let mut pool = DEBT_POOL.load(deps.storage)?;
-            let withdrawn = pool.leave(debt_amount)?;
-            // Ensure that the amount being repaid is at least the value of the debt being burned
-            ensure!(
-                amount.ge(&withdrawn),
-                ContractError::InsufficientRepay {
-                    debt: debt_amount,
-                    value: withdrawn,
-                    repaid: amount
-                }
-            );
-            DEPOSIT_POOL.save(deps.storage, &pool)?;
-            Ok(Response::default().add_message(debt.burn_msg(amount)))
+            state.repay(amount, debt_amount)?;
+            Response::default().add_message(debt.burn_msg(debt_amount))
         }
-    }
+    };
+    state.save(deps.storage)?;
+    Ok(response)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -132,6 +122,8 @@ mod tests {
             owner,
             &InstantiateMsg {
                 denom: "btc".to_string(),
+                receipt: todo!(),
+                debt: todo!(),
             },
             &[],
             "template",
