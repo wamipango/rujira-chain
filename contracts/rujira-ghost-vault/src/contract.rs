@@ -221,9 +221,9 @@ mod tests {
                     },
                     interest: Interest {
                         target_utilization: Decimal::from_ratio(8u128, 10u128),
-                        base_rate: Decimal::from_ratio(3u128, 10000u128),
-                        slope1: Decimal::from_ratio(8u128, 10u128),
-                        slope2: Decimal::from_ratio(8u128, 10u128),
+                        base_rate: Decimal::from_ratio(1u128, 10u128),
+                        step1: Decimal::from_ratio(1u128, 10u128),
+                        step2: Decimal::from_ratio(3u128, 1u128),
                     },
                 },
                 &[],
@@ -377,7 +377,7 @@ mod tests {
                 .add_attributes(vec![("amount", "100"), ("denom", "x/ghost-vault-btc-debt")]),
         );
 
-        app.update_block(|x| x.time = x.time.plus_days(30));
+        app.update_block(|x| x.time = x.time.plus_days(90));
 
         // Check the rate has increased
         let status: StatusResponse = app
@@ -387,14 +387,14 @@ mod tests {
 
         assert_eq!(status.total_deposits, Uint128::from(800u128));
         assert_eq!(status.total_borrows, Uint128::from(400u128));
-        assert_eq!(status.debt_pool.size, Uint128::from(413u128));
+        assert_eq!(status.debt_pool.size, Uint128::from(416u128));
         assert_eq!(status.debt_pool.shares, Uint128::from(400u128));
-        assert_eq!(status.debt_pool.ratio, Decimal::from_str("1.0325").unwrap());
-        assert_eq!(status.deposit_pool.size, Uint128::from(813u128));
+        assert_eq!(status.debt_pool.ratio, Decimal::from_str("1.04").unwrap());
+        assert_eq!(status.deposit_pool.size, Uint128::from(816u128));
         assert_eq!(status.deposit_pool.shares, Uint128::from(800u128));
         assert_eq!(
             status.deposit_pool.ratio,
-            Decimal::from_str("1.01625").unwrap()
+            Decimal::from_str("1.02").unwrap()
         );
 
         // Make another deposit
@@ -412,12 +412,12 @@ mod tests {
             &Event::new("wasm-rujira-ghost-vault/deposit").add_attributes(vec![
                 ("amount", "1000"),
                 ("owner", owner.as_str()),
-                ("minted", "984"),
+                ("minted", "980"),
             ]),
         );
 
         res.assert_event(&Event::new("mint").add_attributes(vec![
-            ("amount", "984"),
+            ("amount", "980"),
             ("denom", "x/ghost-vault-btc-rcpt"),
             ("recipient", owner.as_str()),
         ]));
@@ -439,12 +439,12 @@ mod tests {
                 borrower.clone(),
                 contract.clone(),
                 &ExecuteMsg::Repay {},
-                &vec![coin(103, "btc"), coin(100, "x/ghost-vault-btc-debt")],
+                &vec![coin(104, "btc"), coin(100, "x/ghost-vault-btc-debt")],
             )
             .unwrap();
         res.assert_event(
             &Event::new("wasm-rujira-ghost-vault/repay").add_attributes(vec![
-                ("amount", "103"),
+                ("amount", "104"),
                 ("borrower", borrower.as_str()),
                 ("shares", "100"),
             ]),
@@ -467,7 +467,7 @@ mod tests {
 
         res.assert_event(
             &Event::new("wasm-rujira-ghost-vault/withdraw").add_attributes(vec![
-                ("amount", "203"),
+                ("amount", "204"),
                 ("owner", owner.as_str()),
                 ("shares", "200"),
             ]),

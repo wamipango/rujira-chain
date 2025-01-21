@@ -49,8 +49,8 @@ mod tests {
             interest: Interest {
                 target_utilization: Decimal::from_ratio(8u128, 10u128),
                 base_rate: Decimal::from_ratio(3u128, 10000u128),
-                slope1: Decimal::from_ratio(8u128, 10u128),
-                slope2: Decimal::from_ratio(8u128, 10u128),
+                step1: Decimal::from_ratio(8u128, 10u128),
+                step2: Decimal::from_ratio(3u128, 11u128),
             },
         }
         .validate()
