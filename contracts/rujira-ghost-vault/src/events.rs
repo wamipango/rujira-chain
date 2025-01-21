@@ -15,14 +15,14 @@ pub fn event_withdraw(owner: Addr, amount: Uint128, shares: Uint128) -> Event {
 }
 
 pub fn event_borrow(borrower: Addr, amount: Uint128, minted: Uint128) -> Event {
-    Event::new(format!("{}/deposit", env!("CARGO_PKG_NAME")))
+    Event::new(format!("{}/borrow", env!("CARGO_PKG_NAME")))
         .add_attribute("borrower", borrower)
         .add_attribute("amount", amount)
         .add_attribute("minted", minted)
 }
 
 pub fn event_repay(borrower: Addr, amount: Uint128, shares: Uint128) -> Event {
-    Event::new(format!("{}/deposit", env!("CARGO_PKG_NAME")))
+    Event::new(format!("{}/repay", env!("CARGO_PKG_NAME")))
         .add_attribute("borrower", borrower)
         .add_attribute("amount", amount)
         .add_attribute("shares", shares)

@@ -72,22 +72,20 @@ pub fn execute(
                 .add_event(event_withdraw(info.sender, withdrawn, amount))
         }
         ExecuteMsg::Borrow { amount } => {
-            Borrower::load(deps.storage, info.sender.clone())?;
+            let mut borrower = Borrower::load(deps.storage, info.sender.clone())?;
+            borrower.borrow(amount)?;
+            borrower.save(deps.storage)?;
             let mint = state.borrow(amount)?;
             Response::default()
-                // Mint to contract and send both together for clarity
-                .add_message(debt.mint_msg(mint, env.contract.address.clone()))
+                .add_message(debt.mint_msg(mint, info.sender.clone()))
                 .add_message(BankMsg::Send {
                     to_address: info.sender.to_string(),
-                    amount: vec![
-                        coin(amount.u128(), config.denom),
-                        coin(mint.u128(), rcpt.denom()),
-                    ],
+                    amount: coins(amount.u128(), config.denom),
                 })
                 .add_event(event_borrow(info.sender, amount, mint))
         }
         ExecuteMsg::Repay {} => {
-            Borrower::load(deps.storage, info.sender.clone())?;
+            let mut borrower = Borrower::load(deps.storage, info.sender.clone())?;
 
             let amount = info
                 .funds
@@ -99,7 +97,11 @@ pub fn execute(
                 .iter()
                 .find(|x| x.denom == debt.denom())
                 .ok_or(PaymentError::MissingDenom(debt.denom()))?;
-            state.repay(amount.amount, debt_amount.amount)?;
+
+            borrower.repay(amount.amount);
+            borrower.save(deps.storage)?;
+
+            state.repay(amount.amount, amount.amount)?;
             Response::default()
                 .add_message(debt.burn_msg(debt_amount.amount))
                 .add_event(event_repay(info.sender, amount.amount, debt_amount.amount))
@@ -146,7 +148,7 @@ pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> Result<Binary, ContractE
 mod tests {
 
     use super::*;
-    use cosmwasm_std::{Decimal, Event};
+    use cosmwasm_std::{Decimal, Event, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{ghost_vault::Interest, TokenMetadata};
     use rujira_rs_testing::mock_rujira_app;
@@ -162,7 +164,7 @@ mod tests {
                 .unwrap();
         });
 
-        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query).with_sudo(sudo));
         let code_id = app.store_code(code);
         let contract = app
             .instantiate_contract(
@@ -247,6 +249,91 @@ mod tests {
         res.assert_event(
             &Event::new("burn")
                 .add_attributes(vec![("amount", "200"), ("denom", "x/ghost-vault-btc-rcpt")]),
+        );
+
+        // Whitelist a borrower address
+        let borrower = app.api().addr_make("borrower");
+        app.wasm_sudo(
+            contract.clone(),
+            &SudoMsg::AddBorrower {
+                addr: borrower.to_string(),
+                borrow_limit: Uint128::from(500u128),
+            },
+        )
+        .unwrap();
+
+        // Check we can't borrow more than the limit
+        app.execute_contract(
+            borrower.clone(),
+            contract.clone(),
+            &ExecuteMsg::Borrow {
+                amount: Uint128::from(501u128),
+            },
+            &vec![],
+        )
+        .unwrap_err();
+
+        // Borrow the whole lot, check debt tokens minted
+        let res = app
+            .execute_contract(
+                borrower.clone(),
+                contract.clone(),
+                &ExecuteMsg::Borrow {
+                    amount: Uint128::from(500u128),
+                },
+                &vec![],
+            )
+            .unwrap();
+
+        res.assert_event(
+            &Event::new("wasm-rujira-ghost-vault/borrow").add_attributes(vec![
+                ("borrower", borrower.as_str()),
+                ("amount", "500"),
+                ("minted", "500"),
+            ]),
+        );
+
+        res.assert_event(&Event::new("mint").add_attributes(vec![
+            ("amount", "500"),
+            ("denom", "x/ghost-vault-btc-debt"),
+            ("recipient", borrower.as_str()),
+        ]));
+
+        res.assert_event(
+            &Event::new("transfer")
+                .add_attributes(vec![("amount", "500btc"), ("recipient", borrower.as_str())]),
+        );
+
+        // Test repay debt without token
+        app.execute_contract(
+            borrower.clone(),
+            contract.clone(),
+            &ExecuteMsg::Repay {},
+            &coins(100, "x/ghost-vault-btc-debt"),
+        )
+        .unwrap_err();
+
+        // Now repay with the required asset
+        let res = app
+            .execute_contract(
+                borrower.clone(),
+                contract.clone(),
+                &ExecuteMsg::Repay {},
+                &vec![coin(100, "btc"), coin(100, "x/ghost-vault-btc-debt")],
+            )
+            .unwrap();
+
+        res.assert_event(
+            &Event::new("wasm-rujira-ghost-vault/repay").add_attributes(vec![
+                ("amount", "100"),
+                ("borrower", borrower.as_str()),
+                ("shares", "100"),
+            ]),
+        );
+
+        res.assert_event(
+            &Event::new("burn")
+                .add_attributes(vec![("amount", "100"), ("denom", "x/ghost-vault-btc-debt")]),
         );
     }
 }
