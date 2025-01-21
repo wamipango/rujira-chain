@@ -1,7 +1,10 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{ensure, Decimal, Env, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Item;
-use rujira_rs::{ghost_vault::Interest, SharePool};
+use rujira_rs::{
+    ghost_vault::{Interest, PoolResponse, StatusResponse},
+    SharePool,
+};
 use std::ops::{Mul, Sub};
 
 use crate::{config::Config, ContractError};
@@ -118,5 +121,25 @@ impl State {
         self.last_updated = env.block.time;
 
         Ok(())
+    }
+}
+
+impl From<State> for StatusResponse {
+    fn from(value: State) -> Self {
+        Self {
+            last_updated: value.last_updated,
+            total_deposits: value.total_deposits,
+            total_borrows: value.total_borrows,
+            debt_pool: PoolResponse {
+                size: value.debt_pool.size(),
+                shares: value.debt_pool.shares(),
+                ratio: value.debt_pool.ratio(),
+            },
+            deposit_pool: PoolResponse {
+                size: value.deposit_pool.size(),
+                shares: value.deposit_pool.shares(),
+                ratio: value.deposit_pool.ratio(),
+            },
+        }
     }
 }

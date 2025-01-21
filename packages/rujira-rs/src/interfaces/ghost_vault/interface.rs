@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Decimal, Timestamp, Uint128};
 
 use crate::TokenMetadata;
 
@@ -38,4 +38,50 @@ pub enum SudoMsg {
 
 #[cw_serde]
 #[derive(QueryResponses)]
-pub enum QueryMsg {}
+pub enum QueryMsg {
+    #[returns(StatusResponse)]
+    Status {},
+
+    #[returns(BorrowerResponse)]
+    Borrower { addr: String },
+
+    #[returns(BorrowersResponse)]
+    Borrowers {
+        limit: Option<u8>,
+        start_after: Option<String>,
+    },
+}
+
+#[cw_serde]
+pub struct StatusResponse {
+    pub last_updated: Timestamp,
+    pub total_deposits: Uint128,
+    pub total_borrows: Uint128,
+
+    // Share pool that accounts for accrued debt interest
+    pub debt_pool: PoolResponse,
+    // Share pool that allocated collected debt interest to lenders
+    pub deposit_pool: PoolResponse,
+}
+
+#[cw_serde]
+pub struct PoolResponse {
+    /// The total deposits into the pool
+    pub size: Uint128,
+    /// The total ownership of the pool
+    pub shares: Uint128,
+    /// Ratio of shares / size
+    pub ratio: Decimal,
+}
+
+#[cw_serde]
+pub struct BorrowerResponse {
+    pub addr: String,
+    pub limit: Uint128,
+    pub current: Uint128,
+}
+
+#[cw_serde]
+pub struct BorrowersResponse {
+    pub borrowers: Vec<BorrowerResponse>,
+}

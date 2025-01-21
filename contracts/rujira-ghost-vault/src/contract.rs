@@ -1,11 +1,14 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
+    coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, PaymentError};
-use rujira_rs::ghost_vault::{ExecuteMsg, InstantiateMsg, QueryMsg, SudoMsg};
+use rujira_rs::ghost_vault::{
+    BorrowerResponse, BorrowersResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StatusResponse,
+    SudoMsg,
+};
 use rujira_rs::TokenFactory;
 
 use crate::borrowers::Borrower;
@@ -137,12 +140,35 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> Result<Binary, ContractError> {
-    Ok(to_json_binary(&())?)
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
+    let mut state = State::load(deps.storage)?;
+    let config = Config::load(deps.storage)?;
+    state.distribute_interest(&env, &config)?;
+
+    match msg {
+        QueryMsg::Status {} => Ok(to_json_binary(&StatusResponse::from(state))?),
+        QueryMsg::Borrower { addr } => Ok(to_json_binary(&BorrowerResponse::from(
+            Borrower::load(deps.storage, deps.api.addr_validate(addr.as_str())?)?,
+        ))?),
+        QueryMsg::Borrowers { limit, start_after } => {
+            let borrowers = Borrower::list(
+                deps.storage,
+                limit,
+                start_after
+                    .map(|x| deps.api.addr_validate(x.as_str()))
+                    .transpose()?,
+            )
+            .map(|x| x.map(BorrowerResponse::from))
+            .collect::<StdResult<Vec<BorrowerResponse>>>()?;
+            Ok(to_json_binary(&BorrowersResponse { borrowers })?)
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+
+    use std::str::FromStr;
 
     use super::*;
     use cosmwasm_std::{coin, Decimal, Event, Uint128};
@@ -264,6 +290,19 @@ mod tests {
         )
         .unwrap();
 
+        let b: BorrowerResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Borrower {
+                    addr: borrower.to_string(),
+                },
+            )
+            .unwrap();
+        assert_eq!(b.addr, borrower.to_string());
+        assert_eq!(b.limit, Uint128::from(500u128));
+        assert_eq!(b.current, Uint128::zero());
+
         // Check we can't borrow more than the limit
         app.execute_contract(
             borrower.clone(),
@@ -339,6 +378,24 @@ mod tests {
         );
 
         app.update_block(|x| x.time = x.time.plus_days(30));
+
+        // Check the rate has increased
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
+
+        assert_eq!(status.total_deposits, Uint128::from(800u128));
+        assert_eq!(status.total_borrows, Uint128::from(400u128));
+        assert_eq!(status.debt_pool.size, Uint128::from(413u128));
+        assert_eq!(status.debt_pool.shares, Uint128::from(400u128));
+        assert_eq!(status.debt_pool.ratio, Decimal::from_str("1.0325").unwrap());
+        assert_eq!(status.deposit_pool.size, Uint128::from(813u128));
+        assert_eq!(status.deposit_pool.shares, Uint128::from(800u128));
+        assert_eq!(
+            status.deposit_pool.ratio,
+            Decimal::from_str("1.01625").unwrap()
+        );
 
         // Make another deposit
         let res = app
