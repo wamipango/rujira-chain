@@ -39,6 +39,9 @@ pub enum SudoMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(Interest)]
+    Interest {},
+
     #[returns(StatusResponse)]
     Status {},
 
@@ -57,6 +60,10 @@ pub struct StatusResponse {
     pub last_updated: Timestamp,
 
     pub utilization_ratio: Decimal,
+
+    pub borrow_rate: Decimal,
+
+    pub lend_rate: Decimal,
     // Share pool that accounts for accrued debt interest
     pub debt_pool: PoolResponse,
     // Share pool that allocated collected debt interest to lenders

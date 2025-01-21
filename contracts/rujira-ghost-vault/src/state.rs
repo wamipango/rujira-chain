@@ -1,10 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{ensure, Decimal, Env, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Item;
-use rujira_rs::{
-    ghost_vault::{Interest, PoolResponse, StatusResponse},
-    SharePool,
-};
+use rujira_rs::{ghost_vault::Interest, SharePool};
 use std::ops::{Mul, Sub};
 
 use crate::{config::Config, ContractError};
@@ -13,15 +10,15 @@ static STATE: Item<State> = Item::new("state");
 
 #[cw_serde]
 pub struct State {
-    last_updated: Timestamp,
+    pub last_updated: Timestamp,
 
     // Pools representing the ownership of debt, and ownership of deposits + interest
     // Calculated interest is charged on the debt_pool, and the same amount allocated
     // to the deposit_pool. As membership of each grows and shrinks (ie through
     // borrows & repays for debt_pool, and deposits & withdraws for deposit_pool),
     // the effective rate earned by depositors will vary
-    debt_pool: SharePool,
-    deposit_pool: SharePool,
+    pub debt_pool: SharePool,
+    pub deposit_pool: SharePool,
 }
 
 impl State {
@@ -75,7 +72,7 @@ impl State {
         Ok(())
     }
 
-    fn utilization(&self) -> Decimal {
+    pub fn utilization(&self) -> Decimal {
         // We consider accrued interest and debt in the utilization rate
         if self.deposit_pool.size().is_zero() {
             Decimal::zero()
@@ -89,12 +86,20 @@ impl State {
         }
     }
 
+    pub fn borrow_rate(&self, interest: &Interest) -> StdResult<Decimal> {
+        interest.rate(self.utilization())
+    }
+
+    pub fn lend_rate(&self, interest: &Interest) -> StdResult<Decimal> {
+        Ok(interest.rate(self.utilization())? * self.utilization())
+    }
+
     pub fn calculate_interest(
         &mut self,
         interest: &Interest,
         to: Timestamp,
     ) -> Result<Uint128, ContractError> {
-        let rate = interest.rate(self.utilization())?;
+        let rate = self.borrow_rate(interest)?;
         let seconds = to.seconds().sub(self.last_updated.seconds());
         let part = Decimal::from_ratio(seconds, 31_536_000u128);
         Ok(Decimal::from_ratio(self.debt_pool.size(), 1u128)
@@ -115,24 +120,5 @@ impl State {
         self.last_updated = env.block.time;
 
         Ok(())
-    }
-}
-
-impl From<State> for StatusResponse {
-    fn from(value: State) -> Self {
-        Self {
-            utilization_ratio: value.utilization(),
-            last_updated: value.last_updated,
-            debt_pool: PoolResponse {
-                size: value.debt_pool.size(),
-                shares: value.debt_pool.shares(),
-                ratio: value.debt_pool.ratio(),
-            },
-            deposit_pool: PoolResponse {
-                size: value.deposit_pool.size(),
-                shares: value.deposit_pool.shares(),
-                ratio: value.deposit_pool.ratio(),
-            },
-        }
     }
 }

@@ -6,8 +6,8 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::{must_pay, PaymentError};
 use rujira_rs::ghost_vault::{
-    BorrowerResponse, BorrowersResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StatusResponse,
-    SudoMsg,
+    BorrowerResponse, BorrowersResponse, ExecuteMsg, InstantiateMsg, PoolResponse, QueryMsg,
+    StatusResponse, SudoMsg,
 };
 use rujira_rs::TokenFactory;
 
@@ -146,7 +146,23 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     state.distribute_interest(&env, &config)?;
 
     match msg {
-        QueryMsg::Status {} => Ok(to_json_binary(&StatusResponse::from(state))?),
+        QueryMsg::Status {} => Ok(to_json_binary(&StatusResponse {
+            borrow_rate: state.borrow_rate(&config.interest)?,
+            lend_rate: state.lend_rate(&config.interest)?,
+            utilization_ratio: state.utilization(),
+            last_updated: state.last_updated,
+            debt_pool: PoolResponse {
+                size: state.debt_pool.size(),
+                shares: state.debt_pool.shares(),
+                ratio: state.debt_pool.ratio(),
+            },
+            deposit_pool: PoolResponse {
+                size: state.deposit_pool.size(),
+                shares: state.deposit_pool.shares(),
+                ratio: state.deposit_pool.ratio(),
+            },
+        })?),
+        QueryMsg::Interest {} => Ok(to_json_binary(&config.interest)?),
         QueryMsg::Borrower { addr } => Ok(to_json_binary(&BorrowerResponse::from(
             Borrower::load(deps.storage, deps.api.addr_validate(addr.as_str())?)?,
         ))?),
@@ -384,7 +400,7 @@ mod tests {
             .wrap()
             .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
             .unwrap();
-
+        dbg!(&status);
         assert_eq!(
             status.utilization_ratio,
             Decimal::from_str("0.509803921568627451").unwrap()
