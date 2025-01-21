@@ -14,9 +14,6 @@ static STATE: Item<State> = Item::new("state");
 #[cw_serde]
 pub struct State {
     last_updated: Timestamp,
-    total_deposits: Uint128,
-    // Total amount of debt that interest is chargeable on
-    total_borrows: Uint128,
 
     // Pools representing the ownership of debt, and ownership of deposits + interest
     // Calculated interest is charged on the debt_pool, and the same amount allocated
@@ -33,8 +30,6 @@ impl State {
             storage,
             &Self {
                 last_updated: env.block.time,
-                total_deposits: Uint128::zero(),
-                total_borrows: Uint128::zero(),
                 debt_pool: SharePool::default(),
                 deposit_pool: SharePool::default(),
             },
@@ -52,19 +47,16 @@ impl State {
     }
 
     pub fn deposit(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
-        self.total_deposits += amount;
         Ok(self.deposit_pool.join(amount)?)
     }
 
     pub fn withdraw(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
         let withdrawn = self.deposit_pool.leave(amount)?;
-        self.total_deposits -= withdrawn;
         Ok(withdrawn)
     }
 
     pub fn borrow(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
         let mint = self.debt_pool.join(amount)?;
-        self.total_borrows += amount;
 
         Ok(mint)
     }
@@ -80,8 +72,21 @@ impl State {
                 repaid: amount
             }
         );
-        self.total_borrows -= withdrawn;
         Ok(())
+    }
+
+    fn utilization(&self) -> Decimal {
+        // We consider accrued interest and debt in the utilization rate
+        if self.deposit_pool.size().is_zero() {
+            Decimal::zero()
+        } else {
+            Decimal::one()
+                - Decimal::from_ratio(
+                    // We use the debt pool size to determine utilization
+                    self.deposit_pool.size().sub(self.debt_pool.size()),
+                    self.deposit_pool.size(),
+                )
+        }
     }
 
     pub fn calculate_interest(
@@ -89,21 +94,10 @@ impl State {
         interest: &Interest,
         to: Timestamp,
     ) -> Result<Uint128, ContractError> {
-        // We consider accrued interest in the utilization rate
-        let utilization = if self.deposit_pool.size().is_zero() {
-            Decimal::zero()
-        } else {
-            Decimal::one()
-                - Decimal::from_ratio(
-                    self.total_deposits.sub(self.total_borrows),
-                    self.deposit_pool.size(),
-                )
-        };
-
-        let rate = interest.rate(utilization)?;
+        let rate = interest.rate(self.utilization())?;
         let seconds = to.seconds().sub(self.last_updated.seconds());
         let part = Decimal::from_ratio(seconds, 31_536_000u128);
-        Ok(Decimal::from_ratio(self.total_borrows, 1u128)
+        Ok(Decimal::from_ratio(self.debt_pool.size(), 1u128)
             .mul(rate)
             .mul(part)
             .to_uint_floor())
@@ -127,9 +121,8 @@ impl State {
 impl From<State> for StatusResponse {
     fn from(value: State) -> Self {
         Self {
+            utilization_ratio: value.utilization(),
             last_updated: value.last_updated,
-            total_deposits: value.total_deposits,
-            total_borrows: value.total_borrows,
             debt_pool: PoolResponse {
                 size: value.debt_pool.size(),
                 shares: value.debt_pool.shares(),

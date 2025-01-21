@@ -55,9 +55,8 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct StatusResponse {
     pub last_updated: Timestamp,
-    pub total_deposits: Uint128,
-    pub total_borrows: Uint128,
 
+    pub utilization_ratio: Decimal,
     // Share pool that accounts for accrued debt interest
     pub debt_pool: PoolResponse,
     // Share pool that allocated collected debt interest to lenders

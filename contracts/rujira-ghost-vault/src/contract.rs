@@ -385,8 +385,10 @@ mod tests {
             .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
             .unwrap();
 
-        assert_eq!(status.total_deposits, Uint128::from(800u128));
-        assert_eq!(status.total_borrows, Uint128::from(400u128));
+        assert_eq!(
+            status.utilization_ratio,
+            Decimal::from_str("0.509803921568627451").unwrap()
+        );
         assert_eq!(status.debt_pool.size, Uint128::from(416u128));
         assert_eq!(status.debt_pool.shares, Uint128::from(400u128));
         assert_eq!(status.debt_pool.ratio, Decimal::from_str("1.04").unwrap());
@@ -476,6 +478,32 @@ mod tests {
         res.assert_event(
             &Event::new("burn")
                 .add_attributes(vec![("amount", "200"), ("denom", "x/ghost-vault-btc-rcpt")]),
+        );
+
+        // Check complete repayument
+        app.execute_contract(
+            borrower.clone(),
+            contract.clone(),
+            &ExecuteMsg::Repay {},
+            &vec![coin(312, "btc"), coin(300, "x/ghost-vault-btc-debt")],
+        )
+        .unwrap();
+
+        // Check the rate has increased
+        let status: StatusResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
+            .unwrap();
+
+        assert_eq!(status.utilization_ratio, Decimal::zero());
+        assert_eq!(status.debt_pool.size, Uint128::zero());
+        assert_eq!(status.debt_pool.shares, Uint128::zero());
+        assert_eq!(status.debt_pool.ratio, Decimal::zero());
+        assert_eq!(status.deposit_pool.size, Uint128::from(1612u128));
+        assert_eq!(status.deposit_pool.shares, Uint128::from(1580u128));
+        assert_eq!(
+            status.deposit_pool.ratio,
+            Decimal::from_str("1.020253164556962025").unwrap()
         );
     }
 }
