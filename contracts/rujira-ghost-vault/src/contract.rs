@@ -11,6 +11,7 @@ use rujira_rs::TokenFactory;
 use crate::borrowers::Borrower;
 use crate::config::Config;
 use crate::error::ContractError;
+use crate::events::{event_borrow, event_deposit, event_repay, event_withdraw};
 use crate::state::State;
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -55,7 +56,9 @@ pub fn execute(
         ExecuteMsg::Deposit {} => {
             let amount = must_pay(&info, config.denom.as_str())?;
             let mint = state.deposit(amount)?;
-            Response::default().add_message(rcpt.mint_msg(mint, info.sender))
+            Response::default()
+                .add_message(rcpt.mint_msg(mint, info.sender.clone()))
+                .add_event(event_deposit(info.sender, amount, mint))
         }
         ExecuteMsg::Withdraw {} => {
             let amount = must_pay(&info, rcpt.denom().as_str())?;
@@ -66,6 +69,7 @@ pub fn execute(
                     to_address: info.sender.to_string(),
                     amount: coins(withdrawn.u128(), config.denom),
                 })
+                .add_event(event_withdraw(info.sender, withdrawn, amount))
         }
         ExecuteMsg::Borrow { amount } => {
             Borrower::load(deps.storage, info.sender.clone())?;
@@ -80,6 +84,7 @@ pub fn execute(
                         coin(mint.u128(), rcpt.denom()),
                     ],
                 })
+                .add_event(event_borrow(info.sender, amount, mint))
         }
         ExecuteMsg::Repay {} => {
             Borrower::load(deps.storage, info.sender.clone())?;
@@ -95,7 +100,9 @@ pub fn execute(
                 .find(|x| x.denom == debt.denom())
                 .ok_or(PaymentError::MissingDenom(debt.denom()))?;
             state.repay(amount.amount, debt_amount.amount)?;
-            Response::default().add_message(debt.burn_msg(debt_amount.amount))
+            Response::default()
+                .add_message(debt.burn_msg(debt_amount.amount))
+                .add_event(event_repay(info.sender, amount.amount, debt_amount.amount))
         }
     };
     state.save(deps.storage)?;
@@ -139,35 +146,107 @@ pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> Result<Binary, ContractE
 mod tests {
 
     use super::*;
-    use cosmwasm_std::Decimal;
-    use cw_multi_test::{BasicApp, ContractWrapper, Executor};
-    use rujira_rs::ghost_vault::Interest;
+    use cosmwasm_std::{Decimal, Event};
+    use cw_multi_test::{ContractWrapper, Executor};
+    use rujira_rs::{ghost_vault::Interest, TokenMetadata};
+    use rujira_rs_testing::mock_rujira_app;
 
     #[test]
-    fn instantiation() {
-        let mut app = BasicApp::default();
+    fn lifecycle() {
+        let mut app = mock_rujira_app();
         let owner = app.api().addr_make("owner");
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &owner, coins(1_000_000, "btc"))
+                .unwrap();
+        });
 
         let code = Box::new(ContractWrapper::new(execute, instantiate, query));
         let code_id = app.store_code(code);
-        app.instantiate_contract(
-            code_id,
-            owner,
-            &InstantiateMsg {
-                denom: "btc".to_string(),
-                receipt: todo!(),
-                debt: todo!(),
-                interest: Interest {
-                    target_utilization: Decimal::from_ratio(8u128, 10u128),
-                    base_rate: Decimal::from_ratio(3u128, 10000u128),
-                    slope1: Decimal::from_ratio(8u128, 10u128),
-                    slope2: Decimal::from_ratio(8u128, 10u128),
+        let contract = app
+            .instantiate_contract(
+                code_id,
+                owner.clone(),
+                &InstantiateMsg {
+                    denom: "btc".to_string(),
+                    receipt: TokenMetadata {
+                        description: "".to_string(),
+                        exponent: 6,
+                        display: "".to_string(),
+                        name: "".to_string(),
+                        symbol: "".to_string(),
+                        uri: None,
+                        uri_hash: None,
+                    },
+                    debt: TokenMetadata {
+                        description: "".to_string(),
+                        exponent: 6,
+                        display: "".to_string(),
+                        name: "".to_string(),
+                        symbol: "".to_string(),
+                        uri: None,
+                        uri_hash: None,
+                    },
+                    interest: Interest {
+                        target_utilization: Decimal::from_ratio(8u128, 10u128),
+                        base_rate: Decimal::from_ratio(3u128, 10000u128),
+                        slope1: Decimal::from_ratio(8u128, 10u128),
+                        slope2: Decimal::from_ratio(8u128, 10u128),
+                    },
                 },
-            },
-            &[],
-            "template",
-            None,
-        )
-        .unwrap();
+                &[],
+                "template",
+                None,
+            )
+            .unwrap();
+
+        // First deposit
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Deposit {},
+                &coins(1_000u128, "btc"),
+            )
+            .unwrap();
+
+        res.assert_event(
+            &Event::new("wasm-rujira-ghost-vault/deposit").add_attributes(vec![
+                ("amount", "1000"),
+                ("owner", owner.as_str()),
+                ("minted", "1000"),
+            ]),
+        );
+
+        res.assert_event(&Event::new("mint").add_attributes(vec![
+            ("amount", "1000"),
+            ("denom", "x/ghost-vault-btc-rcpt"),
+            ("recipient", owner.as_str()),
+        ]));
+
+        // Withdraw some
+
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Withdraw {},
+                &coins(200u128, "x/ghost-vault-btc-rcpt"),
+            )
+            .unwrap();
+
+        res.assert_event(
+            &Event::new("wasm-rujira-ghost-vault/withdraw").add_attributes(vec![
+                ("amount", "200"),
+                ("owner", owner.as_str()),
+                ("shares", "200"),
+            ]),
+        );
+
+        res.assert_event(
+            &Event::new("burn")
+                .add_attributes(vec![("amount", "200"), ("denom", "x/ghost-vault-btc-rcpt")]),
+        );
     }
 }

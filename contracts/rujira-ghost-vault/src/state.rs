@@ -84,8 +84,11 @@ impl State {
         to: Timestamp,
     ) -> Result<Uint128, ContractError> {
         // We consider accrued interest in the utilization rate
-        let utilization =
-            Decimal::one() - Decimal::from_ratio(balance.clone(), self.deposit_pool.size());
+        let utilization = if self.deposit_pool.size().is_zero() {
+            Decimal::zero()
+        } else {
+            Decimal::one() - Decimal::from_ratio(balance.clone(), self.deposit_pool.size())
+        };
         let rate = interest.rate(utilization)?;
         let seconds = to.seconds().sub(self.last_updated.seconds());
         let part = Decimal::from_ratio(seconds, 31_536_000u128);
