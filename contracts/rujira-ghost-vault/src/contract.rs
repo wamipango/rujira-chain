@@ -397,5 +397,28 @@ mod tests {
             &Event::new("burn")
                 .add_attributes(vec![("amount", "100"), ("denom", "x/ghost-vault-btc-debt")]),
         );
+
+        // Lastly check that the value of my deposit has increased
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Withdraw {},
+                &coins(200u128, "x/ghost-vault-btc-rcpt"),
+            )
+            .unwrap();
+
+        res.assert_event(
+            &Event::new("wasm-rujira-ghost-vault/withdraw").add_attributes(vec![
+                ("amount", "203"),
+                ("owner", owner.as_str()),
+                ("shares", "200"),
+            ]),
+        );
+
+        res.assert_event(
+            &Event::new("burn")
+                .add_attributes(vec![("amount", "200"), ("denom", "x/ghost-vault-btc-rcpt")]),
+        );
     }
 }
