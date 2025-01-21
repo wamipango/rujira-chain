@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     coins, to_json_binary, Addr, BankMsg, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, QuerierWrapper, Reply, Response, StdResult, Storage, SubMsg,
+    MessageInfo, QuerierWrapper, Reply, Response, StdResult, Storage, SubMsg, WasmMsg,
 };
 
 use crate::error::ContractError;
@@ -107,7 +107,7 @@ fn get_action_msg(
     storage: &mut dyn Storage,
     querier: QuerierWrapper,
     contract: &Addr,
-) -> StdResult<Option<(Action, CosmosMsg)>> {
+) -> StdResult<Option<(Action, WasmMsg)>> {
     // Fetch the next action in the iterator
     if let Some(action) = Action::next(storage)? {
         let balance = querier.query_balance(contract, action.denom.to_string())?;

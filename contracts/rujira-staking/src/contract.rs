@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult, Storage, Uint128, WasmMsg,
+    coins, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response,
+    StdResult, Storage, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
@@ -60,11 +60,11 @@ pub fn execute(
         }
     }?;
     if swap_amount.gt(&Uint128::zero()) {
-        res = res.add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+        res = res.add_message(WasmMsg::Execute {
             contract_addr: config.revenue_converter.0.to_string(),
             msg: config.revenue_converter.1.clone(),
             funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
-        }));
+        });
     }
     Ok(res)
 }
@@ -99,10 +99,10 @@ fn execute_account(
             let mut response =
                 Response::default().add_event(event_account_bond(info.sender.clone(), amount));
             if reward_amount.gt(&Uint128::zero()) {
-                response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
+                response = response.add_message(BankMsg::Send {
                     to_address: info.sender.to_string(),
                     amount: coins(reward_amount.u128(), config.revenue_denom.clone()),
-                }));
+                });
             }
             Ok(response)
         }
@@ -112,10 +112,10 @@ fn execute_account(
             let mut response = Response::default()
                 .add_event(event_account_claim(info.sender.clone(), reward_amount));
             if reward_amount.gt(&Uint128::zero()) {
-                response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
+                response = response.add_message(BankMsg::Send {
                     to_address: info.sender.to_string(),
                     amount: coins(reward_amount.u128(), config.revenue_denom.clone()),
-                }));
+                });
             }
             Ok(response)
         }
@@ -134,10 +134,10 @@ fn execute_account(
                 rewards,
             ));
             if !send.is_empty() {
-                response = response.add_message(CosmosMsg::Bank(BankMsg::Send {
+                response = response.add_message(BankMsg::Send {
                     to_address: info.sender.to_string(),
                     amount: send.into_vec(),
-                }));
+                });
             }
             Ok(response)
         }
@@ -167,10 +167,10 @@ fn execute_liquid(
             Ok(Response::default()
                 .add_event(event_liquid_unbond(info.sender.clone(), shares, returned))
                 .add_message(share_denom.burn_msg(shares))
-                .add_message(CosmosMsg::Bank(BankMsg::Send {
+                .add_message(BankMsg::Send {
                     to_address: info.sender.to_string(),
                     amount: coins(returned.u128(), config.bond_denom.clone()),
-                })))
+                }))
         }
     }
 }

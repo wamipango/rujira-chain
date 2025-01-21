@@ -2,8 +2,7 @@ use std::cmp::min;
 
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    coins, Addr, Api, Binary, Coin, CosmosMsg, Order, StdError, StdResult, Storage, Uint128,
-    WasmMsg,
+    coins, Addr, Api, Binary, Coin, Order, StdError, StdResult, Storage, Uint128, WasmMsg,
 };
 use cw_storage_plus::{Bound, Item, Map};
 use rujira_rs::revenue::{ActionResponse, ConfigResponse, InstantiateMsg};
@@ -143,7 +142,7 @@ impl Action {
         ACTIONS.remove(storage, denom.to_string())
     }
 
-    pub fn execute(&self, amount: Coin) -> StdResult<Option<CosmosMsg>> {
+    pub fn execute(&self, amount: Coin) -> StdResult<Option<WasmMsg>> {
         if amount.denom != self.denom {
             return Err(StdError::generic_err("Invalid Denom"));
         }
@@ -151,11 +150,11 @@ impl Action {
         if total.is_zero() {
             return Ok(None);
         }
-        Ok(Some(CosmosMsg::Wasm(WasmMsg::Execute {
+        Ok(Some(WasmMsg::Execute {
             contract_addr: self.contract.to_string(),
             msg: self.msg.clone(),
             funds: coins(total.u128(), amount.denom),
-        })))
+        }))
     }
 }
 

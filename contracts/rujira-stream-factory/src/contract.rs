@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, Uint128, WasmMsg,
+    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use rujira_rs::stream::factory::{ExecuteMsg, InstantiateMsg, QueryMsg};
@@ -43,13 +43,13 @@ pub fn execute(
         .add(Uint128::one());
     COUNTER.save(deps.storage, &idx)?;
     let label = format!("rujira-stream:{}", idx);
-    let init_msg = CosmosMsg::Wasm(WasmMsg::Instantiate {
+    let init_msg = WasmMsg::Instantiate {
         admin: None,
         code_id: config.code_id,
         label,
         msg: to_json_binary(&StreamInstantiateMsg::from(msg))?,
         funds: info.funds,
-    });
+    };
 
     Ok(Response::default().add_message(init_msg))
 }

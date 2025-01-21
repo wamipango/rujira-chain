@@ -1,8 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-};
+use cosmwasm_std::{to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response};
 use cw2::set_contract_version;
 use cw_utils::NativeBalance;
 use rujira_rs::stream::{ExecuteMsg, InstantiateMsg, QueryMsg, SudoMsg};
@@ -54,12 +52,10 @@ pub fn execute(
             }
             // No need to save this claimant if nothing was earned in this period
             CLAIMS.save(deps.storage, claimant.clone(), &env.block.time)?;
-            Ok(
-                Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: claimant.to_string(),
-                    amount: allocation.into_vec(),
-                })),
-            )
+            Ok(Response::default().add_message(BankMsg::Send {
+                to_address: claimant.to_string(),
+                amount: allocation.into_vec(),
+            }))
         }
     }
 }

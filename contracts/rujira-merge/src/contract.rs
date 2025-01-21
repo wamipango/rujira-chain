@@ -1,8 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    ensure_eq, to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response,
+    ensure_eq, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response,
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, nonpayable};
@@ -56,12 +55,11 @@ pub fn execute(
         ExecuteMsg::Withdraw { share_amount } => {
             nonpayable(&info)?;
             let amount = execute_withdraw(deps.storage, &config, time, &info.sender, share_amount)?;
-            let msg = CosmosMsg::Bank(BankMsg::Send {
-                to_address: info.sender.to_string(),
-                amount: vec![Coin::new(amount, config.ruji_denom)],
-            });
             Ok(Response::default()
-                .add_message(msg)
+                .add_message(BankMsg::Send {
+                    to_address: info.sender.to_string(),
+                    amount: vec![Coin::new(amount, config.ruji_denom)],
+                })
                 .add_event(event_withdraw(info.sender, share_amount, amount)))
         }
     }

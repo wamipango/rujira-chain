@@ -26,16 +26,16 @@ impl CallbackData {
         cb_addr: &Addr,
         data: impl Serialize,
         funds: impl Into<Vec<Coin>>,
-    ) -> StdResult<CosmosMsg<T>> {
+    ) -> StdResult<impl Into<CosmosMsg<T>>> {
         let msg = CallbackMsg {
             data: to_json_binary(&data)?,
             callback: self.clone(),
         };
-        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+        Ok(WasmMsg::Execute {
             contract_addr: cb_addr.to_string(),
             msg: to_json_binary(&ReceiverExecuteMsg::Callback(msg))?,
             funds: funds.into(),
-        }))
+        })
     }
 
     pub fn into_json_binary(self) -> Binary {
