@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, ensure, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
+    coin, coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
 };
 use cw2::set_contract_version;
 use cw_utils::must_pay;
@@ -10,7 +10,7 @@ use rujira_rs::TokenFactory;
 
 use crate::config::Config;
 use crate::error::ContractError;
-use crate::state::{State, DEPOSIT_POOL, MARKETS};
+use crate::state::{State, MARKETS};
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -50,16 +50,12 @@ pub fn execute(
     let response = match msg {
         ExecuteMsg::Deposit {} => {
             let amount = must_pay(&info, config.denom.as_str())?;
-            let mut pool = DEPOSIT_POOL.load(deps.storage)?;
-            let mint = pool.join(amount)?;
-            DEPOSIT_POOL.save(deps.storage, &pool)?;
+            let mint = state.deposit(amount)?;
             Response::default().add_message(rcpt.mint_msg(mint, info.sender))
         }
         ExecuteMsg::Withdraw {} => {
             let amount = must_pay(&info, rcpt.denom().as_str())?;
-            let mut pool = DEPOSIT_POOL.load(deps.storage)?;
-            let withdrawn = pool.leave(amount)?;
-            DEPOSIT_POOL.save(deps.storage, &pool)?;
+            let withdrawn = state.withdraw(amount)?;
             Response::default()
                 .add_message(rcpt.burn_msg(amount))
                 .add_message(BankMsg::Send {

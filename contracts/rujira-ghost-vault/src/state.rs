@@ -5,9 +5,6 @@ use rujira_rs::SharePool;
 
 use crate::{config::Config, ContractError};
 
-// Apply interest to pooled token deposits
-pub static DEPOSIT_POOL: Item<SharePool> = Item::new("deposits");
-
 pub static MARKETS: Map<Addr, Uint128> = Map::new("markets");
 
 pub static STATE: Item<State> = Item::new("state");
@@ -19,17 +16,19 @@ pub struct State {
     total_borrows: Uint128,
 
     debt_pool: SharePool,
+
+    deposit_pool: SharePool,
 }
 
 impl State {
     pub fn init(storage: &mut dyn Storage, env: &Env) -> StdResult<()> {
-        DEPOSIT_POOL.save(storage, &SharePool::default())?;
         STATE.save(
             storage,
             &Self {
                 last_updated: env.block.time,
                 total_borrows: Uint128::zero(),
                 debt_pool: SharePool::default(),
+                deposit_pool: SharePool::default(),
             },
         )?;
 
@@ -42,6 +41,14 @@ impl State {
 
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
         STATE.save(storage, self)
+    }
+
+    pub fn deposit(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
+        Ok(self.deposit_pool.join(amount)?)
+    }
+
+    pub fn withdraw(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
+        Ok(self.deposit_pool.leave(amount)?)
     }
 
     pub fn borrow(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
@@ -81,17 +88,14 @@ impl State {
         env: &Env,
         config: &Config,
     ) -> StdResult<()> {
-        let mut deposit = DEPOSIT_POOL.load(storage)?;
-
         // TODO: Calculate interest charged on total debt since last update
         let interest = self.calculate_interest(env.block.time);
 
         // Allocate it to the deposit pool
-        deposit.deposit(interest);
+        self.deposit_pool.deposit(interest);
         // Charge it to the debt pool, so that outstanding debt tokens are required to
         // pay this interest on return
         self.debt_pool.deposit(interest);
-        DEPOSIT_POOL.save(storage, &deposit)?;
         Ok(())
     }
 }
