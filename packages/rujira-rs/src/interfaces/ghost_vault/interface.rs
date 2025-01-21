@@ -3,10 +3,13 @@ use cosmwasm_std::Uint128;
 
 use crate::TokenMetadata;
 
+use super::interest::Interest;
+
 #[cw_serde]
 pub struct InstantiateMsg {
     /// The denom string that can be deposited and lent
     pub denom: String,
+    pub interest: Interest,
     pub receipt: TokenMetadata,
     pub debt: TokenMetadata,
 }

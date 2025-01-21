@@ -1,7 +1,8 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{ensure, Addr, Decimal, Env, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::{Item, Map};
-use rujira_rs::SharePool;
+use rujira_rs::{ghost_vault::Interest, SharePool};
+use std::ops::{Mul, Sub};
 
 use crate::{config::Config, ContractError};
 
@@ -15,8 +16,12 @@ pub struct State {
     // Total amount of debt that interest is chargeable on
     total_borrows: Uint128,
 
+    // Pools representing the ownership of debt, and ownership of deposits + interest
+    // Calculated interest is charged on the debt_pool, and the same amount allocated
+    // to the deposit_pool. As membership of each grows and shrinks (ie through
+    // borrows & repays for debt_pool, and deposits & withdraws for deposit_pool),
+    // the effective rate earned by depositors will vary
     debt_pool: SharePool,
-
     deposit_pool: SharePool,
 }
 
@@ -74,22 +79,33 @@ impl State {
         Ok(())
     }
 
-    pub fn calculate_interest(&mut self, to: Timestamp) -> Uint128 {
-        let debt_amount = self.total_borrows;
-        let rate = Decimal::one();
-
+    pub fn calculate_interest(
+        &mut self,
+        interest: &Interest,
+        balance: &Uint128,
+        to: Timestamp,
+    ) -> Result<Uint128, ContractError> {
+        // We consider accrued interest in the utilization rate
+        let utilization =
+            Decimal::one() - Decimal::from_ratio(balance.clone(), self.deposit_pool.size());
+        let rate = interest.rate(utilization)?;
+        let seconds = to.seconds().sub(self.last_updated.seconds());
+        let part = Decimal::from_ratio(seconds, 31_536_000u128);
         self.last_updated = to;
-        Uint128::one()
+        Ok(Decimal::from_ratio(self.total_borrows, 1u128)
+            .mul(rate)
+            .mul(part)
+            .to_uint_floor())
     }
 
     pub fn distribute_interest(
         &mut self,
-        storage: &mut dyn Storage,
         env: &Env,
         config: &Config,
-    ) -> StdResult<()> {
-        // TODO: Calculate interest charged on total debt since last update
-        let interest = self.calculate_interest(env.block.time);
+        balance: &Uint128,
+    ) -> Result<(), ContractError> {
+        // Calculate interest charged on total debt since last update
+        let interest = self.calculate_interest(&config.interest, balance, env.block.time)?;
 
         // Allocate it to the deposit pool
         self.deposit_pool.deposit(interest);

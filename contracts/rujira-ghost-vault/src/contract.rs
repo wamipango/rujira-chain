@@ -44,8 +44,11 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     let mut state = State::load(deps.storage)?;
-    state.distribute_interest(deps.storage, &env, &config)?;
+    let balance = deps
+        .querier
+        .query_balance(env.contract.address.clone(), config.denom.clone())?;
     let rcpt = TokenFactory::new(&env, format!("ghost-vault-{}-rcpt", config.denom).as_str());
+    state.distribute_interest(&env, &config, &balance.amount)?;
     let debt = TokenFactory::new(&env, format!("ghost-vault-{}-debt", config.denom).as_str());
     let response = match msg {
         ExecuteMsg::Deposit {} => {
@@ -104,7 +107,9 @@ pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> Result<Binary, ContractE
 mod tests {
 
     use super::*;
+    use cosmwasm_std::Decimal;
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
+    use rujira_rs::ghost_vault::Interest;
 
     #[test]
     fn instantiation() {
@@ -120,6 +125,12 @@ mod tests {
                 denom: "btc".to_string(),
                 receipt: todo!(),
                 debt: todo!(),
+                interest: Interest {
+                    target_utilization: Decimal::from_ratio(8u128, 10u128),
+                    base_rate: Decimal::from_ratio(3u128, 10000u128),
+                    slope1: Decimal::from_ratio(8u128, 10u128),
+                    slope2: Decimal::from_ratio(8u128, 10u128),
+                },
             },
             &[],
             "template",
