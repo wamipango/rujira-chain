@@ -4,13 +4,14 @@ use cosmwasm_std::{
     coin, coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
 };
 use cw2::set_contract_version;
-use cw_utils::must_pay;
+use cw_utils::{must_pay, PaymentError};
 use rujira_rs::ghost_vault::{ExecuteMsg, InstantiateMsg, QueryMsg, SudoMsg};
 use rujira_rs::TokenFactory;
 
+use crate::borrowers::Borrower;
 use crate::config::Config;
 use crate::error::ContractError;
-use crate::state::{State, MARKETS};
+use crate::state::State;
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -67,7 +68,7 @@ pub fn execute(
                 })
         }
         ExecuteMsg::Borrow { amount } => {
-            MARKETS.load(deps.storage, info.sender.clone())?;
+            Borrower::load(deps.storage, info.sender.clone())?;
             let mint = state.borrow(amount)?;
             Response::default()
                 // Mint to contract and send both together for clarity
@@ -81,12 +82,20 @@ pub fn execute(
                 })
         }
         ExecuteMsg::Repay {} => {
-            MARKETS.load(deps.storage, info.sender.clone())?;
-            // TODO: Fetch the debt token + deposit token
-            let amount = must_pay(&info, config.denom.as_str())?;
-            let debt_amount = must_pay(&info, debt.denom().as_str())?;
-            state.repay(amount, debt_amount)?;
-            Response::default().add_message(debt.burn_msg(debt_amount))
+            Borrower::load(deps.storage, info.sender.clone())?;
+
+            let amount = info
+                .funds
+                .iter()
+                .find(|x| x.denom == config.denom)
+                .ok_or(PaymentError::MissingDenom(config.denom))?;
+            let debt_amount = info
+                .funds
+                .iter()
+                .find(|x| x.denom == debt.denom())
+                .ok_or(PaymentError::MissingDenom(debt.denom()))?;
+            state.repay(amount.amount, debt_amount.amount)?;
+            Response::default().add_message(debt.burn_msg(debt_amount.amount))
         }
     };
     state.save(deps.storage)?;
@@ -94,8 +103,31 @@ pub fn execute(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn sudo(_deps: DepsMut, _env: Env, _msg: SudoMsg) -> Result<Response, ContractError> {
-    Ok(Response::default())
+pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+    let mut config = Config::load(deps.storage)?;
+
+    match msg {
+        SudoMsg::AddBorrower { addr, borrow_limit } => {
+            Borrower::set(
+                deps.storage,
+                deps.api.addr_validate(addr.as_str())?,
+                borrow_limit,
+            )?;
+            Ok(Response::default())
+        }
+        SudoMsg::UpdateBorrower { addr, borrow_limit } => {
+            let addr = deps.api.addr_validate(addr.as_str())?;
+            // Check borrower already exists
+            Borrower::load(deps.storage, addr.clone())?;
+            Borrower::set(deps.storage, addr, borrow_limit)?;
+            Ok(Response::default())
+        }
+        SudoMsg::UpdateInterest { interest } => {
+            config.interest = interest;
+            config.save(deps.storage)?;
+            Ok(Response::default())
+        }
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

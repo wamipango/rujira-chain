@@ -20,6 +20,12 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
+    #[error("UnauthorizedBorrower")]
+    UnauthorizedBorrower {},
+
+    #[error("BorrowLimitReached {limit}")]
+    BorrowLimitReached { limit: Uint128 },
+
     #[error("InsufficientRepay debt {debt} value {value} repaid {repaid}")]
     InsufficientRepay {
         debt: Uint128,

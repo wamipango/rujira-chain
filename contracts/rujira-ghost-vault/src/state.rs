@@ -1,14 +1,12 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{ensure, Addr, Decimal, Env, StdResult, Storage, Timestamp, Uint128};
-use cw_storage_plus::{Item, Map};
+use cosmwasm_std::{ensure, Decimal, Env, StdResult, Storage, Timestamp, Uint128};
+use cw_storage_plus::Item;
 use rujira_rs::{ghost_vault::Interest, SharePool};
 use std::ops::{Mul, Sub};
 
 use crate::{config::Config, ContractError};
 
-pub static MARKETS: Map<Addr, Uint128> = Map::new("markets");
-
-pub static STATE: Item<State> = Item::new("state");
+static STATE: Item<State> = Item::new("state");
 
 #[cw_serde]
 pub struct State {

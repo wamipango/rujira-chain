@@ -28,14 +28,12 @@ pub enum ExecuteMsg {
 
 #[cw_serde]
 pub enum SudoMsg {
-    // /// Whitelist a new market, allowing it to borrow from the money market.
-    // WhitelistMarket(MarketConfigMsg),
-    // /// Update a whitelisted market's parameters
-    // UpdateMarket(MarketConfigMsg),
-    // /// Update contract config
-    // UpdateConfig(ConfigUpdate),
-    // /// Update contract interest parameters
-    // UpdateInterest(InterestUpdate),
+    /// Whitelist a new borrower
+    AddBorrower { addr: String, borrow_limit: Uint128 },
+    /// Update a whitelisted Borrower's parameters
+    UpdateBorrower { addr: String, borrow_limit: Uint128 },
+    /// Update contract interest parameters
+    UpdateInterest { interest: Interest },
 }
 
 #[cw_serde]
