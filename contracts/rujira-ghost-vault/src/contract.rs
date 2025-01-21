@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
+    coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, PaymentError};
@@ -46,12 +46,9 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     let mut state = State::load(deps.storage)?;
-    let balance = deps
-        .querier
-        .query_balance(env.contract.address.clone(), config.denom.clone())?;
     let rcpt = TokenFactory::new(&env, format!("ghost-vault-{}-rcpt", config.denom).as_str());
-    state.distribute_interest(&env, &config, &balance.amount)?;
     let debt = TokenFactory::new(&env, format!("ghost-vault-{}-debt", config.denom).as_str());
+    state.distribute_interest(&env, &config)?;
     let response = match msg {
         ExecuteMsg::Deposit {} => {
             let amount = must_pay(&info, config.denom.as_str())?;
@@ -101,7 +98,7 @@ pub fn execute(
             borrower.repay(amount.amount);
             borrower.save(deps.storage)?;
 
-            state.repay(amount.amount, amount.amount)?;
+            state.repay(amount.amount, debt_amount.amount)?;
             Response::default()
                 .add_message(debt.burn_msg(debt_amount.amount))
                 .add_event(event_repay(info.sender, amount.amount, debt_amount.amount))
@@ -148,7 +145,7 @@ pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> Result<Binary, ContractE
 mod tests {
 
     use super::*;
-    use cosmwasm_std::{Decimal, Event, Uint128};
+    use cosmwasm_std::{coin, Decimal, Event, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{ghost_vault::Interest, TokenMetadata};
     use rujira_rs_testing::mock_rujira_app;
@@ -157,10 +154,16 @@ mod tests {
     fn lifecycle() {
         let mut app = mock_rujira_app();
         let owner = app.api().addr_make("owner");
+        let borrower = app.api().addr_make("borrower");
+
         app.init_modules(|router, _, storage| {
             router
                 .bank
                 .init_balance(storage, &owner, coins(1_000_000, "btc"))
+                .unwrap();
+            router
+                .bank
+                .init_balance(storage, &borrower, coins(1_000_000, "btc"))
                 .unwrap();
         });
 
@@ -252,7 +255,6 @@ mod tests {
         );
 
         // Whitelist a borrower address
-        let borrower = app.api().addr_make("borrower");
         app.wasm_sudo(
             contract.clone(),
             &SudoMsg::AddBorrower {
@@ -326,6 +328,66 @@ mod tests {
         res.assert_event(
             &Event::new("wasm-rujira-ghost-vault/repay").add_attributes(vec![
                 ("amount", "100"),
+                ("borrower", borrower.as_str()),
+                ("shares", "100"),
+            ]),
+        );
+
+        res.assert_event(
+            &Event::new("burn")
+                .add_attributes(vec![("amount", "100"), ("denom", "x/ghost-vault-btc-debt")]),
+        );
+
+        app.update_block(|x| x.time = x.time.plus_days(30));
+
+        // Make another deposit
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Deposit {},
+                &coins(1_000u128, "btc"),
+            )
+            .unwrap();
+
+        // Ensure that < 1000 tokens are minted to accommodate the increase in interest payments
+        res.assert_event(
+            &Event::new("wasm-rujira-ghost-vault/deposit").add_attributes(vec![
+                ("amount", "1000"),
+                ("owner", owner.as_str()),
+                ("minted", "984"),
+            ]),
+        );
+
+        res.assert_event(&Event::new("mint").add_attributes(vec![
+            ("amount", "984"),
+            ("denom", "x/ghost-vault-btc-rcpt"),
+            ("recipient", owner.as_str()),
+        ]));
+
+        // finally check that a 1:1 repay doesn't work, and that more btc is required
+
+        // Now repay with the required asset
+        app.execute_contract(
+            borrower.clone(),
+            contract.clone(),
+            &ExecuteMsg::Repay {},
+            &vec![coin(100, "btc"), coin(100, "x/ghost-vault-btc-debt")],
+        )
+        .unwrap_err();
+        // debt rate is 1.0325
+
+        let res = app
+            .execute_contract(
+                borrower.clone(),
+                contract.clone(),
+                &ExecuteMsg::Repay {},
+                &vec![coin(103, "btc"), coin(100, "x/ghost-vault-btc-debt")],
+            )
+            .unwrap();
+        res.assert_event(
+            &Event::new("wasm-rujira-ghost-vault/repay").add_attributes(vec![
+                ("amount", "103"),
                 ("borrower", borrower.as_str()),
                 ("shares", "100"),
             ]),
