@@ -53,13 +53,7 @@ pub fn execute(
         .map(|x| Oracle::load(deps.querier, &x))
         .transpose()?;
     let mut messages: Vec<CosmosMsg> = vec![];
-    // let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
-    // let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
     let mut fees = NativeBalance::default();
-
-    // let mut arb = Arber::new();
-    // arb.run(base_iter, quote_iter)?;
-    // let (b, q) = arb.commit(deps.storage)?;
 
     match msg {
         ExecuteMsg::Swap { min_return, to, .. } => {
@@ -112,16 +106,6 @@ pub fn execute(
             let res = e.execute_orders(deps.storage, vec, &oracle)?;
             fees += res.fees;
 
-            let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
-            let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
-            let mut arb = Arber::new();
-            let arbres = arb.run(base_iter, quote_iter)?;
-            let arbcommit = arb.commit(deps.storage)?;
-            handle_commit(arbcommit.0, &config, &Side::Base, &mut messages)?;
-            handle_commit(arbcommit.1, &config, &Side::Quote, &mut messages)?;
-            fees += coin(arbres.profit_quote.u128(), config.denoms.bid(&Side::Quote));
-            fees += coin(arbres.profit_base.u128(), config.denoms.bid(&Side::Base));
-
             // let commit = arb.commit(deps.storage)?;
 
             if !res.withdraw.is_empty() {
@@ -142,7 +126,33 @@ pub fn execute(
 
             Ok(Response::default()
                 .add_messages(messages)
+                .add_message(WasmMsg::Execute {
+                    contract_addr: env.contract.address.to_string(),
+                    msg: to_json_binary(&ExecuteMsg::Arb { then: None })?,
+                    funds: vec![],
+                })
                 .add_events(res.events))
+        }
+        ExecuteMsg::Arb { then } => {
+            let mut arb = Arber::new();
+            let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
+            let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
+            let res = arb.run(base_iter, quote_iter)?;
+            let commit = arb.commit(deps.storage)?;
+            handle_commit(commit.0, &config, &Side::Base, &mut messages)?;
+            handle_commit(commit.1, &config, &Side::Quote, &mut messages)?;
+            fees += coin(res.profit_quote.u128(), config.denoms.bid(&Side::Quote));
+            fees += coin(res.profit_base.u128(), config.denoms.bid(&Side::Base));
+            fees.normalize();
+
+            if !fees.is_empty() {
+                messages.push(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: config.fee_address.to_string(),
+                    amount: fees.into_vec(),
+                }))
+            }
+
+            Ok(Response::default().add_messages(messages))
         }
     }
 }
