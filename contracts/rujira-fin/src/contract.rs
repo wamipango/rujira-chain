@@ -112,9 +112,17 @@ pub fn execute(
             let res = e.execute_orders(deps.storage, vec, &oracle)?;
             fees += res.fees;
 
-            // let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
-            // let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
-            // fees += arb.run(base_iter, quote_iter)?;
+            let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
+            let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
+            let mut arb = Arber::new();
+            let arbres = arb.run(base_iter, quote_iter)?;
+            let arbcommit = arb.commit(deps.storage)?;
+            dbg!(&arb);
+            dbg!(&arbres);
+            dbg!(&arbcommit);
+            handle_commit(arbcommit.1, &config, &Side::Quote, &mut messages)?;
+            fees += coin(arbres.profit_quote.u128(), config.denoms.bid(&Side::Quote));
+
             // let commit = arb.commit(deps.storage)?;
 
             if !res.withdraw.is_empty() {

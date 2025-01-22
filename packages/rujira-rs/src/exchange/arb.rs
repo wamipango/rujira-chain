@@ -1,5 +1,4 @@
 use cosmwasm_std::{Storage, Uint128};
-use std::ops::Sub;
 
 use super::{SwapCommit, SwapError, Swappable};
 
@@ -21,15 +20,16 @@ impl<T: Arbitrage + Clone> Arber<T> {
         &mut self,
         mut base_iter: impl Iterator<Item = T>,
         mut quote_iter: impl Iterator<Item = T>,
-    ) -> Result<(Uint128, Uint128), SwapError> {
+    ) -> Result<ArbitrageResult, SwapError> {
         let mut base = base_iter.next();
         let mut quote = quote_iter.next();
-        let mut profit = (Uint128::zero(), Uint128::zero());
+        let mut profit_base = Uint128::zero();
+        let mut profit_quote = Uint128::zero();
         while let (Some(b), Some(q)) = (&mut base, &mut quote) {
             match b.arbitrage(q)? {
                 Some((base_profit, quote_profit)) => {
-                    profit.0 += base_profit;
-                    profit.1 += quote_profit;
+                    profit_base += base_profit;
+                    profit_quote += quote_profit;
                     self.pending_quote.push(q.clone());
                     self.pending_base.push(b.clone());
 
@@ -44,7 +44,10 @@ impl<T: Arbitrage + Clone> Arber<T> {
                 None => break,
             }
         }
-        Ok(profit)
+        Ok(ArbitrageResult {
+            profit_base: profit_base.clone(),
+            profit_quote: profit_quote.clone(),
+        })
     }
 
     pub fn commit(
@@ -63,6 +66,12 @@ impl<T: Arbitrage + Clone> Arber<T> {
 
         Ok((base, quote))
     }
+}
+
+#[derive(Debug)]
+pub struct ArbitrageResult {
+    pub profit_base: Uint128,
+    pub profit_quote: Uint128,
 }
 
 pub trait Arbitrage: Swappable + Sized {
@@ -165,8 +174,8 @@ mod tests {
 
         let mut arb = Arber::new();
         let res = arb.run(base_iter, quote_iter).unwrap();
-        assert_eq!(res.0, Uint128::from(114u128));
-        assert_eq!(res.1, Uint128::from(200u128));
+        assert_eq!(res.profit_base, Uint128::from(114u128));
+        assert_eq!(res.profit_quote, Uint128::from(200u128));
         assert_eq!(
             arb.pending_base,
             vec![

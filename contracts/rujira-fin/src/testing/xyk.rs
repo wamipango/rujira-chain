@@ -519,6 +519,8 @@ fn combined_book() {
 
 #[test]
 fn test_arbitrage() {
+    // Test the execution and correct market maker settlement of
+    // orderbook arbitrage activity
     let mut app = mock_rujira_app();
     let owner = app.api().addr_make("owner");
     let fees = app.api().addr_make("fees");
@@ -564,8 +566,6 @@ fn test_arbitrage() {
         ],
     );
 
-    dbg!(app.wrap().query_all_balances(fin.clone()).unwrap());
-
     // Here we have an arbitrage profit that's captured in USDC, but an local orderbook that only has a
     // single BTC in local balances - no USDC
     // Options:
@@ -577,9 +577,11 @@ fn test_arbitrage() {
     // 199_800_199 at 999.00099  and a user order selling
     // 10_000 at 998
 
-    // The buy will buy all of the sell - 10_000 at 999.00099 = 9,990,009
-    // The sell will partially fill the buy -
-    // So there's an overlap of
+    // Buy 10000 BTC off the market maker for 9990009 USDC
+    // Sell 10000 BTC to the buyer for 9,980,000 USDC
+    // Profit 10,009 USDC
+    // Request the full 10000 swap from the market maker
+    // in exchange for 9990010 USDC - sell order value (9,980,000) + profit 10,009
     let res = app
         .execute_contract(
             owner.clone(),
@@ -592,8 +594,25 @@ fn test_arbitrage() {
             &coins(10_000, "btc"),
         )
         .unwrap();
-
     dbg!(&res);
+
+    // Ensure BOW has returned the funds
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", fin.to_string()),
+        ("sender", bow.to_string()),
+        ("amount", "9990010usdc".to_string()),
+    ]));
+
+    // Ensure arb fees are sent
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", fees.as_str()),
+        ("sender", fin.as_str()),
+        ("amount", "10009usdc"),
+    ]));
+
+    // Now execute in the opposite direction, consuming:
+    // - multiple market maker pools with a single order
+    // - a single market maker pool with multiple orders
 }
 
 fn assert_side(side: Vec<BookItemResponse>, items: Vec<(&str, u128)>) {
