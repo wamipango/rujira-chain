@@ -7,7 +7,7 @@ mod sudo;
 mod tick;
 
 pub use denoms::Denoms;
-pub use execute::{ExecuteMsg, InstantiateMsg};
+pub use execute::{ExecuteMsg, InstantiateMsg, SwapRequest};
 pub use price::{OraclePrice, Price};
 pub use query::*;
 pub use side::Side;

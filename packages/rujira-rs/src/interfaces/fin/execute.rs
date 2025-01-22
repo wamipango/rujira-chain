@@ -1,6 +1,6 @@
 use crate::{CallbackData, Layer1Asset};
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Binary, Decimal, Uint128};
+use cosmwasm_std::{Addr, Binary, Decimal, Uint128};
 
 use super::{price::Price, side::Side, Denoms, Tick};
 
@@ -35,15 +35,7 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     /// Executes a market trade based on current order book.
-    Swap {
-        min_return: Option<Uint128>,
-        to: Option<String>,
-
-        /// An optional callback that FIN will execute with the funds from the swap.
-        /// The callback is executed on the sender's address.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        callback: Option<CallbackData>,
-    },
+    Swap(SwapRequest),
 
     /// Manage all orders
     /// Submit a list of price and target offer amounts
@@ -60,4 +52,18 @@ pub enum ExecuteMsg {
     Arb {
         then: Option<Binary>,
     },
+
+    /// Callback action to support an arb prior to a swap execution
+    DoSwap((Addr, SwapRequest)),
+}
+
+#[cw_serde]
+pub struct SwapRequest {
+    pub min_return: Option<Uint128>,
+    pub to: Option<String>,
+
+    /// An optional callback that FIN will execute with the funds from the swap.
+    /// The callback is executed on the sender's address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub callback: Option<CallbackData>,
 }

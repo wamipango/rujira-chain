@@ -8,7 +8,7 @@ use rujira_rs::{
     bow::{self, Xyk},
     fin::{
         BookItemResponse, BookResponse, Denoms, ExecuteMsg, InstantiateMsg, OrderResponse,
-        OrdersResponse, Price, QueryMsg, Side, Tick,
+        OrdersResponse, Price, QueryMsg, Side, SwapRequest, Tick,
     },
     Chain, Layer1Asset, TokenMetadata,
 };
@@ -162,11 +162,11 @@ fn mm_book() {
         .execute_contract(
             owner.clone(),
             fin.clone(),
-            &ExecuteMsg::Swap {
+            &ExecuteMsg::Swap(SwapRequest {
                 min_return: None,
                 to: None,
                 callback: None,
-            },
+            }),
             &coins(100_000_000, "usdc"),
         )
         .unwrap();
@@ -244,11 +244,11 @@ fn mm_book() {
         .execute_contract(
             owner.clone(),
             fin.clone(),
-            &ExecuteMsg::Swap {
+            &ExecuteMsg::Swap(SwapRequest {
                 min_return: None,
                 to: None,
                 callback: None,
-            },
+            }),
             &coins(500_000, "btc"),
         )
         .unwrap();
@@ -302,11 +302,11 @@ fn mm_book() {
     app.execute_contract(
         owner.clone(),
         fin.clone(),
-        &ExecuteMsg::Swap {
+        &ExecuteMsg::Swap(SwapRequest {
             min_return: None,
             to: None,
             callback: None,
-        },
+        }),
         &coins(600_000_000, "usdc"),
     )
     .unwrap();
@@ -406,11 +406,11 @@ fn combined_book() {
         .execute_contract(
             owner.clone(),
             fin.clone(),
-            &ExecuteMsg::Swap {
+            &ExecuteMsg::Swap(SwapRequest {
                 min_return: None,
                 to: None,
                 callback: None,
-            },
+            }),
             &coins(455_000, "btc"),
         )
         .unwrap();

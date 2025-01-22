@@ -8,8 +8,8 @@ use crate::pool::Pool;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult, WasmMsg,
+    coin, coins, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env,
+    MessageInfo, Response, StdResult, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
@@ -56,42 +56,16 @@ pub fn execute(
     let mut fees = NativeBalance::default();
 
     match msg {
-        ExecuteMsg::Swap { min_return, to, .. } => {
-            let to = to.map(|x| deps.api.addr_validate(&x)).transpose()?;
-            let funds = one_coin(&info)?;
-            let side = config.denoms.ask_side(&funds)?;
-            let mut swapper = Swapper::new(funds.amount, min_return, config.fee_taker);
-            let res = {
-                let mut iter = swap_iter(deps.as_ref(), &config, &side, &oracle);
-                swapper.swap(&mut iter)?
+        ExecuteMsg::Swap(req) => {
+            let msg = WasmMsg::Execute {
+                contract_addr: env.contract.address.to_string(),
+                msg: to_json_binary(&ExecuteMsg::Arb {
+                    then: Some(to_json_binary(&ExecuteMsg::DoSwap((info.sender, req)))?),
+                })?,
+                funds: info.funds,
             };
-            let commit = swapper.commit(deps.storage)?;
-            handle_commit(commit, &config, &side, &mut messages)?;
-            let mut funds = NativeBalance(vec![
-                coin(res.return_amount.u128(), config.denoms.bid(&side)),
-                coin(res.remaining_offer.u128(), config.denoms.ask(&side)),
-            ]);
 
-            funds.normalize();
-            if !funds.is_empty() {
-                messages.push(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: to.unwrap_or(info.sender).to_string(),
-                    amount: funds.into_vec(),
-                }))
-            }
-
-            fees += coin(res.fee_amount.u128(), config.denoms.bid(&side));
-            fees.normalize();
-            if !fees.is_empty() {
-                messages.push(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: config.fee_address.to_string(),
-                    amount: fees.into_vec(),
-                }))
-            }
-
-            Ok(Response::default()
-                .add_messages(messages)
-                .add_events(res.events))
+            Ok(Response::default().add_message(msg))
         }
         ExecuteMsg::Order(vec) => {
             let mut e = OrderManager::new(
@@ -152,7 +126,58 @@ pub fn execute(
                 }))
             }
 
+            if let Some(msg) = then {
+                messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: env.contract.address.to_string(),
+                    msg,
+                    funds: info.funds,
+                }))
+            }
+
             Ok(Response::default().add_messages(messages))
+        }
+
+        ExecuteMsg::DoSwap((sender, req)) => {
+            ensure_eq!(
+                info.sender,
+                env.contract.address,
+                ContractError::Unauthorized {}
+            );
+            let to = req.to.map(|x| deps.api.addr_validate(&x)).transpose()?;
+            let funds = one_coin(&info)?;
+            let side = config.denoms.ask_side(&funds)?;
+            let mut swapper = Swapper::new(funds.amount, req.min_return, config.fee_taker);
+            let res = {
+                let mut iter = swap_iter(deps.as_ref(), &config, &side, &oracle);
+                swapper.swap(&mut iter)?
+            };
+            let commit = swapper.commit(deps.storage)?;
+            handle_commit(commit, &config, &side, &mut messages)?;
+            let mut funds = NativeBalance(vec![
+                coin(res.return_amount.u128(), config.denoms.bid(&side)),
+                coin(res.remaining_offer.u128(), config.denoms.ask(&side)),
+            ]);
+
+            funds.normalize();
+            if !funds.is_empty() {
+                messages.push(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: to.unwrap_or(sender).to_string(),
+                    amount: funds.into_vec(),
+                }))
+            }
+
+            fees += coin(res.fee_amount.u128(), config.denoms.bid(&side));
+            fees.normalize();
+            if !fees.is_empty() {
+                messages.push(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: config.fee_address.to_string(),
+                    amount: fees.into_vec(),
+                }))
+            }
+
+            Ok(Response::default()
+                .add_messages(messages)
+                .add_events(res.events))
         }
     }
 }
@@ -334,7 +359,7 @@ mod tests {
     use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
     use rujira_rs::{
-        fin::{Denoms, Tick},
+        fin::{Denoms, SwapRequest, Tick},
         Layer1Asset,
     };
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};
@@ -567,11 +592,11 @@ mod tests {
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
-                &ExecuteMsg::Swap {
+                &ExecuteMsg::Swap(SwapRequest {
                     min_return: None,
                     to: None,
                     callback: None,
-                },
+                }),
                 &[swap_amount],
             )
             .unwrap();
@@ -596,11 +621,11 @@ mod tests {
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
-                &ExecuteMsg::Swap {
+                &ExecuteMsg::Swap(SwapRequest {
                     min_return: None,
                     to: None,
                     callback: None,
-                },
+                }),
                 &coins(30000, "btc-btc"),
             )
             .unwrap();
@@ -631,11 +656,11 @@ mod tests {
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
-                &ExecuteMsg::Swap {
+                &ExecuteMsg::Swap(SwapRequest {
                     min_return: None,
                     to: None,
                     callback: None,
-                },
+                }),
                 &coins(100000, "btc-btc"),
             )
             .unwrap();
