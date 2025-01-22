@@ -1,4 +1,3 @@
-pub mod arb;
 pub mod config;
 pub mod contract;
 mod error;

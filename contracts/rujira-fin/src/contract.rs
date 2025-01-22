@@ -1,4 +1,3 @@
-use crate::arb::Arber;
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
 use crate::market_maker::{MarketMaker, MarketMakerOffer};
@@ -10,13 +9,13 @@ use crate::pool::Pool;
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, WasmMsg,
+    Response, StdResult, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
 use itertools::{EitherOrBoth, Itertools};
 use rujira_rs::bow;
-use rujira_rs::exchange::{Swappable, Swapper};
+use rujira_rs::exchange::{Arber, SwapCommit, Swappable, Swapper};
 use rujira_rs::fin::{
     BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OraclePrice,
     OrderResponse, OrdersResponse, Price, QueryMsg, Side, SimulationResponse, SudoMsg,
@@ -54,11 +53,13 @@ pub fn execute(
         .map(|x| Oracle::load(deps.querier, &x))
         .transpose()?;
     let mut messages: Vec<CosmosMsg> = vec![];
-    let mut arb = Arber::new(&config.denoms);
-    let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
-    let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
-    let mut fees = arb.run(base_iter, quote_iter)?;
-    let _commit = arb.commit(deps.storage)?;
+    // let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
+    // let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
+    let mut fees = NativeBalance::default();
+
+    // let mut arb = Arber::new();
+    // arb.run(base_iter, quote_iter)?;
+    // let (b, q) = arb.commit(deps.storage)?;
 
     match msg {
         ExecuteMsg::Swap { min_return, to, .. } => {
@@ -71,30 +72,13 @@ pub fn execute(
                 swapper.swap(&mut iter)?
             };
             let commit = swapper.commit(deps.storage)?;
-
-            if let Some(mm) = config.market_maker {
-                if !commit.market_maker.1.is_zero() {
-                    let min_return = coin(commit.market_maker.1.u128(), config.denoms.bid(&side));
-
-                    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                        contract_addr: mm.to_string(),
-                        msg: to_json_binary(&bow::ExecuteMsg::Swap {
-                            min_return,
-                            to: None,
-                            callback: None,
-                        })?,
-                        funds: coins(commit.market_maker.0.u128(), config.denoms.ask(&side)),
-                    }))
-                }
-            }
-
+            handle_commit(commit, &config, &side, &mut messages)?;
             let mut funds = NativeBalance(vec![
                 coin(res.return_amount.u128(), config.denoms.bid(&side)),
                 coin(res.remaining_offer.u128(), config.denoms.ask(&side)),
             ]);
 
             funds.normalize();
-
             if !funds.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
                     to_address: to.unwrap_or(info.sender).to_string(),
@@ -103,9 +87,7 @@ pub fn execute(
             }
 
             fees += coin(res.fee_amount.u128(), config.denoms.bid(&side));
-
             fees.normalize();
-
             if !fees.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
                     to_address: config.fee_address.to_string(),
@@ -130,11 +112,10 @@ pub fn execute(
             let res = e.execute_orders(deps.storage, vec, &oracle)?;
             fees += res.fees;
 
-            let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
-            let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
-            fees += arb.run(base_iter, quote_iter)?;
-            let commit = arb.commit(deps.storage)?;
-            dbg!(commit);
+            // let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
+            // let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
+            // fees += arb.run(base_iter, quote_iter)?;
+            // let commit = arb.commit(deps.storage)?;
 
             if !res.withdraw.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
@@ -153,11 +134,37 @@ pub fn execute(
                 }))
             }
 
+            dbg!(&messages);
+
             Ok(Response::default()
                 .add_messages(messages)
                 .add_events(res.events))
         }
     }
+}
+
+fn handle_commit(
+    c: SwapCommit,
+    config: &Config,
+    side: &Side,
+    messages: &mut Vec<CosmosMsg>,
+) -> StdResult<()> {
+    if let Some(mm) = config.market_maker.clone() {
+        if !c.market_maker.1.is_zero() {
+            let min_return = coin(c.market_maker.1.u128(), config.denoms.bid(&side));
+
+            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: mm.to_string(),
+                msg: to_json_binary(&bow::ExecuteMsg::Swap {
+                    min_return,
+                    to: None,
+                    callback: None,
+                })?,
+                funds: coins(c.market_maker.0.u128(), config.denoms.ask(&side)),
+            }))
+        }
+    }
+    Ok(())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

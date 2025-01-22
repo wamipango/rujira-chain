@@ -9,7 +9,7 @@ use rujira_rs::{
 };
 use std::{
     cmp::Ordering,
-    ops::{Div, Mul},
+    ops::{Div, Mul, Sub},
 };
 
 pub struct MarketMaker<'a> {
@@ -72,7 +72,7 @@ impl Swappable for MarketMakerOffer {
     }
 
     fn total(&self) -> Uint128 {
-        self.total
+        self.total.sub(self.commitment.1)
     }
 
     fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
@@ -83,13 +83,21 @@ impl Swappable for MarketMakerOffer {
             .div(self.price)
             .to_uint_floor();
         let res = match self.total.cmp(&offer_value) {
-            // Partial fill
-            Ordering::Greater => (offer, offer_value),
+            Ordering::Greater => {
+                self.total -= offer_value;
+                (offer, offer_value)
+            }
             // Complete fill
-            _ => (pool_value, self.total),
+            _ => {
+                let size = self.total;
+                self.total = Uint128::zero();
+                (pool_value, size)
+            }
         };
 
-        self.commitment = res;
+        // Increment commitment as the same offer may be used multiple times, particularly during arbitrage
+        self.commitment.0 += res.0;
+        self.commitment.1 += res.1;
         Ok(res)
     }
 

@@ -564,20 +564,36 @@ fn test_arbitrage() {
         ],
     );
 
-    // let res = app
-    //     .execute_contract(
-    //         owner.clone(),
-    //         fin.clone(),
-    //         &ExecuteMsg::Order(vec![(
-    //             Side::Base,
-    //             Price::Fixed(Decimal::from_str("998").unwrap()),
-    //             Uint128::from(10_000u128),
-    //         )]),
-    //         &coins(10_000, "btc"),
-    //     )
-    //     .unwrap();
+    dbg!(app.wrap().query_all_balances(fin.clone()).unwrap());
 
-    // dbg!(&res);
+    // Here we have an arbitrage profit that's captured in USDC, but an local orderbook that only has a
+    // single BTC in local balances - no USDC
+    // Options:
+    // 1: Execute the mm swap for arbitrage and send fees in a callback
+    // 2: Assume there is a float on the contract (including balances from user orders) and just check that the Arb MM swap is executed correctly
+    // 3: Ensure arbitrage profit is captured in the local token, also ensure arb swap is executed
+
+    // We have a maker maker order buying with
+    // 199_800_199 at 999.00099  and a user order selling
+    // 10_000 at 998
+
+    // The buy will buy all of the sell - 10_000 at 999.00099 = 9,990,009
+    // The sell will partially fill the buy -
+    // So there's an overlap of
+    let res = app
+        .execute_contract(
+            owner.clone(),
+            fin.clone(),
+            &ExecuteMsg::Order(vec![(
+                Side::Base,
+                Price::Fixed(Decimal::from_str("998").unwrap()),
+                Uint128::from(10_000u128),
+            )]),
+            &coins(10_000, "btc"),
+        )
+        .unwrap();
+
+    dbg!(&res);
 }
 
 fn assert_side(side: Vec<BookItemResponse>, items: Vec<(&str, u128)>) {

@@ -93,74 +93,10 @@ pub struct SwapResult {
 
 mod tests {
 
+    use crate::exchange::testing::TestIter;
+
     use super::*;
-    use std::cmp::Ordering;
-    use std::ops::Div;
     use std::str::FromStr;
-
-    struct TestItem {
-        pub price: Decimal,
-        pub amount: Uint128,
-    }
-
-    impl Swappable for TestItem {
-        fn prefix(&self) -> &str {
-            "some-prefix"
-        }
-
-        fn rate(&self) -> Decimal {
-            self.price
-        }
-
-        fn attributes(&self) -> Vec<Attribute> {
-            vec![Attribute::new("test", "attr")]
-        }
-
-        fn total(&self) -> Uint128 {
-            self.amount
-        }
-
-        fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
-            let offer_value = Decimal::from_ratio(offer, 1u128)
-                .mul(self.price)
-                .to_uint_floor();
-            let pool_value = Decimal::from_ratio(self.amount, 1u128)
-                .div(self.price)
-                .to_uint_floor();
-            match self.amount.cmp(&offer_value) {
-                // Partial fill
-                Ordering::Greater => Ok((offer, offer_value)),
-                // Complete fill
-                _ => Ok((pool_value, self.amount)),
-            }
-        }
-
-        fn commit(&self, _storage: &mut dyn Storage) -> Result<SwapCommit, SwapError> {
-            Ok(SwapCommit::default())
-        }
-    }
-
-    struct TestIter {
-        pub items: Vec<(Decimal, Uint128)>,
-    }
-
-    impl TestIter {
-        pub fn new(items: Vec<(Decimal, Uint128)>) -> Self {
-            let mut items = items;
-            items.reverse();
-            Self { items }
-        }
-    }
-
-    impl Iterator for TestIter {
-        type Item = TestItem;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            self.items
-                .pop()
-                .map(|(price, amount)| TestItem { price, amount })
-        }
-    }
 
     #[test]
     fn test_swap_execution() {
