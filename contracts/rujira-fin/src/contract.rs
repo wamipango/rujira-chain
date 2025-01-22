@@ -80,8 +80,6 @@ pub fn execute(
             let res = e.execute_orders(deps.storage, vec, &oracle)?;
             fees += res.fees;
 
-            // let commit = arb.commit(deps.storage)?;
-
             if !res.withdraw.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
                     to_address: info.sender.to_string(),
@@ -108,7 +106,7 @@ pub fn execute(
                 .add_events(res.events))
         }
         ExecuteMsg::Arb { then } => {
-            let mut arb = Arber::new();
+            let mut arb = Arber::default();
             let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
             let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
             let res = arb.run(base_iter, quote_iter)?;
@@ -190,7 +188,7 @@ fn handle_commit(
 ) -> StdResult<()> {
     if let Some(mm) = config.market_maker.clone() {
         if !c.market_maker.1.is_zero() {
-            let min_return = coin(c.market_maker.1.u128(), config.denoms.bid(&side));
+            let min_return = coin(c.market_maker.1.u128(), config.denoms.bid(side));
 
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: mm.to_string(),
@@ -199,7 +197,7 @@ fn handle_commit(
                     to: None,
                     callback: None,
                 })?,
-                funds: coins(c.market_maker.0.u128(), config.denoms.ask(&side)),
+                funds: coins(c.market_maker.0.u128(), config.denoms.ask(side)),
             }))
         }
     }

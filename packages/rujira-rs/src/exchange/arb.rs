@@ -9,13 +9,16 @@ pub struct Arber<T> {
     pending_quote: Vec<T>,
 }
 
-impl<T: Arbitrage + Clone> Arber<T> {
-    pub fn new() -> Self {
+impl<T> Default for Arber<T> {
+    fn default() -> Self {
         Self {
             pending_base: vec![],
             pending_quote: vec![],
         }
     }
+}
+
+impl<T: Arbitrage + Clone> Arber<T> {
     pub fn run(
         &mut self,
         mut base_iter: impl Iterator<Item = T>,
@@ -45,8 +48,8 @@ impl<T: Arbitrage + Clone> Arber<T> {
             }
         }
         Ok(ArbitrageResult {
-            profit_base: profit_base.clone(),
-            profit_quote: profit_quote.clone(),
+            profit_base,
+            profit_quote,
         })
     }
 
@@ -172,7 +175,7 @@ mod tests {
             (Decimal::from_str("0.6").unwrap(), Uint128::from(1000u128)),
         ]);
 
-        let mut arb = Arber::new();
+        let mut arb = Arber::default();
         let res = arb.run(base_iter, quote_iter).unwrap();
         assert_eq!(res.profit_base, Uint128::from(114u128));
         assert_eq!(res.profit_quote, Uint128::from(200u128));
