@@ -518,9 +518,8 @@ fn combined_book() {
 }
 
 #[test]
-fn test_arbitrage() {
-    // Test the execution and correct market maker settlement of
-    // orderbook arbitrage activity
+fn test_arbitrage_quote_single() {
+    // Test arbitrage with a single match
     let mut app = mock_rujira_app();
     let owner = app.api().addr_make("owner");
     let fees = app.api().addr_make("fees");
@@ -594,7 +593,6 @@ fn test_arbitrage() {
             &coins(10_000, "btc"),
         )
         .unwrap();
-    dbg!(&res);
 
     // Ensure BOW has returned the funds
     res.assert_event(&Event::new("transfer").add_attributes(vec![
@@ -609,10 +607,130 @@ fn test_arbitrage() {
         ("sender", fin.as_str()),
         ("amount", "10009usdc"),
     ]));
+}
 
+#[test]
+fn test_arbitrage_quote_multi() {
     // Now execute in the opposite direction, consuming:
     // - multiple market maker pools with a single order
     // - a single market maker pool with multiple orders
+
+    let mut app = mock_rujira_app();
+    let owner = app.api().addr_make("owner");
+    let fees = app.api().addr_make("fees");
+    let (fin, bow) = setup(&mut app, &owner, &fees);
+    app.init_modules(|router, _, storage| {
+        router.bank.init_balance(
+            storage,
+            &owner,
+            vec![
+                coin(1_000_000_000_000, "btc"),
+                coin(1_000_000_000_000, "usdc"),
+            ],
+        )
+    })
+    .unwrap();
+
+    app.execute_contract(
+        owner.clone(),
+        bow.clone(),
+        &bow::ExecuteMsg::Deposit {},
+        // 2 BTC @ 100k USDC
+        &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
+    )
+    .unwrap();
+
+    let book: BookResponse = app
+        .wrap()
+        .query_wasm_smart(
+            fin.clone(),
+            &QueryMsg::Book {
+                limit: Some(10),
+                offset: None,
+            },
+        )
+        .unwrap();
+
+    assert_side(
+        book.base,
+        vec![
+            ("1001.0011", 199_800u128),
+            ("1003.0061", 199_201u128),
+            ("1005.0018", 197_810u128),
+            ("1006.9887", 196_667u128),
+            ("1008.981", 196_174u128),
+            ("1010.9624", 194_793u128),
+        ],
+    );
+
+    let res = app
+        .execute_contract(
+            owner.clone(),
+            fin.clone(),
+            &ExecuteMsg::Order(vec![(
+                Side::Quote,
+                Price::Fixed(Decimal::from_str("1004").unwrap()),
+                Uint128::from(600_000_000u128),
+            )]),
+            &coins(600_000_000u128, "usdc"),
+        )
+        .unwrap();
+
+    // Ensure BOW has returned the funds
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", fin.to_string()),
+        ("sender", bow.to_string()),
+        ("amount", "399001btc".to_string()),
+    ]));
+
+    // Ensure arb fees are sent
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", fees.as_str()),
+        ("sender", fin.as_str()),
+        ("amount", "797205usdc"),
+    ]));
+
+    // Now a small one that should take profit in BTC
+
+    let book: BookResponse = app
+        .wrap()
+        .query_wasm_smart(
+            fin.clone(),
+            &QueryMsg::Book {
+                limit: Some(10),
+                offset: None,
+            },
+        )
+        .unwrap();
+
+    assert_side(book.base, vec![("1005.009", 199_401u128)]);
+
+    let res = app
+        .execute_contract(
+            owner.clone(),
+            fin.clone(),
+            &ExecuteMsg::Order(vec![(
+                Side::Quote,
+                Price::Fixed(Decimal::from_str("1006").unwrap()),
+                Uint128::from(10_000_000u128),
+            )]),
+            &coins(10_000_000u128, "usdc"),
+        )
+        .unwrap();
+
+    // Ensure BOW has returned the funds
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", fin.to_string()),
+        ("sender", bow.to_string()),
+        ("amount", "9951btc".to_string()),
+    ]));
+
+    // Ensure arb fees are sent
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("recipient", fees.as_str()),
+        ("sender", fin.as_str()),
+        ("amount", "10btc"),
+    ]));
 }
 
 fn assert_side(side: Vec<BookItemResponse>, items: Vec<(&str, u128)>) {

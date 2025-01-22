@@ -72,7 +72,7 @@ impl Swappable for MarketMakerOffer {
     }
 
     fn total(&self) -> Uint128 {
-        self.total.sub(self.commitment.1)
+        self.total
     }
 
     fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
@@ -95,9 +95,7 @@ impl Swappable for MarketMakerOffer {
             }
         };
 
-        // Increment commitment as the same offer may be used multiple times, particularly during arbitrage
-        self.commitment.0 += res.0;
-        self.commitment.1 += res.1;
+        self.commitment = res;
         Ok(res)
     }
 

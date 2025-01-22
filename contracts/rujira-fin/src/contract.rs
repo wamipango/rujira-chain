@@ -120,8 +120,10 @@ pub fn execute(
             dbg!(&arb);
             dbg!(&arbres);
             dbg!(&arbcommit);
+            handle_commit(arbcommit.0, &config, &Side::Base, &mut messages)?;
             handle_commit(arbcommit.1, &config, &Side::Quote, &mut messages)?;
             fees += coin(arbres.profit_quote.u128(), config.denoms.bid(&Side::Quote));
+            fees += coin(arbres.profit_base.u128(), config.denoms.bid(&Side::Base));
 
             // let commit = arb.commit(deps.storage)?;
 
