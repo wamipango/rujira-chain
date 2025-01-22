@@ -9,7 +9,7 @@ use rujira_rs::{
 };
 use std::{
     cmp::Ordering,
-    ops::{Div, Mul, Sub},
+    ops::{Div, Mul},
 };
 
 pub struct MarketMaker<'a> {

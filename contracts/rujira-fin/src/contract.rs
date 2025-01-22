@@ -117,9 +117,6 @@ pub fn execute(
             let mut arb = Arber::new();
             let arbres = arb.run(base_iter, quote_iter)?;
             let arbcommit = arb.commit(deps.storage)?;
-            dbg!(&arb);
-            dbg!(&arbres);
-            dbg!(&arbcommit);
             handle_commit(arbcommit.0, &config, &Side::Base, &mut messages)?;
             handle_commit(arbcommit.1, &config, &Side::Quote, &mut messages)?;
             fees += coin(arbres.profit_quote.u128(), config.denoms.bid(&Side::Quote));
@@ -135,7 +132,6 @@ pub fn execute(
             }
 
             fees.normalize();
-            dbg!(&fees);
 
             if !fees.is_empty() {
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
@@ -143,8 +139,6 @@ pub fn execute(
                     amount: fees.into_vec(),
                 }))
             }
-
-            dbg!(&messages);
 
             Ok(Response::default()
                 .add_messages(messages)
