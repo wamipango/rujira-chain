@@ -1,6 +1,8 @@
 pub mod bow;
 pub mod demo;
 pub mod fin;
+pub mod ghost_borrow;
+pub mod ghost_registry;
 pub mod ghost_vault;
 pub mod merge;
 pub mod orca;
