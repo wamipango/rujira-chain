@@ -31,10 +31,11 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
+    let status = Status::load(deps.as_ref(), &env)?;
     match msg {
         ExecuteMsg::Manage {
             borrowed,
@@ -42,7 +43,7 @@ pub fn execute(
         } => {
             let funds = NativeBalance(info.funds);
             let mut position = Position::load(deps.storage, &info.sender);
-            let mut returned = position.adjust(deposited, borrowed, funds)?;
+            let mut returned = position.adjust(status, deposited, borrowed, funds)?;
             returned.normalize();
             position.save(deps.storage)?;
 

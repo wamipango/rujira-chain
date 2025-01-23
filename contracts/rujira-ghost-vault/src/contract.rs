@@ -124,19 +124,19 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
     let mut config = Config::load(deps.storage)?;
 
     match msg {
-        SudoMsg::AddBorrower { addr, borrow_limit } => {
+        SudoMsg::AddBorrower { addr, debt_limit } => {
             Borrower::set(
                 deps.storage,
                 deps.api.addr_validate(addr.as_str())?,
-                borrow_limit,
+                debt_limit,
             )?;
             Ok(Response::default())
         }
-        SudoMsg::UpdateBorrower { addr, borrow_limit } => {
+        SudoMsg::UpdateBorrower { addr, debt_limit } => {
             let addr = deps.api.addr_validate(addr.as_str())?;
             // Check borrower already exists
             Borrower::load(deps.storage, addr.clone())?;
-            Borrower::set(deps.storage, addr, borrow_limit)?;
+            Borrower::set(deps.storage, addr, debt_limit)?;
             Ok(Response::default())
         }
         SudoMsg::UpdateInterest { interest } => {
@@ -155,7 +155,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 
     match msg {
         QueryMsg::Status {} => Ok(to_json_binary(&StatusResponse {
-            borrow_rate: state.borrow_rate(&config.interest)?,
+            debt_rate: state.debt_rate(&config.interest)?,
             lend_rate: state.lend_rate(&config.interest)?,
             utilization_ratio: state.utilization(),
             last_updated: state.last_updated,
@@ -310,7 +310,7 @@ mod tests {
             contract.clone(),
             &SudoMsg::AddBorrower {
                 addr: borrower.to_string(),
-                borrow_limit: Uint128::from(500u128),
+                debt_limit: Uint128::from(500u128),
             },
         )
         .unwrap();

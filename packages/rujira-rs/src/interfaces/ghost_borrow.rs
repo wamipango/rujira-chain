@@ -72,11 +72,18 @@ pub struct StatusResponse {
     /// Total amount of debt issued
     pub debt_amount: Uint128,
 
-    /// Current borrow rate
-    pub borrow_rate: Decimal,
+    /// Current debt rate
+    pub debt_rate: Decimal,
 
-    /// Current borrow limit
-    pub borrow_limit: Uint128,
+    /// Current debt limit
+    pub debt_limit: Uint128,
+
+    /// Maximum LTV value before the contract is allowed to begin liqudiating collateral
+    pub max_ltv: Decimal,
+
+    /// Current collateral price denmincated in debt token
+    /// Adjusted for decimal delta between tokens
+    pub price: Decimal,
 }
 
 #[cw_serde]

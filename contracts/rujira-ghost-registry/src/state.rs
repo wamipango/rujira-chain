@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, StdResult, Storage};
+use cosmwasm_std::{Addr, Decimal, StdResult, Storage};
 use cw_storage_plus::{Index, IndexList, IndexedMap, MultiIndex};
 use rujira_rs::ghost_registry::ContractConfigResponse;
 
@@ -10,6 +10,7 @@ pub struct ContractConfig {
     pub debt_denom: String,
     pub vault_addr: String,
     pub orca_addr: String,
+    pub max_ltv: Decimal,
 }
 
 pub struct ContractConfigIndexes<'a> {
@@ -76,6 +77,7 @@ impl From<ContractConfig> for ContractConfigResponse {
             debt_denom: value.debt_denom,
             vault_addr: value.vault_addr,
             orca_addr: value.orca_addr,
+            max_ltv: value.max_ltv,
         }
     }
 }

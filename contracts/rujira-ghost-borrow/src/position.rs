@@ -3,6 +3,8 @@ use cosmwasm_std::{Addr, StdResult, Storage, Uint128};
 use cw_storage_plus::Map;
 use cw_utils::NativeBalance;
 
+use crate::config::Status;
+
 static POSITIONS: Map<Addr, (Uint128, Uint128)> = Map::new("positions");
 
 #[cw_serde]
@@ -39,6 +41,7 @@ impl Position {
 
     pub fn adjust(
         &mut self,
+        _status: Status,
         _deposited: Uint128,
         _borrowed: Uint128,
         _funds: NativeBalance,

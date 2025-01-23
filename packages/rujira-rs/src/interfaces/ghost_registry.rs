@@ -12,11 +12,11 @@ pub enum ExecuteMsg {}
 
 #[cw_serde]
 pub enum SudoMsg {
-    /// Creates and registers a new borrow market
+    /// Creates and registers a new debt market
     Create {
-        /// Lending vault to borrow funds from
+        /// Lending vault to debt funds from
         vault_addr: String,
-        /// Initial hard-cap for borrowing for this contract from the vault
+        /// Initial hard-cap for debting for this contract from the vault
         vault_limit: Uint128,
         /// The liquidation queue that will be used to liquidate collateral_denom for debt_denom
         orca_addr: String,
@@ -41,18 +41,18 @@ pub enum QueryMsg {
     #[returns(StatusResponse)]
     Status {},
 
-    /// Query the status of a registered borrow market
+    /// Query the status of a registered debt market
     #[returns(ContractConfigResponse)]
     ContractConfig(String),
 
-    /// Query the status of a registered borrow market
+    /// Query the status of a registered debt market
     #[returns(ContractStatusResponse)]
     ContractStatus(String),
 }
 
 #[cw_serde]
 pub struct ConfigResponse {
-    /// The Code ID used to deploy and register new ghost-borrow markets
+    /// The Code ID used to deploy and register new ghost-debt markets
     pub code_id: u64,
     pub checksum: HexBinary,
 }
@@ -70,6 +70,7 @@ pub struct ContractConfigResponse {
     pub debt_denom: String,
     pub vault_addr: String,
     pub orca_addr: String,
+    pub max_ltv: Decimal,
 }
 
 #[cw_serde]
@@ -86,29 +87,36 @@ pub struct ContractStatusResponse {
     /// Total amount of debt issued
     pub debt_amount: Uint128,
 
-    /// Current borrow rate
-    pub borrow_rate: Decimal,
+    /// Current debt rate
+    pub debt_rate: Decimal,
 
-    /// Current borrow limit
-    pub borrow_limit: Uint128,
+    /// Current debt limit
+    pub debt_limit: Uint128,
+
+    /// Maximum LTV value before the contract is allowed to begin liqudiating collateral
+    pub max_ltv: Decimal,
+
+    /// Current collateral price denmincated in debt token
+    /// Adjusted for decimal delta between tokens
+    pub price: Decimal,
 }
 
 #[cw_serde]
 pub struct CollateralStatus {
     /// The total amount of collateral deposited across all contracts
-    deposited: Uint128,
+    amount: Uint128,
     /// The collateral token
     denom: String,
-    /// A breakdown of the collateral on the contracts where the borrow token is CollateralStatus::denom
+    /// A breakdown of the collateral on the contracts where the debt token is CollateralStatus::denom
     contracts: Vec<ContractStatusResponse>,
 }
 
 #[cw_serde]
 pub struct DebtStatus {
     /// The total amount of collateral deposited across all contracts
-    borrowed: Uint128,
-    /// The borrowed token
+    amount: Uint128,
+    /// The debted token
     denom: String,
-    /// A breakdown of the debt on the contracts where the borrow token is DebtStatus::denom
+    /// A breakdown of the debt on the contracts where the debt token is DebtStatus::denom
     contracts: Vec<ContractStatusResponse>,
 }

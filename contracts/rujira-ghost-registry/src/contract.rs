@@ -76,7 +76,7 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
                 msg: to_json_binary(&ghost_vault::ExecuteMsg::Sudo(
                     ghost_vault::SudoMsg::AddBorrower {
                         addr: contract.to_string(),
-                        borrow_limit: vault_limit,
+                        debt_limit: vault_limit,
                     },
                 ))?,
                 funds: vec![],
@@ -88,6 +88,7 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
                 debt_denom,
                 vault_addr,
                 orca_addr,
+                max_ltv: Decimal::zero(),
             }
             .save(deps.storage)?;
             Ok(Response::default()
@@ -124,8 +125,10 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                 debt_denom: config.debt_denom,
                 collateral_amount: Uint128::zero(),
                 debt_amount: Uint128::zero(),
-                borrow_rate: Decimal::zero(),
-                borrow_limit: Uint128::zero(),
+                debt_rate: Decimal::zero(),
+                debt_limit: Uint128::zero(),
+                max_ltv: config.max_ltv,
+                price: Decimal::zero(),
             })?)
         }
     }

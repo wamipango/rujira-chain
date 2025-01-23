@@ -86,7 +86,7 @@ impl State {
         }
     }
 
-    pub fn borrow_rate(&self, interest: &Interest) -> StdResult<Decimal> {
+    pub fn debt_rate(&self, interest: &Interest) -> StdResult<Decimal> {
         interest.rate(self.utilization())
     }
 
@@ -99,7 +99,7 @@ impl State {
         interest: &Interest,
         to: Timestamp,
     ) -> Result<Uint128, ContractError> {
-        let rate = self.borrow_rate(interest)?;
+        let rate = self.debt_rate(interest)?;
         let seconds = to.seconds().sub(self.last_updated.seconds());
         let part = Decimal::from_ratio(seconds, 31_536_000u128);
         Ok(Decimal::from_ratio(self.debt_pool.size(), 1u128)

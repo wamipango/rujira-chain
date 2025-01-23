@@ -29,10 +29,14 @@ pub struct Status {
     pub debt_amount: Uint128,
 
     /// Current borrow rate
-    pub borrow_rate: Decimal,
+    pub debt_rate: Decimal,
 
     /// Current borrow limit
-    pub borrow_limit: Uint128,
+    pub debt_limit: Uint128,
+
+    pub price: Decimal,
+
+    pub max_ltv: Decimal,
 }
 
 impl Config {
@@ -73,8 +77,10 @@ impl From<registry::ContractStatusResponse> for Status {
             debt_denom: value.debt_denom,
             collateral_amount: value.collateral_amount,
             debt_amount: value.debt_amount,
-            borrow_rate: value.borrow_rate,
-            borrow_limit: value.borrow_limit,
+            debt_rate: value.debt_rate,
+            debt_limit: value.debt_limit,
+            price: value.price,
+            max_ltv: value.max_ltv,
         }
     }
 }
@@ -86,8 +92,10 @@ impl From<Status> for StatusResponse {
             debt_denom: value.debt_denom,
             collateral_amount: value.collateral_amount,
             debt_amount: value.debt_amount,
-            borrow_rate: value.borrow_rate,
-            borrow_limit: value.borrow_limit,
+            debt_rate: value.debt_rate,
+            debt_limit: value.debt_limit,
+            price: value.price,
+            max_ltv: value.max_ltv,
         }
     }
 }

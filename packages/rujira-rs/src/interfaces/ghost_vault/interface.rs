@@ -34,9 +34,9 @@ pub enum ExecuteMsg {
 #[cw_serde]
 pub enum SudoMsg {
     /// Whitelist a new borrower
-    AddBorrower { addr: String, borrow_limit: Uint128 },
+    AddBorrower { addr: String, debt_limit: Uint128 },
     /// Update a whitelisted Borrower's parameters
-    UpdateBorrower { addr: String, borrow_limit: Uint128 },
+    UpdateBorrower { addr: String, debt_limit: Uint128 },
     /// Update contract interest parameters
     UpdateInterest { interest: Interest },
 }
@@ -66,7 +66,7 @@ pub struct StatusResponse {
 
     pub utilization_ratio: Decimal,
 
-    pub borrow_rate: Decimal,
+    pub debt_rate: Decimal,
 
     pub lend_rate: Decimal,
     // Share pool that accounts for accrued debt interest
