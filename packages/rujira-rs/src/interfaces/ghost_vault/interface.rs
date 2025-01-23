@@ -12,6 +12,8 @@ pub struct InstantiateMsg {
     pub interest: Interest,
     pub receipt: TokenMetadata,
     pub debt: TokenMetadata,
+    /// Lending market registry
+    pub registry: String,
 }
 
 #[cw_serde]
@@ -24,6 +26,9 @@ pub enum ExecuteMsg {
     Borrow { amount: Uint128 },
     /// Repay a borrow. Only callable by whitelisted market contracts.
     Repay {},
+
+    /// Priviledged to allow registry to call
+    Sudo(SudoMsg),
 }
 
 #[cw_serde]

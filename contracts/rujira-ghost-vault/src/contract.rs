@@ -1,7 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+    coins, ensure, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
+    StdResult,
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, PaymentError};
@@ -28,7 +29,7 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::from(msg.clone());
+    let config = Config::new(deps.as_ref(), msg.clone())?;
     config.validate()?;
     config.save(deps.storage)?;
     State::init(deps.storage, &env)?;
@@ -105,6 +106,13 @@ pub fn execute(
             Response::default()
                 .add_message(debt.burn_msg(debt_amount.amount))
                 .add_event(event_repay(info.sender, amount.amount, debt_amount.amount))
+        }
+        ExecuteMsg::Sudo(msg) => {
+            ensure!(
+                info.sender == config.registry,
+                ContractError::Unauthorized {}
+            );
+            return sudo(deps, env, msg);
         }
     };
     state.save(deps.storage)?;
@@ -216,6 +224,7 @@ mod tests {
                 code_id,
                 owner.clone(),
                 &InstantiateMsg {
+                    registry: app.api().addr_make("registry").to_string(),
                     denom: "btc".to_string(),
                     receipt: TokenMetadata {
                         description: "".to_string(),

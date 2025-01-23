@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{StdResult, Storage};
+use cosmwasm_std::{Binary, HexBinary, StdResult, Storage};
 use cw_storage_plus::Item;
 use rujira_rs::ghost_registry::InstantiateMsg;
 
@@ -8,11 +8,17 @@ use crate::ContractError;
 static CONFIG: Item<Config> = Item::new("config");
 
 #[cw_serde]
-pub struct Config {}
+pub struct Config {
+    pub checksum: HexBinary,
+    pub code_id: u64,
+}
 
 impl From<InstantiateMsg> for Config {
-    fn from(_: InstantiateMsg) -> Self {
-        Self {}
+    fn from(value: InstantiateMsg) -> Self {
+        Self {
+            checksum: value.checksum,
+            code_id: value.code_id,
+        }
     }
 }
 
@@ -36,6 +42,11 @@ mod tests {
 
     #[test]
     fn validation() {
-        Config {}.validate().unwrap();
+        Config {
+            checksum: HexBinary::default(),
+            code_id: 1,
+        }
+        .validate()
+        .unwrap();
     }
 }

@@ -1,9 +1,10 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{Decimal, HexBinary, Uint128};
 
 #[cw_serde]
 pub struct InstantiateMsg {
-    code_id: u32,
+    pub checksum: HexBinary,
+    pub code_id: u64,
 }
 
 #[cw_serde]
@@ -36,7 +37,7 @@ pub enum QueryMsg {
 
     /// Query global status of lending market
     #[returns(StatusResponse)]
-    Status(),
+    Status {},
 
     /// Query the status of a registered borrow market
     #[returns(ContractConfigResponse)]
