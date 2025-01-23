@@ -1,12 +1,13 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    instantiate2_address, to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response,
-    WasmMsg,
+    instantiate2_address, to_json_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo,
+    Response, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use rujira_rs::ghost_registry::{
-    ContractConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, SudoMsg,
+    ConfigResponse, ContractConfigResponse, ContractStatusResponse, ExecuteMsg, InstantiateMsg,
+    QueryMsg, SudoMsg,
 };
 use rujira_rs::{ghost_borrow, ghost_vault};
 
@@ -108,11 +109,24 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     match msg {
-        QueryMsg::Config {} => todo!(),
+        QueryMsg::Config {} => Ok(to_json_binary(&ConfigResponse::from(Config::load(
+            deps.storage,
+        )?))?),
         QueryMsg::Status {} => todo!(),
         QueryMsg::ContractConfig(addr) => Ok(to_json_binary(&ContractConfigResponse::from(
             ContractConfig::load(deps.storage, deps.api.addr_validate(&addr)?)?,
         ))?),
-        QueryMsg::ContractStatus(_) => todo!(),
+        QueryMsg::ContractStatus(addr) => {
+            let config = ContractConfig::load(deps.storage, deps.api.addr_validate(&addr)?)?;
+            Ok(to_json_binary(&ContractStatusResponse {
+                contract: config.contract.to_string(),
+                collateral_denom: config.collateral_denom,
+                debt_denom: config.debt_denom,
+                collateral_amount: Uint128::zero(),
+                debt_amount: Uint128::zero(),
+                borrow_rate: Decimal::zero(),
+                borrow_limit: Uint128::zero(),
+            })?)
+        }
     }
 }

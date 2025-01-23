@@ -53,7 +53,8 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct ConfigResponse {
     /// The Code ID used to deploy and register new ghost-borrow markets
-    pub code_id: u32,
+    pub code_id: u64,
+    pub checksum: HexBinary,
 }
 
 #[cw_serde]
