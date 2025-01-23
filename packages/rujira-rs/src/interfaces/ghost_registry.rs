@@ -16,6 +16,8 @@ pub enum SudoMsg {
     Create {
         /// Lending vault to borrow funds from
         vault_addr: String,
+        /// Initial hard-cap for borrowing for this contract from the vault
+        vault_limit: Uint128,
         /// The liquidation queue that will be used to liquidate collateral_denom for debt_denom
         orca_addr: String,
         /// Collateral denom string
@@ -24,7 +26,7 @@ pub enum SudoMsg {
         debt_denom: String,
     },
     UpdateConfig {
-        code_id: Option<u32>,
+        code: Option<(u64, HexBinary)>,
     },
 }
 

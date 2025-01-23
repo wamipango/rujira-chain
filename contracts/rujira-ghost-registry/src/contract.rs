@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     instantiate2_address, to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response,
-    Uint128, WasmMsg,
+    WasmMsg,
 };
 use cw2::set_contract_version;
 use rujira_rs::ghost_registry::{
@@ -43,11 +43,12 @@ pub fn execute(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
-    let config = Config::load(deps.storage)?;
+    let mut config = Config::load(deps.storage)?;
     let salt = to_json_binary(&msg)?;
     match msg {
         SudoMsg::Create {
             vault_addr,
+            vault_limit,
             orca_addr,
             collateral_denom,
             debt_denom,
@@ -74,7 +75,7 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
                 msg: to_json_binary(&ghost_vault::ExecuteMsg::Sudo(
                     ghost_vault::SudoMsg::AddBorrower {
                         addr: contract.to_string(),
-                        borrow_limit: Uint128::one(),
+                        borrow_limit: vault_limit,
                     },
                 ))?,
                 funds: vec![],
@@ -92,7 +93,15 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
                 .add_message(init_msg)
                 .add_message(vault_msg))
         }
-        SudoMsg::UpdateConfig { code_id } => todo!(),
+        SudoMsg::UpdateConfig { code } => match code {
+            Some((code_id, checksum)) => {
+                config.code_id = code_id;
+                config.checksum = checksum;
+                config.save(deps.storage)?;
+                Ok(Response::default())
+            }
+            None => Ok(Response::default()),
+        },
     }
 }
 
