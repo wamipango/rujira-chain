@@ -1,7 +1,10 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{
+    to_json_binary, BankMsg, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
+};
 use cw2::set_contract_version;
+use cw_utils::NativeBalance;
 use rujira_rs::ghost_borrow::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, PositionResponse, QueryMsg, StatusResponse, SudoMsg,
 };
@@ -27,12 +30,33 @@ pub fn instantiate(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
-    _info: MessageInfo,
-    _msg: ExecuteMsg,
+    info: MessageInfo,
+    msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    Ok(Response::default())
+    match msg {
+        ExecuteMsg::Manage {
+            borrowed,
+            deposited,
+        } => {
+            let funds = NativeBalance(info.funds);
+            let mut position = Position::load(deps.storage, &info.sender);
+            let mut returned = position.adjust(deposited, borrowed, funds)?;
+            returned.normalize();
+            position.save(deps.storage)?;
+
+            if returned.is_empty() {
+                Ok(Response::default())
+            } else {
+                Ok(Response::default().add_message(BankMsg::Send {
+                    to_address: position.owner.to_string(),
+                    amount: returned.into_vec(),
+                }))
+            }
+        }
+        ExecuteMsg::Transfer { .. } => todo!(),
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

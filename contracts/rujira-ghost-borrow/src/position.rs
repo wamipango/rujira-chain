@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, StdResult, Storage, Uint128};
 use cw_storage_plus::Map;
+use cw_utils::NativeBalance;
 
 static POSITIONS: Map<Addr, (Uint128, Uint128)> = Map::new("positions");
 
@@ -34,5 +35,14 @@ impl Position {
 
     pub fn is_zero(&self) -> bool {
         self.collateral.is_zero() && self.debt.is_zero()
+    }
+
+    pub fn adjust(
+        &mut self,
+        _deposited: Uint128,
+        _borrowed: Uint128,
+        _funds: NativeBalance,
+    ) -> StdResult<NativeBalance> {
+        todo!()
     }
 }
