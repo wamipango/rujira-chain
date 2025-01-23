@@ -8,6 +8,7 @@ use cw_utils::NativeBalance;
 use rujira_rs::ghost_borrow::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, PositionResponse, QueryMsg, StatusResponse, SudoMsg,
 };
+use rujira_rs::ghost_vault;
 
 use crate::config::{Config, Status, REGISTRY};
 use crate::error::ContractError;
@@ -35,6 +36,7 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
+    let config = Config::load(deps.as_ref(), &env)?;
     let status = Status::load(deps.as_ref(), &env)?;
     match msg {
         ExecuteMsg::Manage {
@@ -42,7 +44,10 @@ pub fn execute(
             deposited,
         } => {
             let funds = NativeBalance(info.funds);
-            let mut position = Position::load(deps.storage, &info.sender);
+            let vault_status: ghost_vault::StatusResponse = deps
+                .querier
+                .query_wasm_smart(config.vault_addr, &ghost_vault::QueryMsg::Status {})?;
+            let mut position = Position::load(deps.storage, &info.sender, &vault_status);
             let mut returned = position.adjust(status, deposited, borrowed, funds)?;
             returned.normalize();
             position.save(deps.storage)?;
@@ -75,11 +80,17 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
             deps, &env,
         )?))?),
         QueryMsg::Position(addr) => {
-            let position = Position::load(deps.storage, &deps.api.addr_validate(&addr)?);
+            let config = Config::load(deps, &env)?;
+            let vault_status: ghost_vault::StatusResponse = deps
+                .querier
+                .query_wasm_smart(config.vault_addr, &ghost_vault::QueryMsg::Status {})?;
+            let position =
+                Position::load(deps.storage, &deps.api.addr_validate(&addr)?, &vault_status);
             let res = PositionResponse {
                 owner: position.owner.to_string(),
                 collateral: position.collateral,
-                debt: position.debt,
+                debt_amount: position.debt_amount,
+                debt_shares: position.debt_shares,
                 ltv: Decimal::zero(),
             };
             Ok(to_json_binary(&res)?)

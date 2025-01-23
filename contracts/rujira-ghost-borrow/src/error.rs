@@ -1,4 +1,4 @@
-use cosmwasm_std::{CheckedFromRatioError, StdError};
+use cosmwasm_std::{CheckedFromRatioError, Decimal, StdError, Uint128};
 use cw_utils::PaymentError;
 use rujira_rs::SharePoolError;
 use thiserror::Error;
@@ -25,6 +25,15 @@ pub enum ContractError {
 
     #[error("Invalid: {0}")]
     Invalid(String),
+
+    #[error("MaxDebtExceeded available {available} requested {requested}")]
+    MaxDebtExceeded {
+        available: Uint128,
+        requested: Uint128,
+    },
+
+    #[error("MaxLtvExceeded {result} >= {limit}")]
+    MaxLtvExceeded { limit: Decimal, result: Decimal },
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

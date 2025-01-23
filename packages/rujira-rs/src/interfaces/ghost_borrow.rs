@@ -90,6 +90,7 @@ pub struct StatusResponse {
 pub struct PositionResponse {
     pub owner: String,
     pub collateral: Uint128,
-    pub debt: Uint128,
+    pub debt_shares: Uint128,
+    pub debt_amount: Uint128,
     pub ltv: Decimal,
 }
