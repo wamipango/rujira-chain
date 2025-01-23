@@ -48,6 +48,8 @@ pub enum QueryMsg {
     Config {},
     #[returns(StatusResponse)]
     Status {},
+    #[returns(PositionResponse)]
+    Position(String),
 }
 
 #[cw_serde]
@@ -75,4 +77,12 @@ pub struct StatusResponse {
 
     /// Current borrow limit
     pub borrow_limit: Uint128,
+}
+
+#[cw_serde]
+pub struct PositionResponse {
+    pub owner: String,
+    pub collateral: Uint128,
+    pub debt: Uint128,
+    pub ltv: Decimal,
 }
