@@ -43,12 +43,10 @@ pub fn sudo(_deps: DepsMut, _env: Env, _msg: SudoMsg) -> Result<Response, Contra
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     match msg {
         QueryMsg::Config {} => Ok(to_json_binary(&ConfigResponse::from(Config::load(
-            deps,
-            &env.contract.address,
+            deps, &env,
         )?))?),
         QueryMsg::Status {} => Ok(to_json_binary(&StatusResponse::from(Status::load(
-            deps,
-            &env.contract.address,
+            deps, &env,
         )?))?),
     }
 }

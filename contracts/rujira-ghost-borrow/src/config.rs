@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, Deps, StdResult, Uint128};
+use cosmwasm_std::{Addr, Decimal, Deps, Env, StdResult, Uint128};
 use cw_storage_plus::Item;
 use rujira_rs::{
     ghost_borrow::{ConfigResponse, StatusResponse},
@@ -36,10 +36,10 @@ pub struct Status {
 }
 
 impl Config {
-    pub fn load(deps: Deps, addr: &Addr) -> StdResult<Self> {
+    pub fn load(deps: Deps, env: &Env) -> StdResult<Self> {
         let res: registry::ContractConfigResponse = deps.querier.query_wasm_smart(
             REGISTRY.load(deps.storage)?,
-            &registry::QueryMsg::ContractConfig(addr.to_string()),
+            &registry::QueryMsg::ContractConfig(env.contract.address.to_string()),
         )?;
         Ok(res.into())
     }
@@ -57,10 +57,10 @@ impl From<registry::ContractConfigResponse> for Config {
 }
 
 impl Status {
-    pub fn load(deps: Deps, addr: &Addr) -> StdResult<Self> {
+    pub fn load(deps: Deps, env: &Env) -> StdResult<Self> {
         let res: registry::ContractStatusResponse = deps.querier.query_wasm_smart(
             REGISTRY.load(deps.storage)?,
-            &registry::QueryMsg::ContractStatus(addr.to_string()),
+            &registry::QueryMsg::ContractStatus(env.contract.address.to_string()),
         )?;
         Ok(res.into())
     }
