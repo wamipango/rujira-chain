@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Binary, Decimal, Uint128};
+use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -9,30 +9,71 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     /// Create a new, update or close an existing position
-    /// Set the target amounts. If set to zero, position will be closed
+    /// Set the target amounts. If both set to zero, position will be closed
     /// Surplus is returned to the sender
     Manage {
-        borrowed: Uint128,
-        deposited: Uint128,
-        // TODO: How do we support a recipient with a one-tx solution to withdraw secured assets to another L1
+        // Optionally do something with some collateral before actions are executed.
+        // Returned funds are added to the funds sent in the tx and used to fund the rebalance
+        // request of the tx
+        // Can be used to eg sell a portion of collateral and use the proceeds to repay debt
+        // without requiring spare funds
+        // The `amount` value of the Action will be deducted from the existing position
+        collateral_action: Option<Action>,
+
+        /// Target borrow amount
+        debt_target: Uint128,
+
+        /// Target collateral amount
+        collateral_target: Uint128,
+
+        // Optionally do something with the borrowed funds after the position is adjusted.
+        // Can be used to open a margin position without "looping"
+        // eg with 0.3 BTC dpoesit @ 100k and max LTV 70%, borrow 70k USDC and swap for BTC collateral,
+        // before the position health is checked
+        // The `amount` value of the Action will be borrowed from the Vault in addition to the delta between
+        // the current position debt and `debt_target`
+        debt_action: Option<Action>,
     },
 
     /// Transfer debt to another borrow position, optionally swapping collateral and moving it at the same time
     Transfer {
         /// Amount of the Vault's debt shares to transfer.
-        /// N.b: query the vault status to get the current obligation (value) of the debt shares
-        debt_amount: Uint128,
+        debt_shares: Uint128,
         /// ghost-borrow contract address destination
         /// this address must be registered on ghost-registry for the transfer to be valid
         destination: String,
         /// An optional execution step that will deduct collateral from the current position,
         /// exchange it for the collateral of the destination, and transfer them all together
-        collateral: Option<CollateralTransfer>,
+        collateral: Option<Action>,
+    },
+
+    // Privileged actions used when executing Action's
+    Callback(CallbackMsg),
+}
+
+#[cw_serde]
+pub enum CallbackMsg {
+    ManageCollateral {
+        funds: Vec<Coin>,
+        debt_target: Uint128,
+        collateral_target: Uint128,
+        debt_action: Option<Action>,
+    },
+
+    ManageDebt {
+        funds: Vec<Coin>,
+        debt_target: Uint128,
+        collateral_target: Uint128,
+    },
+
+    TransferCollateral {
+        debt_shares: Uint128,
+        destination: String,
     },
 }
 
 #[cw_serde]
-pub struct CollateralTransfer {
+pub struct Action {
     contract: String,
     msg: Binary,
     amount: Uint128,

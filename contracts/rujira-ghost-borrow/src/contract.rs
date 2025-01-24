@@ -1,12 +1,13 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, BankMsg, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
+    ensure, to_json_binary, BankMsg, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
 };
 use cw2::set_contract_version;
 use cw_utils::NativeBalance;
 use rujira_rs::ghost_borrow::{
-    ConfigResponse, ExecuteMsg, InstantiateMsg, PositionResponse, QueryMsg, StatusResponse, SudoMsg,
+    CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, PositionResponse, QueryMsg,
+    StatusResponse, SudoMsg,
 };
 use rujira_rs::ghost_vault;
 
@@ -40,15 +41,16 @@ pub fn execute(
     let status = Status::load(deps.as_ref(), &env)?;
     match msg {
         ExecuteMsg::Manage {
-            borrowed,
-            deposited,
+            debt_target,
+            collateral_target,
+            ..
         } => {
             let funds = NativeBalance(info.funds);
             let vault_status: ghost_vault::StatusResponse = deps
                 .querier
                 .query_wasm_smart(config.vault_addr, &ghost_vault::QueryMsg::Status {})?;
             let mut position = Position::load(deps.storage, &info.sender, &vault_status);
-            let mut returned = position.adjust(status, deposited, borrowed, funds)?;
+            let mut returned = position.adjust(status, collateral_target, debt_target, funds)?;
             returned.normalize();
             position.save(deps.storage)?;
 
@@ -62,7 +64,23 @@ pub fn execute(
             }
         }
         ExecuteMsg::Transfer { .. } => todo!(),
+        ExecuteMsg::Callback(callback_msg) => {
+            ensure!(
+                info.sender == env.contract.address,
+                ContractError::Unauthorized {}
+            );
+            execute_callback(deps, env, info, callback_msg)
+        }
     }
+}
+
+pub fn execute_callback(
+    _deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    _msg: CallbackMsg,
+) -> Result<Response, ContractError> {
+    todo!()
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
