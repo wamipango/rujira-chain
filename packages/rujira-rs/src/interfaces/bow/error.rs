@@ -2,6 +2,8 @@ use cosmwasm_std::{ConversionOverflowError, OverflowError, StdError, Uint128};
 use cw_utils::PaymentError;
 use thiserror::Error;
 
+use crate::asset::Layer1AssetError;
+
 #[derive(Error, Debug)]
 pub enum StrategyError {
     #[error("{0}")]
@@ -16,8 +18,14 @@ pub enum StrategyError {
     #[error("{0}")]
     ConversionOverflow(#[from] ConversionOverflowError),
 
+    #[error("{0}")]
+    Layer1Asset(#[from] Layer1AssetError),
+
     #[error("InvalidPair")]
     InvalidPair {},
+
+    #[error("InvalidRoute")]
+    InvalidRoute {},
 
     #[error("InvalidDeposit")]
     InvalidDeposit {},

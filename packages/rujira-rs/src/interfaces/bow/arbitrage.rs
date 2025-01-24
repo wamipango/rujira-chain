@@ -1,6 +1,6 @@
-use crate::bow::error::StrategyError;
+use crate::{bow::error::StrategyError, Layer1Asset};
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Coins, Deps, Env, MessageInfo, Uint128};
+use cosmwasm_std::{Binary, Coin, Coins, Decimal, Deps, Env, MessageInfo, Uint128};
 use cw_utils::NativeBalance;
 
 use super::{strategy::Strategy, QuoteRequest, QuoteResponse};
@@ -17,8 +17,9 @@ pub struct Arbitrage {}
 
 impl Strategy for Arbitrage {
     fn denom(&self) -> String {
-        todo!()
+        "bow-arb".to_string()
     }
+
     fn validate(
         &self,
         _deps: Deps,
@@ -34,9 +35,9 @@ impl Strategy for Arbitrage {
         &self,
         _deps: Deps,
         _env: Env,
-        _req: QuoteRequest,
+        req: QuoteRequest,
     ) -> Result<Option<QuoteResponse>, StrategyError> {
-        todo!()
+        Route::try_from(req.clone())?.quote(req.min_price, req.data)
     }
 
     fn calculate_share(
@@ -60,5 +61,37 @@ impl Strategy for Arbitrage {
     ) -> Result<NativeBalance, StrategyError> {
         todo!()
     }
-    //
+}
+
+enum Route {
+    Single(Layer1Asset),
+    Dual(Layer1Asset, Layer1Asset),
+}
+
+impl Route {
+    pub fn quote(
+        &self,
+        min_price: Option<Decimal>,
+        data: Option<Binary>,
+    ) -> Result<Option<QuoteResponse>, StrategyError> {
+        match self {
+            Route::Single(layer1_asset) => todo!(),
+            Route::Dual(layer1_asset, layer1_asset1) => todo!(),
+        }
+    }
+}
+
+impl TryFrom<QuoteRequest> for Route {
+    type Error = StrategyError;
+
+    fn try_from(value: QuoteRequest) -> Result<Self, Self::Error> {
+        match (value.ask_denom.as_str(), value.offer_denom.as_str()) {
+            ("rune", asset) => Ok(Self::Single(Layer1Asset::from_native(asset.to_string())?)),
+            (asset, "rune") => Ok(Self::Single(Layer1Asset::from_native(asset.to_string())?)),
+            (a, b) => Ok(Self::Dual(
+                Layer1Asset::from_native(a.to_string())?,
+                Layer1Asset::from_native(b.to_string())?,
+            )),
+        }
+    }
 }

@@ -110,6 +110,28 @@ impl Layer1Asset {
             .unwrap_or_default()
             .to_string()
     }
+
+    pub fn from_native(denom: String) -> std::result::Result<Self, Layer1AssetError> {
+        if denom == "rune".to_string() {
+            return Ok(Self::new(Chain::Thor, "rune"));
+        }
+        match denom.split('-').collect::<Vec<_>>().as_slice() {
+            [chain, symbol] => Ok(Self::new(Chain::try_from(*chain)?, symbol)),
+            _ => Err(Layer1AssetError::InvalidNativeDenom(denom)),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum Layer1AssetError {
+    #[error("{0}")]
+    ChainParse(#[from] ChainParseError),
+
+    #[error("Invalid layer 1 string {0}")]
+    Invalid(String),
+
+    #[error("Invalid native denom string {0}")]
+    InvalidNativeDenom(String),
 }
 
 impl Display for Layer1Asset {
@@ -154,15 +176,6 @@ impl FromStr for Layer1Asset {
     fn from_str(s: &str) -> result::Result<Self, Self::Err> {
         s.try_into()
     }
-}
-
-#[derive(Error, Debug)]
-pub enum Layer1AssetError {
-    #[error("{0}")]
-    Chain(#[from] ChainParseError),
-
-    #[error("Invalid {0}")]
-    Invalid(String),
 }
 
 impl Memoed for Asset {

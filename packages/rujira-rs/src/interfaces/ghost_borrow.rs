@@ -26,7 +26,8 @@ pub enum ExecuteMsg {
         /// Target collateral amount
         collateral_target: Uint128,
 
-        // Optionally do something with the borrowed funds after the position is adjusted.
+        // Optionally do something with the borrowed funds after the position is adjusted, using the proceeds
+        // to fund the rebalance request
         // Can be used to open a margin position without "looping"
         // eg with 0.3 BTC dpoesit @ 100k and max LTV 70%, borrow 70k USDC and swap for BTC collateral,
         // before the position health is checked
