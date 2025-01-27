@@ -1,7 +1,7 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Decimal, Timestamp, Uint128};
 
-use crate::TokenMetadata;
+use crate::{CallbackData, TokenMetadata};
 
 use super::interest::Interest;
 
@@ -19,11 +19,14 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     /// Deposit the borrowable asset into the money market.
-    Deposit {},
+    Deposit { callback: Option<CallbackData> },
     /// Withdraw the borrowable asset from the money market.
-    Withdraw {},
+    Withdraw { callback: Option<CallbackData> },
     /// Borrow the borrowable asset from the money market. Only callable by whitelisted market contracts.
-    Borrow { amount: Uint128 },
+    Borrow {
+        amount: Uint128,
+        callback: Option<CallbackData>,
+    },
     /// Repay a borrow. Only callable by whitelisted market contracts.
     Repay {},
 

@@ -8,7 +8,7 @@ use crate::pool::Pool;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env,
+    coin, coins, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Empty, Env,
     MessageInfo, Response, StdResult, WasmMsg,
 };
 use cw2::set_contract_version;
@@ -67,7 +67,7 @@ pub fn execute(
 
             Ok(Response::default().add_message(msg))
         }
-        ExecuteMsg::Order(vec) => {
+        ExecuteMsg::Order((vec, callback)) => {
             let mut e = OrderManager::new(
                 config.denoms.clone(),
                 config.fee_maker,
@@ -81,10 +81,16 @@ pub fn execute(
             fees += res.fees;
 
             if !res.withdraw.is_empty() {
-                messages.push(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: info.sender.to_string(),
-                    amount: res.withdraw.into_vec(),
-                }))
+                match callback {
+                    None => messages.push(CosmosMsg::Bank(BankMsg::Send {
+                        to_address: info.sender.to_string(),
+                        amount: res.withdraw.into_vec(),
+                    })),
+                    Some(cb) => messages.push(
+                        cb.to_message(&info.sender, Empty {}, res.withdraw.into_vec())?
+                            .into(),
+                    ),
+                }
             }
 
             fees.normalize();
@@ -156,13 +162,21 @@ pub fn execute(
                 coin(res.remaining_offer.u128(), config.denoms.ask(&side)),
             ]);
 
+            let recipient = to.unwrap_or(sender);
+
             funds.normalize();
             if !funds.is_empty() {
-                messages.push(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: to.unwrap_or(sender).to_string(),
-                    amount: funds.into_vec(),
-                }))
-            }
+                match req.callback {
+                    None => messages.push(CosmosMsg::Bank(BankMsg::Send {
+                        to_address: recipient.to_string(),
+                        amount: funds.into_vec(),
+                    })),
+                    Some(cb) => messages.push(
+                        cb.to_message(&recipient, Empty {}, funds.into_vec())?
+                            .into(),
+                    ),
+                }
+            };
 
             fees += coin(res.fee_amount.u128(), config.denoms.bid(&side));
             fees.normalize();
@@ -441,40 +455,43 @@ mod tests {
         app.execute_contract(
             owner.clone(),
             contract.clone(),
-            &ExecuteMsg::Order(vec![
-                (Side::Base, Price::Oracle(0), Uint128::from(1000000u128)),
-                (
-                    Side::Base,
-                    Price::Fixed(Decimal::from_str("1000.00").unwrap()),
-                    Uint128::from(1000000u128),
-                ),
-                (
-                    Side::Base,
-                    Price::Fixed(Decimal::from_str("933.17").unwrap()),
-                    Uint128::from(1000000u128),
-                ),
-                (
-                    Side::Base,
-                    Price::Fixed(Decimal::from_str("932.19").unwrap()),
-                    Uint128::from(2100000u128),
-                ),
-                (
-                    Side::Base,
-                    Price::Fixed(Decimal::from_str("912.19").unwrap()),
-                    Uint128::from(5100000u128),
-                ),
-                (Side::Quote, Price::Oracle(1), Uint128::from(10000u128)),
-                (
-                    Side::Quote,
-                    Price::Fixed(Decimal::from_str("1000.10").unwrap()),
-                    Uint128::from(12500u128),
-                ),
-                (
-                    Side::Quote,
-                    Price::Fixed(Decimal::from_str("879.00").unwrap()),
-                    Uint128::from(51000u128),
-                ),
-            ]),
+            &ExecuteMsg::Order((
+                vec![
+                    (Side::Base, Price::Oracle(0), Uint128::from(1000000u128)),
+                    (
+                        Side::Base,
+                        Price::Fixed(Decimal::from_str("1000.00").unwrap()),
+                        Uint128::from(1000000u128),
+                    ),
+                    (
+                        Side::Base,
+                        Price::Fixed(Decimal::from_str("933.17").unwrap()),
+                        Uint128::from(1000000u128),
+                    ),
+                    (
+                        Side::Base,
+                        Price::Fixed(Decimal::from_str("932.19").unwrap()),
+                        Uint128::from(2100000u128),
+                    ),
+                    (
+                        Side::Base,
+                        Price::Fixed(Decimal::from_str("912.19").unwrap()),
+                        Uint128::from(5100000u128),
+                    ),
+                    (Side::Quote, Price::Oracle(1), Uint128::from(10000u128)),
+                    (
+                        Side::Quote,
+                        Price::Fixed(Decimal::from_str("1000.10").unwrap()),
+                        Uint128::from(12500u128),
+                    ),
+                    (
+                        Side::Quote,
+                        Price::Fixed(Decimal::from_str("879.00").unwrap()),
+                        Uint128::from(51000u128),
+                    ),
+                ],
+                None,
+            )),
             &funds,
         )
         .unwrap();
@@ -538,44 +555,47 @@ mod tests {
         app.execute_contract(
             owner.clone(),
             contract.clone(),
-            &ExecuteMsg::Order(vec![
-                (Side::Base, Price::Oracle(0), Uint128::from(10000u128)),
-                (
-                    Side::Base,
-                    Price::Fixed(Decimal::from_str("1000.00").unwrap()),
-                    Uint128::from(10000u128),
-                ),
-                (
-                    Side::Base,
-                    Price::Fixed(Decimal::from_str("933.17").unwrap()),
-                    Uint128::from(10000u128),
-                ),
-                (
-                    Side::Base,
-                    Price::Fixed(Decimal::from_str("932.19").unwrap()),
-                    Uint128::from(21000u128),
-                ),
-                (
-                    Side::Base,
-                    Price::Fixed(Decimal::from_str("912.19").unwrap()),
-                    Uint128::from(51000u128),
-                ),
-                (
-                    Side::Quote,
-                    Price::Oracle(-1000),
-                    Uint128::from(10000000u128),
-                ),
-                (
-                    Side::Quote,
-                    Price::Fixed(Decimal::from_str("900.00").unwrap()),
-                    Uint128::from(12500000u128),
-                ),
-                (
-                    Side::Quote,
-                    Price::Fixed(Decimal::from_str("879.00").unwrap()),
-                    Uint128::from(51000000u128),
-                ),
-            ]),
+            &ExecuteMsg::Order((
+                vec![
+                    (Side::Base, Price::Oracle(0), Uint128::from(10000u128)),
+                    (
+                        Side::Base,
+                        Price::Fixed(Decimal::from_str("1000.00").unwrap()),
+                        Uint128::from(10000u128),
+                    ),
+                    (
+                        Side::Base,
+                        Price::Fixed(Decimal::from_str("933.17").unwrap()),
+                        Uint128::from(10000u128),
+                    ),
+                    (
+                        Side::Base,
+                        Price::Fixed(Decimal::from_str("932.19").unwrap()),
+                        Uint128::from(21000u128),
+                    ),
+                    (
+                        Side::Base,
+                        Price::Fixed(Decimal::from_str("912.19").unwrap()),
+                        Uint128::from(51000u128),
+                    ),
+                    (
+                        Side::Quote,
+                        Price::Oracle(-1000),
+                        Uint128::from(10000000u128),
+                    ),
+                    (
+                        Side::Quote,
+                        Price::Fixed(Decimal::from_str("900.00").unwrap()),
+                        Uint128::from(12500000u128),
+                    ),
+                    (
+                        Side::Quote,
+                        Price::Fixed(Decimal::from_str("879.00").unwrap()),
+                        Uint128::from(51000000u128),
+                    ),
+                ],
+                None,
+            )),
             &funds,
         )
         .unwrap();

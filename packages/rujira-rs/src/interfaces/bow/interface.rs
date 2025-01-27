@@ -17,14 +17,14 @@ pub enum ExecuteMsg {
     Swap {
         min_return: Coin,
         to: Option<String>,
-
-        /// An optional callback that BOW will execute with the funds from the swap.
-        /// The callback is executed on the sender's address.
-        #[serde(skip_serializing_if = "Option::is_none")]
         callback: Option<CallbackData>,
     },
-    Deposit {},
-    Withdraw {},
+    Deposit {
+        callback: Option<CallbackData>,
+    },
+    Withdraw {
+        callback: Option<CallbackData>,
+    },
 }
 
 #[cw_serde]

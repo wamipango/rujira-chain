@@ -47,7 +47,7 @@ pub enum ExecuteMsg {
     ///
     /// Funds sent must be equal to the net change of balances. Funds withdrawn in step 0 and retracted in 1's,
     /// can be reused to fund orders in 1 and 3  
-    Order(Vec<(Side, Price, Uint128)>),
+    Order((Vec<(Side, Price, Uint128)>, Option<CallbackData>)),
 
     Arb {
         then: Option<Binary>,
@@ -61,9 +61,5 @@ pub enum ExecuteMsg {
 pub struct SwapRequest {
     pub min_return: Option<Uint128>,
     pub to: Option<String>,
-
-    /// An optional callback that FIN will execute with the funds from the swap.
-    /// The callback is executed on the sender's address.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub callback: Option<CallbackData>,
 }

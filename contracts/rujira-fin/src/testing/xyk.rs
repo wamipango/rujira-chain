@@ -116,7 +116,7 @@ fn mm_book() {
     app.execute_contract(
         owner.clone(),
         bow.clone(),
-        &bow::ExecuteMsg::Deposit {},
+        &bow::ExecuteMsg::Deposit { callback: None },
         // 2 BTC @ 100k USDC
         &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
     )
@@ -333,7 +333,7 @@ fn combined_book() {
     app.execute_contract(
         owner.clone(),
         bow.clone(),
-        &bow::ExecuteMsg::Deposit {},
+        &bow::ExecuteMsg::Deposit { callback: None },
         // 2 BTC @ 100k USDC
         &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
     )
@@ -363,19 +363,22 @@ fn combined_book() {
     app.execute_contract(
         owner.clone(),
         fin.clone(),
-        &ExecuteMsg::Order(vec![
-            (
-                Side::Quote,
-                Price::Fixed(Decimal::from_str("997.00698").unwrap()),
-                Uint128::from(5_000_000u128),
-            ),
-            (
-                Side::Quote,
-                Price::Fixed(Decimal::from_str("996").unwrap()),
-                Uint128::from(5_000_000u128),
-            ),
-            (Side::Quote, Price::Oracle(0), Uint128::from(5_000_000u128)),
-        ]),
+        &ExecuteMsg::Order((
+            vec![
+                (
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("997.00698").unwrap()),
+                    Uint128::from(5_000_000u128),
+                ),
+                (
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("996").unwrap()),
+                    Uint128::from(5_000_000u128),
+                ),
+                (Side::Quote, Price::Oracle(0), Uint128::from(5_000_000u128)),
+            ],
+            None,
+        )),
         &coins(15_000_000, "usdc"),
     )
     .unwrap();
@@ -486,11 +489,14 @@ fn combined_book() {
         .execute_contract(
             owner.clone(),
             fin.clone(),
-            &ExecuteMsg::Order(vec![(
-                Side::Quote,
-                Price::Fixed(Decimal::from_str("996").unwrap()),
-                Uint128::zero(),
-            )]),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("996").unwrap()),
+                    Uint128::zero(),
+                )],
+                None,
+            )),
             &coins(455_000, "btc"),
         )
         .unwrap();
@@ -539,7 +545,7 @@ fn test_arbitrage_quote_single() {
     app.execute_contract(
         owner.clone(),
         bow.clone(),
-        &bow::ExecuteMsg::Deposit {},
+        &bow::ExecuteMsg::Deposit { callback: None },
         // 2 BTC @ 100k USDC
         &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
     )
@@ -585,11 +591,14 @@ fn test_arbitrage_quote_single() {
         .execute_contract(
             owner.clone(),
             fin.clone(),
-            &ExecuteMsg::Order(vec![(
-                Side::Base,
-                Price::Fixed(Decimal::from_str("998").unwrap()),
-                Uint128::from(10_000u128),
-            )]),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("998").unwrap()),
+                    Uint128::from(10_000u128),
+                )],
+                None,
+            )),
             &coins(10_000, "btc"),
         )
         .unwrap();
@@ -634,7 +643,7 @@ fn test_arbitrage_quote_multi() {
     app.execute_contract(
         owner.clone(),
         bow.clone(),
-        &bow::ExecuteMsg::Deposit {},
+        &bow::ExecuteMsg::Deposit { callback: None },
         // 2 BTC @ 100k USDC
         &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
     )
@@ -667,11 +676,14 @@ fn test_arbitrage_quote_multi() {
         .execute_contract(
             owner.clone(),
             fin.clone(),
-            &ExecuteMsg::Order(vec![(
-                Side::Quote,
-                Price::Fixed(Decimal::from_str("1004").unwrap()),
-                Uint128::from(600_000_000u128),
-            )]),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("1004").unwrap()),
+                    Uint128::from(600_000_000u128),
+                )],
+                None,
+            )),
             &coins(600_000_000u128, "usdc"),
         )
         .unwrap();
@@ -709,11 +721,14 @@ fn test_arbitrage_quote_multi() {
         .execute_contract(
             owner.clone(),
             fin.clone(),
-            &ExecuteMsg::Order(vec![(
-                Side::Quote,
-                Price::Fixed(Decimal::from_str("1006").unwrap()),
-                Uint128::from(10_000_000u128),
-            )]),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("1006").unwrap()),
+                    Uint128::from(10_000_000u128),
+                )],
+                None,
+            )),
             &coins(10_000_000u128, "usdc"),
         )
         .unwrap();

@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, ensure, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult,
+    coins, ensure, to_json_binary, BankMsg, Binary, Deps, DepsMut, Empty, Env, MessageInfo,
+    Response, StdResult,
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, PaymentError};
@@ -54,36 +54,72 @@ pub fn execute(
     let debt = TokenFactory::new(&env, format!("ghost-vault-{}-debt", config.denom).as_str());
     state.distribute_interest(&env, &config)?;
     let response = match msg {
-        ExecuteMsg::Deposit {} => {
+        ExecuteMsg::Deposit { callback } => {
             let amount = must_pay(&info, config.denom.as_str())?;
             let mint = state.deposit(amount)?;
-            Response::default()
-                .add_message(rcpt.mint_msg(mint, info.sender.clone()))
-                .add_event(event_deposit(info.sender, amount, mint))
+
+            match callback {
+                // Mint directly to the recipient if no callback is provided
+                None => Response::default()
+                    .add_message(rcpt.mint_msg(mint, info.sender.clone()))
+                    .add_event(event_deposit(info.sender, amount, mint)),
+                // Otherwise, mint to the contract and send alongside the callback
+                Some(cb) => Response::default()
+                    .add_message(rcpt.mint_msg(mint, env.contract.address))
+                    .add_message(cb.to_message(
+                        &info.sender,
+                        Empty {},
+                        coins(amount.u128(), &rcpt.denom()),
+                    )?)
+                    .add_event(event_deposit(info.sender, amount, mint)),
+            }
         }
-        ExecuteMsg::Withdraw {} => {
+        ExecuteMsg::Withdraw { callback } => {
             let amount = must_pay(&info, rcpt.denom().as_str())?;
             let withdrawn = state.withdraw(amount)?;
-            Response::default()
-                .add_message(rcpt.burn_msg(amount))
-                .add_message(BankMsg::Send {
-                    to_address: info.sender.to_string(),
-                    amount: coins(withdrawn.u128(), config.denom),
-                })
-                .add_event(event_withdraw(info.sender, withdrawn, amount))
+            match callback {
+                None => Response::default()
+                    .add_message(rcpt.burn_msg(amount))
+                    .add_message(BankMsg::Send {
+                        to_address: info.sender.to_string(),
+                        amount: coins(withdrawn.u128(), config.denom),
+                    })
+                    .add_event(event_withdraw(info.sender, withdrawn, amount)),
+                // Otherwise, mint to the contract and send alongside the callback
+                Some(cb) => Response::default()
+                    .add_message(rcpt.burn_msg(amount))
+                    .add_message(cb.to_message(
+                        &info.sender,
+                        Empty {},
+                        coins(amount.u128(), &config.denom),
+                    )?)
+                    .add_event(event_withdraw(info.sender, withdrawn, amount)),
+            }
         }
-        ExecuteMsg::Borrow { amount } => {
+        ExecuteMsg::Borrow { amount, callback } => {
             let mut borrower = Borrower::load(deps.storage, info.sender.clone())?;
             borrower.borrow(amount)?;
             borrower.save(deps.storage)?;
             let mint = state.borrow(amount)?;
-            Response::default()
-                .add_message(debt.mint_msg(mint, info.sender.clone()))
-                .add_message(BankMsg::Send {
-                    to_address: info.sender.to_string(),
-                    amount: coins(amount.u128(), config.denom),
-                })
-                .add_event(event_borrow(info.sender, amount, mint))
+
+            match callback {
+                None => Response::default()
+                    .add_message(debt.mint_msg(mint, info.sender.clone()))
+                    .add_message(BankMsg::Send {
+                        to_address: info.sender.to_string(),
+                        amount: coins(amount.u128(), config.denom),
+                    })
+                    .add_event(event_borrow(info.sender, amount, mint)),
+                // Otherwise, mint to the contract and send alongside the callback
+                Some(cb) => Response::default()
+                    .add_message(debt.mint_msg(mint, info.sender.clone()))
+                    .add_message(cb.to_message(
+                        &info.sender,
+                        Empty {},
+                        coins(amount.u128(), &config.denom),
+                    )?)
+                    .add_event(event_borrow(info.sender, amount, mint)),
+            }
         }
         ExecuteMsg::Repay {} => {
             let mut borrower = Borrower::load(deps.storage, info.sender.clone())?;
@@ -262,7 +298,7 @@ mod tests {
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
-                &ExecuteMsg::Deposit {},
+                &ExecuteMsg::Deposit { callback: None },
                 &coins(1_000u128, "btc"),
             )
             .unwrap();
@@ -287,7 +323,7 @@ mod tests {
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
-                &ExecuteMsg::Withdraw {},
+                &ExecuteMsg::Withdraw { callback: None },
                 &coins(200u128, "x/ghost-vault-btc-rcpt"),
             )
             .unwrap();
@@ -333,6 +369,7 @@ mod tests {
             borrower.clone(),
             contract.clone(),
             &ExecuteMsg::Borrow {
+                callback: None,
                 amount: Uint128::from(501u128),
             },
             &vec![],
@@ -345,6 +382,7 @@ mod tests {
                 borrower.clone(),
                 contract.clone(),
                 &ExecuteMsg::Borrow {
+                    callback: None,
                     amount: Uint128::from(500u128),
                 },
                 &vec![],
@@ -429,7 +467,7 @@ mod tests {
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
-                &ExecuteMsg::Deposit {},
+                &ExecuteMsg::Deposit { callback: None },
                 &coins(1_000u128, "btc"),
             )
             .unwrap();
@@ -487,7 +525,7 @@ mod tests {
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
-                &ExecuteMsg::Withdraw {},
+                &ExecuteMsg::Withdraw { callback: None },
                 &coins(200u128, "x/ghost-vault-btc-rcpt"),
             )
             .unwrap();

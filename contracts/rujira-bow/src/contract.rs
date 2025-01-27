@@ -1,7 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
+    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Empty, Env,
+    MessageInfo, Response,
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, one_coin};
@@ -41,7 +42,11 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     match msg {
-        ExecuteMsg::Swap { min_return, to, .. } => {
+        ExecuteMsg::Swap {
+            min_return,
+            to,
+            callback,
+        } => {
             let offer = one_coin(&info)?;
             config.strategy.validate(
                 deps.as_ref(),
@@ -54,29 +59,54 @@ pub fn execute(
                 .map(|x| deps.api.addr_validate(x.as_str()))
                 .transpose()?
                 .unwrap_or(info.sender);
-            Ok(
-                Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: to_address.to_string(),
-                    amount: vec![min_return],
-                })),
-            )
+
+            match callback {
+                None => Ok(
+                    Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
+                        to_address: to_address.to_string(),
+                        amount: vec![min_return],
+                    })),
+                ),
+                Some(cb) => Ok(Response::default().add_message(cb.to_message(
+                    &to_address,
+                    Empty {},
+                    vec![min_return],
+                )?)),
+            }
         }
-        ExecuteMsg::Deposit {} => {
+        ExecuteMsg::Deposit { callback } => {
             let t = TokenFactory::new(&env, config.strategy.denom().as_str());
             let supply = t.supply(deps.querier)?;
-            let (deposited, minted) =
-                config
-                    .strategy
-                    .calculate_share(deps.as_ref(), env, info.clone(), supply)?;
-            Ok(Response::default()
-                .add_message(t.mint_msg(minted, info.sender.clone()))
-                .add_event(event_deposit(
-                    info.sender,
-                    deposited,
-                    coin(minted.u128(), t.denom()),
-                )))
+            let (deposited, minted) = config.strategy.calculate_share(
+                deps.as_ref(),
+                env.clone(),
+                info.clone(),
+                supply,
+            )?;
+
+            match callback {
+                None => Ok(Response::default()
+                    .add_message(t.mint_msg(minted, info.sender.clone()))
+                    .add_event(event_deposit(
+                        info.sender,
+                        deposited,
+                        coin(minted.u128(), t.denom()),
+                    ))),
+                Some(cb) => Ok(Response::default()
+                    .add_message(t.mint_msg(minted, env.contract.address))
+                    .add_message(cb.to_message(
+                        &info.sender,
+                        Empty {},
+                        coins(minted.u128(), &t.denom()),
+                    )?)
+                    .add_event(event_deposit(
+                        info.sender,
+                        deposited,
+                        coin(minted.u128(), t.denom()),
+                    ))),
+            }
         }
-        ExecuteMsg::Withdraw {} => {
+        ExecuteMsg::Withdraw { callback } => {
             let t = TokenFactory::new(&env, config.strategy.denom().as_str());
             let supply = t.supply(deps.querier)?;
             let balance = must_pay(&info, t.denom().as_str())?;
@@ -87,17 +117,32 @@ pub fn execute(
                 supply,
                 balance,
             )?;
-            Ok(Response::default()
-                .add_message(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: info.sender.to_string(),
-                    amount: withdrawn.clone().into_vec(),
-                }))
-                .add_message(t.burn_msg(balance))
-                .add_event(event_withdraw(
-                    info.sender,
-                    coin(balance.u128(), t.denom()),
-                    withdrawn.into_vec().try_into()?,
-                )))
+
+            match callback {
+                None => Ok(Response::default()
+                    .add_message(CosmosMsg::Bank(BankMsg::Send {
+                        to_address: info.sender.to_string(),
+                        amount: withdrawn.clone().into_vec(),
+                    }))
+                    .add_message(t.burn_msg(balance))
+                    .add_event(event_withdraw(
+                        info.sender,
+                        coin(balance.u128(), t.denom()),
+                        withdrawn.into_vec().try_into()?,
+                    ))),
+                Some(cb) => Ok(Response::default()
+                    .add_message(cb.to_message(
+                        &info.sender,
+                        Empty {},
+                        withdrawn.clone().into_vec(),
+                    )?)
+                    .add_message(t.burn_msg(balance))
+                    .add_event(event_withdraw(
+                        info.sender,
+                        coin(balance.u128(), t.denom()),
+                        withdrawn.into_vec().try_into()?,
+                    ))),
+            }
         }
     }
 }
@@ -218,7 +263,7 @@ mod tests {
             .execute_contract(
                 addr.clone(),
                 contract.clone(),
-                &ExecuteMsg::Deposit {},
+                &ExecuteMsg::Deposit { callback: None },
                 &vec![coin(1000, "ruji"), coin(1000, "usdc")],
             )
             .unwrap();
@@ -238,7 +283,7 @@ mod tests {
             .execute_contract(
                 addr.clone(),
                 contract.clone(),
-                &ExecuteMsg::Withdraw {},
+                &ExecuteMsg::Withdraw { callback: None },
                 &vec![coin(200, "x/bow-xyk-ruji-usdc")],
             )
             .unwrap();
