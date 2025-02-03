@@ -469,7 +469,7 @@ fn combined_book() {
             )),
         )
         .unwrap();
-    assert_eq!(order.filled, Uint128::from(5020u128));
+    assert_eq!(order.filled, Uint128::from(5021u128));
     assert_eq!(order.remaining, Uint128::zero());
     let orders: OrdersResponse = app
         .wrap()
@@ -506,14 +506,14 @@ fn combined_book() {
             ("owner", owner.as_str()),
             ("side", "quote"),
             ("price", "fixed:996"),
-            ("amount", "5020"),
+            ("amount", "5021"),
         ]),
     );
 
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", owner.as_str()),
         ("sender", fin.as_str()),
-        ("amount", "459869btc"),
+        ("amount", "459870btc"),
     ]));
 
     res.assert_event(&Event::new("transfer").add_attributes(vec![

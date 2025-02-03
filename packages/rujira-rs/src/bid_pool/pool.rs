@@ -78,17 +78,21 @@ impl Pool {
     }
 
     fn distribute_full(&mut self, rate: &Decimal256) -> Result<DistributionResult, BidPoolError> {
-        let inv = rate.inv().unwrap();
-        let consumed_offer = Decimal256::from_atomics(self.total, 0).unwrap() * inv;
+        let consumed_offer =
+            Decimal256::from_ratio(self.total.mul(rate.denominator()), rate.numerator())
+                .to_uint_ceil();
         let consumed_bids = self.total;
-        self.sum = self.sum + self.product.mul(inv);
+        let offer_per_bid = DecimalScaled::from_ratio(consumed_offer, consumed_bids);
 
+        let sum = self.sum + self.product.mul(offer_per_bid);
+
+        self.sum = sum;
         let mut snapshots = vec![SumSnapshot::from(*self)];
         self.increment_epoch();
         snapshots.push(SumSnapshot::from(*self));
 
         Ok(DistributionResult {
-            consumed_offer: consumed_offer.to_uint_ceil(),
+            consumed_offer: consumed_offer,
             consumed_bids,
             snapshots,
         })
@@ -100,24 +104,25 @@ impl Pool {
         offer: Uint256,
     ) -> Result<DistributionResult, BidPoolError> {
         // S + E / D * P
-        let ratio = DecimalScaled::from_ratio(offer, self.total);
+        let offer_per_bid = DecimalScaled::from_ratio(offer, self.total);
 
         // If sum is not incremented, bids are not filled.
         // Eg     sum = 0.99999999999999999999999999999999999999999999999999992559979936021098395430438
         //    product = 0.0000000000000000000000000000000000000000000000000000000000000000000000000000000006226962958147167932332866989055998293039199447359426092824598426728536322091
         // And so the scale of the product is too small to increment the sum. At this point the pool
         // has scaled too much and we can't execute a distribution
-        let sum = self.sum + self.product * ratio;
+        let sum = self.sum + self.product * offer_per_bid;
         if sum == self.sum {
             return Err(BidPoolError::DistributionError {});
         }
 
-        self.sum = sum;
         // 1 - Q / D
-        // NB: This is where product can truncate to zero with regular datatypes,
-        // ensure that decimals are scaled well
         let ratio = DecimalScaled::one() - DecimalScaled::from_ratio(bids_value, self.total);
-        self.product = self.product * ratio;
+        let product = self.product * ratio;
+
+        self.product = product;
+        self.sum = sum;
+
         if self.product == DecimalScaled::zero() {
             return Err(BidPoolError::DistributionError {});
         }
@@ -149,6 +154,10 @@ impl Pool {
         if bid.product_snapshot.is_zero() {
             return Ok(Uint256::zero());
         }
+        if bid.amount.is_zero() {
+            return Ok(Uint256::zero());
+        }
+
         let reference_ss = sum_snapshot.unwrap_or(bid.sum_snapshot);
         let res = reference_ss
             .sub(bid.sum_snapshot)
@@ -163,6 +172,9 @@ impl Pool {
         if bid.product_snapshot.is_zero() {
             return Ok(bid.amount);
         }
+        if bid.amount.is_zero() {
+            return Ok(Uint256::zero());
+        }
 
         let epoch_diff: Uint256 =
             Uint256::from(self.epoch).checked_sub(Uint256::from(bid.epoch_snapshot))?;
@@ -170,8 +182,10 @@ impl Pool {
         if !epoch_diff.is_zero() {
             return Ok(Uint256::zero());
         }
+
         let ratio = self.product / bid.product_snapshot;
         let amount = ratio * bid.amount;
+
         Ok(amount.to_uint_floor())
     }
 

@@ -413,6 +413,14 @@ mod tests {
 
     #[test]
     fn instantiation() {
+        println!(
+            "{}",
+            to_json_binary(&ExecuteMsg::Order((
+                (vec![(Side::Base, Price::Oracle(1i16), Uint128::one())]),
+                None
+            )))
+            .unwrap()
+        );
         let mut app = BasicApp::default();
         let owner = app.api().addr_make("owner");
 
@@ -738,5 +746,442 @@ mod tests {
                 Layer1Asset::try_from("BTC.BTC").unwrap(),
             ])
         );
+    }
+
+    #[test]
+    fn test_only_full_distribution() {
+        let (mut app, contract) = setup();
+        let owner = app.api().addr_make("owner");
+        let funds = vec![
+            coin(500_000_000_000_000, "btc-btc"),
+            coin(500_000_000_000_000, "eth-usdc"),
+        ];
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &owner, funds.clone())
+                .unwrap();
+        });
+
+        let user = app.api().addr_make("user");
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &user, funds.clone())
+                .unwrap();
+        });
+
+        let user2 = app.api().addr_make("user2");
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &user2, funds.clone())
+                .unwrap();
+        });
+
+        let user3 = app.api().addr_make("user3");
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &user3, funds.clone())
+                .unwrap();
+        });
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("1000.00").unwrap()),
+                    Uint128::from(100u128),
+                )],
+                None,
+            )),
+            &funds,
+        )
+        .unwrap();
+
+        app.execute_contract(
+            user2.clone(),
+            contract.clone(),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("1000.00").unwrap()),
+                    Uint128::from(1000u128),
+                )],
+                None,
+            )),
+            &funds,
+        )
+        .unwrap();
+
+        app.execute_contract(
+            user3.clone(),
+            contract.clone(),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("1000.00").unwrap()),
+                    Uint128::from(500u128),
+                )],
+                None,
+            )),
+            &funds,
+        )
+        .unwrap();
+
+        let orders_owner: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: owner.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+
+        let order = orders_owner.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::from(100u128));
+        assert_eq!(order.filled, Uint128::zero());
+
+        let orders_user2: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: user2.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        let order = orders_user2.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::from(1000u128));
+        assert_eq!(order.filled, Uint128::zero());
+
+        let orders_user3: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: user3.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        let order = orders_user3.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::from(500u128));
+        assert_eq!(order.filled, Uint128::zero());
+
+        let swap_amount = coin(1_600_000, "eth-usdc");
+
+        let res = app
+            .execute_contract(
+                user.clone(),
+                contract.clone(),
+                &ExecuteMsg::Swap(SwapRequest {
+                    min_return: None,
+                    to: None,
+                    callback: None,
+                }),
+                &[swap_amount],
+            )
+            .unwrap();
+
+        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+            ("rate", "1000"),
+            ("price", "fixed:1000"),
+            ("offer", "1600000"),
+            ("bid", "1600"),
+            ("side", "base"),
+        ]));
+
+        let orders_owner: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: owner.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+
+        let order = orders_owner.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::zero());
+        assert_eq!(order.filled, Uint128::from(100000u128));
+
+        let orders_user2: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: user2.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        let order = orders_user2.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::zero());
+        assert_eq!(order.filled, Uint128::from(1000000u128));
+
+        let orders_user3: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: user3.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        let order = orders_user3.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::zero());
+        assert_eq!(order.filled, Uint128::from(500000u128));
+    }
+
+    #[test]
+    fn test_first_partial_then_full() {
+        let (mut app, contract) = setup();
+        let owner = app.api().addr_make("owner");
+        let funds = vec![
+            coin(500_000_000_000_000, "btc-btc"),
+            coin(500_000_000_000_000, "eth-usdc"),
+        ];
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &owner, funds.clone())
+                .unwrap();
+        });
+
+        let user = app.api().addr_make("user");
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &user, funds.clone())
+                .unwrap();
+        });
+
+        let user2 = app.api().addr_make("user2");
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &user2, funds.clone())
+                .unwrap();
+        });
+
+        let user3 = app.api().addr_make("user3");
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &user3, funds.clone())
+                .unwrap();
+        });
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("1000.00").unwrap()),
+                    Uint128::from(100u128),
+                )],
+                None,
+            )),
+            &funds,
+        )
+        .unwrap();
+
+        app.execute_contract(
+            user2.clone(),
+            contract.clone(),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("1000.00").unwrap()),
+                    Uint128::from(1000u128),
+                )],
+                None,
+            )),
+            &funds,
+        )
+        .unwrap();
+
+        app.execute_contract(
+            user3.clone(),
+            contract.clone(),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("1000.00").unwrap()),
+                    Uint128::from(500u128),
+                )],
+                None,
+            )),
+            &funds,
+        )
+        .unwrap();
+
+        // First swap with same amount as price
+        let swap_amount = coin(1_000_000, "eth-usdc");
+
+        let res = app
+            .execute_contract(
+                user.clone(),
+                contract.clone(),
+                &ExecuteMsg::Swap(SwapRequest {
+                    min_return: None,
+                    to: None,
+                    callback: None,
+                }),
+                &[swap_amount],
+            )
+            .unwrap();
+
+        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+            ("rate", "1000"),
+            ("price", "fixed:1000"),
+            ("offer", "1000000"),
+            ("bid", "1000"),
+            ("side", "base"),
+        ]));
+
+        let orders_owner: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: owner.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+
+        let order = orders_owner.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::from(37u128));
+        assert_eq!(order.filled, Uint128::from(62500u128));
+
+        let orders_user2: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: user2.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        let order = orders_user2.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::from(375u128));
+        assert_eq!(order.filled, Uint128::from(625000u128));
+
+        let orders_user3: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: user3.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        let order = orders_user3.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::from(187u128));
+        assert_eq!(order.filled, Uint128::from(312500u128));
+
+        //Second swap with enough amount to cover all the bids
+        let swap_amount = coin(1_600_000, "eth-usdc");
+
+        let res = app
+            .execute_contract(
+                user.clone(),
+                contract.clone(),
+                &ExecuteMsg::Swap(SwapRequest {
+                    min_return: None,
+                    to: None,
+                    callback: None,
+                }),
+                &[swap_amount],
+            )
+            .unwrap();
+
+        res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
+            ("rate", "1000"),
+            ("price", "fixed:1000"),
+            ("offer", "600000"),
+            ("bid", "600"),
+            ("side", "base"),
+        ]));
+
+        let orders_owner: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: owner.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+
+        let order = orders_owner.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::zero());
+        assert_eq!(order.filled, Uint128::from(100000u128));
+
+        let orders_user2: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: user2.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        let order = orders_user2.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::zero());
+        assert_eq!(order.filled, Uint128::from(1000000u128));
+
+        let orders_user3: OrdersResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Orders {
+                    owner: user3.clone().to_string(),
+                    side: None,
+                    offset: None,
+                    limit: None,
+                },
+            )
+            .unwrap();
+        let order = orders_user3.orders[0].clone();
+        assert_eq!(order.remaining, Uint128::zero());
+        assert_eq!(order.filled, Uint128::from(500000u128));
     }
 }

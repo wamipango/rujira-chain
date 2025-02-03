@@ -190,7 +190,6 @@ impl Swappable for Pool {
         let res = self
             .pool
             .distribute(offer.into(), &Decimal256::from(rate))?;
-
         self.pending_sum_snapshots = res.snapshots;
 
         Ok((
