@@ -142,6 +142,7 @@ impl Pool {
         bid.amount = self.bid_remaining_amount(bid)?;
         bid.product_snapshot = self.product;
         bid.sum_snapshot = self.sum;
+        bid.epoch_snapshot = self.epoch;
 
         Ok(())
     }
@@ -343,5 +344,99 @@ mod tests {
         pool.new_bid(Uint256::from(10000000u128));
         pool.distribute(Uint256::from(9999999u128), &Decimal256::one())
             .unwrap_err();
+    }
+
+    #[test]
+    fn test_resizing_increase_full() {
+        // Ensure that bids are reset when increased after a full consimption
+        let mut pool = Pool::default();
+        let mut bid = pool.new_bid(Uint256::from(500u128));
+
+        let res = pool
+            .distribute(
+                Uint256::from(500_000u128),
+                &Decimal256::from_str("0.001").unwrap(),
+            )
+            .unwrap();
+        assert_eq!(bid.epoch_snapshot, 0);
+
+        assert_eq!(res.consumed_offer, Uint256::from(500_000u128));
+        assert_eq!(res.consumed_bids, Uint256::from(500u128));
+        let snapshot = res.snapshots[0].clone();
+        assert_eq!(snapshot.epoch, bid.epoch_snapshot);
+
+        pool.sync_bid(&mut bid, Some(snapshot.sum)).unwrap();
+        assert_eq!(bid.amount, Uint256::zero());
+        assert_eq!(bid.filled, Uint256::from(500_000u128));
+
+        bid.increase(&mut pool, Uint256::from(800u128)).unwrap();
+        assert_eq!(bid.product_snapshot, DecimalScaled::one());
+        assert_eq!(bid.sum_snapshot, DecimalScaled::zero());
+        assert_eq!(bid.epoch_snapshot, 1);
+        let snapshot = res.snapshots[1].clone();
+        assert_eq!(snapshot.epoch, bid.epoch_snapshot);
+        pool.sync_bid(&mut bid, Some(snapshot.sum)).unwrap();
+        assert_eq!(bid.filled, Uint256::from(500_000u128));
+        assert_eq!(bid.amount, Uint256::from(800u128));
+    }
+
+    #[test]
+    fn test_resizing_increase_partial() {
+        // Ensure that bids are reset when increased after a partial consumption
+        let mut pool = Pool::default();
+        let mut bid = pool.new_bid(Uint256::from(1000u128));
+
+        let res = pool
+            .distribute(
+                Uint256::from(500_000u128),
+                &Decimal256::from_str("0.001").unwrap(),
+            )
+            .unwrap();
+        assert_eq!(bid.epoch_snapshot, 0);
+
+        assert_eq!(res.consumed_offer, Uint256::from(500_000u128));
+        assert_eq!(res.consumed_bids, Uint256::from(500u128));
+        let snapshot = res.snapshots[0].clone();
+        assert_eq!(snapshot.epoch, bid.epoch_snapshot);
+
+        pool.sync_bid(&mut bid, Some(snapshot.sum)).unwrap();
+        assert_eq!(bid.amount, Uint256::from(500u128));
+        assert_eq!(bid.filled, Uint256::from(500_000u128));
+
+        bid.increase(&mut pool, Uint256::from(800u128)).unwrap();
+        assert_eq!(bid.epoch_snapshot, 0);
+        let snapshot = res.snapshots[0].clone();
+        assert_eq!(snapshot.epoch, bid.epoch_snapshot);
+        pool.sync_bid(&mut bid, Some(snapshot.sum)).unwrap();
+        assert_eq!(bid.filled, Uint256::from(500_000u128));
+        assert_eq!(bid.amount, Uint256::from(1300u128));
+    }
+
+    #[test]
+    fn test_resizing_decrease() {
+        // Ensure that bids are reset when retracted
+        let mut pool = Pool::default();
+        let mut bid = pool.new_bid(Uint256::from(500u128));
+
+        let res = pool
+            .distribute(
+                Uint256::from(250_000u128),
+                &Decimal256::from_str("0.001").unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(res.consumed_offer, Uint256::from(250_000u128));
+        assert_eq!(res.consumed_bids, Uint256::from(250u128));
+
+        pool.sync_bid(&mut bid, Some(res.snapshots[0].sum)).unwrap();
+        assert_eq!(bid.amount, Uint256::from(250u128));
+        assert_eq!(bid.filled, Uint256::from(250_000u128));
+
+        bid.retract(&mut pool, Some(Uint256::from(125u128)))
+            .unwrap();
+        pool.sync_bid(&mut bid, Some(res.snapshots[0].sum)).unwrap();
+
+        assert_eq!(bid.filled, Uint256::from(250_000u128));
+        assert_eq!(bid.amount, Uint256::from(125u128));
     }
 }
