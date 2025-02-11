@@ -197,7 +197,6 @@ mod tests {
             &InstantiateMsg {
                 metadata: TokenMetadata {
                     description: "RUJI-USDC XYK Liquidity Pool Token".to_string(),
-                    exponent: 6,
                     display: "LP RUJI-USDC".to_string(),
                     name: "LP RUJI-USDC".to_string(),
                     symbol: "LP/RUJI-USDC".to_string(),
@@ -239,7 +238,6 @@ mod tests {
                 &InstantiateMsg {
                     metadata: TokenMetadata {
                         description: "RUJI-USDC XYK Liquidity Pool Token".to_string(),
-                        exponent: 6,
                         display: "LP RUJI-USDC".to_string(),
                         name: "LP RUJI-USDC".to_string(),
                         symbol: "LP/RUJI-USDC".to_string(),

@@ -266,7 +266,6 @@ mod tests {
                         symbol: "sRUJI".to_string(),
                         uri: None,
                         uri_hash: None,
-                        exponent: 6,
                     },
                 },
                 &[],

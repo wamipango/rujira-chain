@@ -32,7 +32,6 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
             &bow::InstantiateMsg {
                 metadata: TokenMetadata {
                     description: "".to_string(),
-                    exponent: 6,
                     display: "".to_string(),
                     name: "".to_string(),
                     symbol: "".to_string(),

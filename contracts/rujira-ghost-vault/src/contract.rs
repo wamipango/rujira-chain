@@ -264,7 +264,6 @@ mod tests {
                     denom: "btc".to_string(),
                     receipt: TokenMetadata {
                         description: "".to_string(),
-                        exponent: 6,
                         display: "".to_string(),
                         name: "".to_string(),
                         symbol: "".to_string(),
@@ -273,7 +272,6 @@ mod tests {
                     },
                     debt: TokenMetadata {
                         description: "".to_string(),
-                        exponent: 6,
                         display: "".to_string(),
                         name: "".to_string(),
                         symbol: "".to_string(),

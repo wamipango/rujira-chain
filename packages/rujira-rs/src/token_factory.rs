@@ -1,10 +1,12 @@
 use crate::msg::token_factory::{
     MsgBurnTokens, MsgCreateDenom, MsgMintTokens, MsgSetDenomAdmin, MsgSetMetadata,
 };
-use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{
-    Addr, Coin, CosmosMsg, DenomMetadata, DenomUnit, Env, QuerierWrapper, StdResult, Uint128,
+use cosmos_sdk_proto::cosmos::{
+    bank::v1beta1::{DenomUnit, Metadata},
+    base::v1beta1::Coin,
 };
+use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{Addr, CosmosMsg, Env, QuerierWrapper, StdResult, Uint128};
 
 pub struct TokenFactory {
     id: String,
@@ -29,7 +31,7 @@ impl TokenFactory {
 
     pub fn create_msg(&self, metadata: TokenMetadata) -> CosmosMsg {
         MsgCreateDenom {
-            sender: self.env.contract.address.clone(),
+            sender: self.env.contract.address.to_string(),
             id: self.id.clone(),
             metadata: metadata.to_sdk(self.denom()),
         }
@@ -38,33 +40,39 @@ impl TokenFactory {
 
     pub fn mint_msg(&self, amount: Uint128, recipient: Addr) -> CosmosMsg {
         MsgMintTokens {
-            sender: self.env.contract.address.clone(),
-            amount: Coin::new(amount, self.denom()),
-            recipient,
+            sender: self.env.contract.address.to_string(),
+            amount: Coin {
+                amount: amount.to_string(),
+                denom: self.denom(),
+            },
+            recipient: recipient.to_string(),
         }
         .into()
     }
 
     pub fn burn_msg(&self, amount: Uint128) -> CosmosMsg {
         MsgBurnTokens {
-            sender: self.env.contract.address.clone(),
-            amount: Coin::new(amount, self.denom()),
+            sender: self.env.contract.address.to_string(),
+            amount: Coin {
+                amount: amount.to_string(),
+                denom: self.denom(),
+            },
         }
         .into()
     }
 
     pub fn set_admin_msg(&self, new_admin: Addr) -> CosmosMsg {
         MsgSetDenomAdmin {
-            sender: self.env.contract.address.clone(),
+            sender: self.env.contract.address.to_string(),
             denom: self.denom(),
-            new_admin,
+            new_admin: new_admin.to_string(),
         }
         .into()
     }
 
     pub fn set_metadata_msg(&self, new_metadata: TokenMetadata) -> CosmosMsg {
         MsgSetMetadata {
-            sender: self.env.contract.address.clone(),
+            sender: self.env.contract.address.to_string(),
             denom: self.denom(),
             new_metadata: new_metadata.to_sdk(self.denom()),
         }
@@ -78,13 +86,6 @@ impl TokenFactory {
 #[cw_serde]
 pub struct TokenMetadata {
     pub description: String,
-
-    /// exponent represents power of 10 exponent that one must
-    /// raise the base_denom to in order to equal the given DenomUnit's denom
-    /// 1 denom = 1^exponent base_denom
-    /// (e.g. with a base_denom of uruji, one can create a DenomUnit of 'ruji' with
-    /// exponent = 6, thus: 1 ruji = 10^6 uruji).
-    pub exponent: u8,
 
     /// display indicates the suggested denom that should be displayed in clients.
     pub display: String,
@@ -103,13 +104,13 @@ pub struct TokenMetadata {
 }
 
 impl TokenMetadata {
-    fn to_sdk(&self, denom: String) -> DenomMetadata {
+    fn to_sdk(&self, denom: String) -> Metadata {
         let x = self.clone();
-        DenomMetadata {
+        Metadata {
             description: x.description,
             denom_units: vec![DenomUnit {
                 denom: denom.clone(),
-                exponent: x.exponent.into(),
+                exponent: 8,
                 aliases: vec![],
             }],
             base: denom,
