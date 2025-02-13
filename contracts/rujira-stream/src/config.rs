@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, Coin, Decimal, StdResult, Storage};
 use cw_storage_plus::Item;
-use rujira_rs::stream::{InstantiateMsg, Schedule};
+use rujira_rs::stream::{ConfigResponse, InstantiateMsg, Schedule};
 
 use crate::ContractError;
 
@@ -32,14 +32,38 @@ impl Recipients {
 pub struct Config {
     pub schedule: Schedule,
     pub recipients: Recipients,
+    pub owner: Option<Addr>,
 }
 
 impl Config {
+    pub fn load(storage: &dyn Storage) -> StdResult<Self> {
+        CONFIG.load(storage)
+    }
+
+    pub fn validate(&self) -> Result<(), ContractError> {
+        Ok(())
+    }
+
+    pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
+        CONFIG.save(storage, self)
+    }
+
     pub fn from_instantiate(api: &dyn Api, value: InstantiateMsg) -> StdResult<Self> {
         Ok(Self {
             recipients: Recipients::from_input(api, value.recipients)?,
             schedule: value.schedule,
+            owner: value.owner.map(|x| api.addr_validate(&x)).transpose()?,
         })
+    }
+}
+
+impl From<Config> for ConfigResponse {
+    fn from(value: Config) -> Self {
+        Self {
+            recipients: value.recipients.into(),
+            schedule: value.schedule,
+            owner: value.owner.map(|x| x.to_string()),
+        }
     }
 }
 
@@ -54,17 +78,9 @@ impl Recipients {
     }
 }
 
-impl Config {
-    pub fn load(storage: &dyn Storage) -> StdResult<Self> {
-        CONFIG.load(storage)
-    }
-
-    pub fn validate(&self) -> Result<(), ContractError> {
-        Ok(())
-    }
-
-    pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
-        CONFIG.save(storage, self)
+impl Into<Vec<(String, u8)>> for Recipients {
+    fn into(self) -> Vec<(String, u8)> {
+        self.0.iter().map(|(a, v)| (a.to_string(), *v)).collect()
     }
 }
 
@@ -83,6 +99,7 @@ mod tests {
                 amount: vec![],
                 period: 1000u64,
             },
+            owner: Some(Addr::unchecked("owner")),
         }
         .validate()
         .unwrap();

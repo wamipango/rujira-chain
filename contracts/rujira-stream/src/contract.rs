@@ -1,9 +1,11 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{
+    ensure_eq, to_json_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
+};
 use cw2::set_contract_version;
 use cw_utils::NativeBalance;
-use rujira_rs::stream::{ExecuteMsg, InstantiateMsg, QueryMsg, SudoMsg};
+use rujira_rs::stream::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, SudoMsg};
 
 use crate::config::Config;
 use crate::error::ContractError;
@@ -57,6 +59,14 @@ pub fn execute(
                 amount: allocation.into_vec(),
             }))
         }
+        ExecuteMsg::Update(msg) => {
+            let owner = config.owner.ok_or(ContractError::Unauthorized {})?;
+            ensure_eq!(info.sender, owner, ContractError::Unauthorized {});
+            let config = Config::from_instantiate(deps.api, msg)?;
+            config.validate()?;
+            config.save(deps.storage)?;
+            Ok(Response::default())
+        }
     }
 }
 
@@ -83,6 +93,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
             allocation.normalize();
             Ok(to_json_binary(&allocation)?)
         }
+        QueryMsg::Config {} => Ok(to_json_binary(&ConfigResponse::from(config))?),
     }
 }
 
@@ -105,6 +116,7 @@ mod tests {
             &InstantiateMsg {
                 recipients: todo!(),
                 schedule: todo!(),
+                owner: todo!(),
             },
             &[],
             "template",

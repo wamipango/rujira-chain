@@ -66,6 +66,7 @@ pub mod factory {
     pub struct ExecuteMsg {
         pub recipients: Vec<(String, u8)>,
         pub schedule: Schedule,
+        pub owner: Option<String>,
     }
 
     #[cw_serde]
@@ -77,6 +78,7 @@ pub mod factory {
 pub struct InstantiateMsg {
     pub recipients: Vec<(String, u8)>,
     pub schedule: Schedule,
+    pub owner: Option<String>,
 }
 
 impl From<factory::ExecuteMsg> for InstantiateMsg {
@@ -84,14 +86,18 @@ impl From<factory::ExecuteMsg> for InstantiateMsg {
         Self {
             recipients: value.recipients,
             schedule: value.schedule,
+            owner: value.owner,
         }
     }
 }
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    /// WIthdraws all pending funds for the calling address
+    /// Withdraws all pending funds for the calling address
     Claim {},
+
+    /// Update streaming config. All fields must be provided
+    Update(InstantiateMsg),
 }
 
 #[cw_serde]
@@ -103,4 +109,14 @@ pub enum QueryMsg {
     #[returns(Vec<Coin>)]
     /// Queries the pending tokens available for a specific adress
     Pending { address: String },
+
+    #[returns(ConfigResponse)]
+    Config {},
+}
+
+#[cw_serde]
+pub struct ConfigResponse {
+    pub recipients: Vec<(String, u8)>,
+    pub schedule: Schedule,
+    pub owner: Option<String>,
 }
