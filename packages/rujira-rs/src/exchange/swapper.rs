@@ -28,15 +28,15 @@ impl<T: Swappable> Swapper<T> {
 
     pub fn swap(&mut self, iter: &mut dyn Iterator<Item = T>) -> Result<SwapResult, SwapError> {
         for mut v in iter {
-            if self.offer.is_zero() {
-                break;
-            }
             let (offer, bids) = v.swap(self.offer)?;
             let attrs = v.attributes();
             self.events.push(event(&v, offer, bids, &attrs));
             self.pending.push(v);
             self.offer -= offer;
             self.returned += bids;
+            if self.offer.is_zero() {
+                break;
+            }
         }
 
         let fee = Decimal::from_ratio(self.returned, 1u128)
