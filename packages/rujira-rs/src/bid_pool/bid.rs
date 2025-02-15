@@ -56,7 +56,7 @@ impl Bid {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.amount <= Uint256::from(1u128) && self.filled.is_zero()
+        self.amount.is_zero() && self.filled.is_zero()
     }
 }
 
