@@ -151,7 +151,6 @@ mod tests {
         exchange::Swappable,
         fin::{Price, Side},
     };
-    use rujira_rs_testing::oracle::TestOracle;
 
     use crate::pool::Pool;
 
@@ -161,7 +160,7 @@ mod tests {
         let timestamp = Timestamp::default();
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
-        let oracle = TestOracle(Decimal::one());
+        let oracle = Decimal::one();
         let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle);
         pool.create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
@@ -180,7 +179,7 @@ mod tests {
         let owner = Addr::unchecked("owner");
         let owner2 = Addr::unchecked("owner2");
         let offer = Uint128::from(100u128);
-        let oracle = TestOracle(Decimal::one());
+        let oracle = Decimal::one();
         let mut pool1 = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle);
         let mut pool2 = Pool::load(&store, &Price::Oracle(1), &Side::Quote, &oracle);
         let mut pool3 = Pool::load(&store, &Price::Oracle(2), &Side::Quote, &oracle);

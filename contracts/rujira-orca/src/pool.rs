@@ -6,11 +6,10 @@ use cw_storage_plus::Map;
 use rujira_rs::{
     bid_pool::{self, SumSnapshot},
     exchange::{SwapCommit, SwapError, Swappable},
-    fin::OraclePrice,
-    DecimalScaled,
+    DecimalScaled, Premiumable,
 };
 
-use crate::{order::Order, premium::Premium, ContractError};
+use crate::{order::Order, ContractError};
 const SNAPSHOTS: Map<(u8, bid_pool::SumSnapshotKey), DecimalScaled> = Map::new("snapshots");
 // The POOLS Map is used simply as an indicator that there is a non-zero BidPool at this key
 // The BID_POOLS Map is used to store the BidPool itself, and the Key is used to populate the Pool values
@@ -31,7 +30,7 @@ pub struct Pool {
 impl Pool {
     pub fn iter<'a>(
         storage: &'a dyn Storage,
-        oracle: &'a impl OraclePrice,
+        oracle: &'a impl Premiumable,
     ) -> Box<dyn Iterator<Item = Self> + 'a> {
         let iter = POOLS
             .range(storage, None, None, cosmwasm_std::Order::Ascending)
@@ -39,7 +38,7 @@ impl Pool {
                 match x {
                     Ok((premium, _)) => Some(Self {
                         premium: premium.clone(),
-                        rate: premium.to_rate(oracle),
+                        rate: oracle.adjust(&-(premium as i16)),
                         // The presence of the key indicates a BidPool should be present,
                         // so we should panic if this is incorrect
                         pool: BID_POOLS.load(storage, premium).unwrap(),
@@ -52,10 +51,10 @@ impl Pool {
         Box::new(iter)
     }
 
-    pub fn load(storage: &dyn Storage, premium: &u8, oracle: &impl OraclePrice) -> Self {
+    pub fn load(storage: &dyn Storage, premium: &u8, oracle: &impl Premiumable) -> Self {
         Self {
             premium: *premium,
-            rate: premium.to_rate(oracle),
+            rate: oracle.adjust(&-(*premium as i16)),
             pool: BID_POOLS.load(storage, *premium).unwrap_or_default(),
             pending_sum_snapshots: vec![],
         }
@@ -193,7 +192,6 @@ mod tests {
 
     use super::*;
     use cosmwasm_std::{testing::MockStorage, Decimal};
-    use rujira_rs_testing::oracle::TestOracle;
 
     #[test]
     // Verify that when a Pool is removed from storage, the BidPool is retained and the correct values used for syncing bids
@@ -203,7 +201,7 @@ mod tests {
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
         let premium = 0;
-        let oracle = TestOracle(Decimal::one());
+        let oracle = Decimal::one();
         let mut pool = Pool::load(&store, &premium, &oracle);
         pool.create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();

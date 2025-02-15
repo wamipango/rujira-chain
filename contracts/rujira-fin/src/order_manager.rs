@@ -1,6 +1,7 @@
 use cosmwasm_std::{coin, Addr, Decimal, Event, Storage, Timestamp, Uint128};
 use cw_utils::NativeBalance;
-use rujira_rs::fin::{Denoms, OraclePrice, Price, Side, Tick};
+use rujira_rs::fin::{Denoms, Price, Side, Tick};
+use rujira_rs::Premiumable;
 use std::cmp::Ordering;
 use std::ops::{Mul, Sub};
 
@@ -53,7 +54,7 @@ impl OrderManager {
         &mut self,
         storage: &mut dyn Storage,
         o: Vec<(Side, Price, Uint128)>,
-        oracle: &impl OraclePrice,
+        oracle: &impl Premiumable,
     ) -> Result<ExecutionResult, ContractError> {
         for (side, price, target) in o {
             if let Price::Fixed(x) = price {
@@ -176,7 +177,6 @@ mod tests {
         testing::{message_info, mock_dependencies, mock_env},
     };
     use rujira_rs::fin::Price;
-    use rujira_rs_testing::oracle::TestOracle;
     use std::str::FromStr;
 
     #[test]
@@ -184,7 +184,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
-        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
+        let oracle = Decimal::from_str("1.0").unwrap();
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
         let tick = Tick::new(4);
@@ -232,7 +232,7 @@ mod tests {
         let tick = Tick::new(4);
         let fee = Decimal::from_str("0.001").unwrap();
 
-        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
+        let oracle = Decimal::from_str("1.0").unwrap();
         let mut funds = NativeBalance::default();
         funds += coin(10000, "usdc");
         funds += coin(10000, "ruji");
@@ -321,7 +321,7 @@ mod tests {
         let tick = Tick::new(4);
         let fee = Decimal::from_str("0.001").unwrap();
 
-        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
+        let oracle = Decimal::from_str("1.0").unwrap();
         let funds = NativeBalance::default();
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
@@ -352,7 +352,7 @@ mod tests {
         let tick = Tick::new(4);
         let fee = Decimal::from_str("0.001").unwrap();
 
-        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
+        let oracle = Decimal::from_str("1.0").unwrap();
         let mut funds = NativeBalance::default();
         funds += coin(10000, "usdc");
         funds += coin(10000, "ruji");
@@ -518,7 +518,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
-        let oracle = TestOracle(Decimal::from_str("1.0").unwrap());
+        let oracle = Decimal::from_str("1.0").unwrap();
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
         let tick = Tick::new(2);

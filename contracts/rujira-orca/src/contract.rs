@@ -1,11 +1,9 @@
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
 use crate::market_maker::{MarketMaker, MarketMakerOffer};
-use crate::oracle::Oracle;
 use crate::order::Order;
 use crate::order_manager::OrderManager;
 use crate::pool::Pool;
-use crate::premium::Premium;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
@@ -15,13 +13,12 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::{must_pay, NativeBalance};
 use itertools::{EitherOrBoth, Itertools};
-use rujira_rs::bow;
 use rujira_rs::exchange::{SwapError, SwapResult, Swappable, Swapper};
-use rujira_rs::fin::OraclePrice;
 use rujira_rs::orca::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, PoolResponse,
     PoolsResponse, QueryMsg, SimulationResponse, SudoMsg,
 };
+use rujira_rs::{bow, Oracle, Premiumable};
 
 // version info for migration info
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -49,7 +46,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let oracle = Oracle::load(deps.querier, &config.oracles)?;
+    let oracle = config.oracles.price(deps.querier)?;
     let mut fees = NativeBalance::default();
     let mut messages: Vec<CosmosMsg> = vec![];
 
@@ -168,7 +165,7 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let oracle = Oracle::load(deps.querier, &config.oracles)?;
+    let oracle = config.oracles.price(deps.querier)?;
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
         QueryMsg::Order((owner, premium)) => {
@@ -227,7 +224,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 fn simulate_swap(
     swapper: &mut Swapper<EitherOrBoth<Pool, MarketMakerOffer>>,
     deps: Deps,
-    oracle: &impl OraclePrice,
+    oracle: &impl Premiumable,
     config: &Config,
 ) -> Result<SwapResult, SwapError> {
     let market_maker = MarketMaker::new(
@@ -242,11 +239,11 @@ fn simulate_swap(
     swapper.swap(&mut iter)
 }
 
-fn order_response(order: &Order, premium: &u8, oracle: &Oracle) -> OrderResponse {
+fn order_response(order: &Order, premium: &u8, oracle: &impl Premiumable) -> OrderResponse {
     OrderResponse {
         owner: order.owner.to_string(),
         premium: *premium,
-        rate: premium.to_rate(oracle),
+        rate: oracle.adjust(&-(*premium as i16)),
         updated_at: order.updated_at,
         offer: order.offer,
         remaining: order.bid.amount().try_into().unwrap(),

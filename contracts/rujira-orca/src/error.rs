@@ -2,7 +2,7 @@ use cosmwasm_std::{
     CheckedFromRatioError, Coin, ConversionOverflowError, OverflowError, StdError, Uint128,
 };
 use cw_utils::PaymentError;
-use rujira_rs::{bid_pool::BidPoolError, exchange::SwapError, query::PoolError};
+use rujira_rs::{bid_pool::BidPoolError, exchange::SwapError, query::PoolError, OracleError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -30,6 +30,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     Swap(#[from] SwapError),
+
+    #[error("{0}")]
+    Oracle(#[from] OracleError),
 
     #[error("InsufficientReturn expected {expected} got {returned}")]
     InsufficientReturn {

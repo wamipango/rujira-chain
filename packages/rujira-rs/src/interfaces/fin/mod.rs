@@ -8,7 +8,7 @@ mod tick;
 
 pub use denoms::Denoms;
 pub use execute::{ExecuteMsg, InstantiateMsg, SwapRequest};
-pub use price::{OraclePrice, Price};
+pub use price::Price;
 pub use query::*;
 pub use side::Side;
 pub use sudo::SudoMsg;

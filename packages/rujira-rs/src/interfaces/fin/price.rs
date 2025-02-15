@@ -4,6 +4,8 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal, Fraction, StdError, Uint128};
 use cw_storage_plus::{IntKey, Key, KeyDeserialize, PrimaryKey};
 
+use crate::Premiumable;
+
 #[cw_serde]
 pub enum Price {
     Fixed(Decimal),
@@ -20,24 +22,10 @@ impl Display for Price {
 }
 
 impl Price {
-    pub fn to_rate(&self, oracle: &impl OraclePrice) -> Decimal {
+    pub fn to_rate(&self, oracle: &impl Premiumable) -> Decimal {
         match self {
             Price::Fixed(fixed) => *fixed,
             Price::Oracle(bps) => oracle.adjust(bps),
-        }
-    }
-}
-
-// Provided as a Trait so that tests can mock an oracle price source
-pub trait OraclePrice {
-    fn adjust(&self, bps: &i16) -> Decimal;
-}
-
-impl<T: OraclePrice> OraclePrice for Option<T> {
-    fn adjust(&self, bps: &i16) -> Decimal {
-        match self {
-            Some(x) => x.adjust(bps),
-            None => panic!("None OraclePrice"),
         }
     }
 }

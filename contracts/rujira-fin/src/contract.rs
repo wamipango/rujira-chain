@@ -1,7 +1,6 @@
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
 use crate::market_maker::{MarketMaker, MarketMakerOffer};
-use crate::oracle::Oracle;
 use crate::order::Order;
 use crate::order_manager::OrderManager;
 use crate::pool::Pool;
@@ -14,12 +13,12 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
 use itertools::{EitherOrBoth, Itertools};
-use rujira_rs::bow;
 use rujira_rs::exchange::{Arber, SwapCommit, Swappable, Swapper};
 use rujira_rs::fin::{
-    BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OraclePrice,
-    OrderResponse, OrdersResponse, Price, QueryMsg, Side, SimulationResponse, SudoMsg,
+    BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse,
+    OrdersResponse, Price, QueryMsg, Side, SimulationResponse, SudoMsg,
 };
+use rujira_rs::{bow, Oracle, Premiumable};
 
 // version info for migration info
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -50,7 +49,7 @@ pub fn execute(
     let oracle = config
         .oracles
         .clone()
-        .map(|x| Oracle::load(deps.querier, &x))
+        .map(|x| x.price(deps.querier))
         .transpose()?;
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut fees = NativeBalance::default();
@@ -258,7 +257,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     let oracle = config
         .oracles
         .clone()
-        .map(|x| Oracle::load(deps.querier, &x))
+        .map(|x| x.price(deps.querier))
         .transpose()?;
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
@@ -328,7 +327,7 @@ fn swap_iter<'a>(
     deps: Deps<'a>,
     config: &'a Config,
     side: &'a Side,
-    oracle: &'a impl OraclePrice,
+    oracle: &'a impl Premiumable,
 ) -> impl Iterator<Item = EitherOrBoth<EitherOrBoth<Pool>, MarketMakerOffer>> + 'a {
     let market_maker = MarketMaker::new(
         deps.querier,
@@ -348,7 +347,7 @@ fn order_response(
     order: &Order,
     side: &Side,
     price: &Price,
-    oracle: &impl OraclePrice,
+    oracle: &impl Premiumable,
 ) -> OrderResponse {
     OrderResponse {
         owner: order.owner.to_string(),
@@ -468,34 +467,34 @@ mod tests {
                     (Side::Base, Price::Oracle(0), Uint128::from(1000000u128)),
                     (
                         Side::Base,
-                        Price::Fixed(Decimal::from_str("1000.00").unwrap()),
+                        Price::Fixed(Decimal::from_str("100000").unwrap()),
                         Uint128::from(1000000u128),
                     ),
                     (
                         Side::Base,
-                        Price::Fixed(Decimal::from_str("933.17").unwrap()),
+                        Price::Fixed(Decimal::from_str("93317").unwrap()),
                         Uint128::from(1000000u128),
                     ),
                     (
                         Side::Base,
-                        Price::Fixed(Decimal::from_str("932.19").unwrap()),
+                        Price::Fixed(Decimal::from_str("93219").unwrap()),
                         Uint128::from(2100000u128),
                     ),
                     (
                         Side::Base,
-                        Price::Fixed(Decimal::from_str("912.19").unwrap()),
+                        Price::Fixed(Decimal::from_str("91219").unwrap()),
                         Uint128::from(5100000u128),
                     ),
-                    (Side::Quote, Price::Oracle(1), Uint128::from(10000u128)),
+                    (Side::Quote, Price::Oracle(1), Uint128::from(1000000u128)),
                     (
                         Side::Quote,
-                        Price::Fixed(Decimal::from_str("1000.10").unwrap()),
-                        Uint128::from(12500u128),
+                        Price::Fixed(Decimal::from_str("100010").unwrap()),
+                        Uint128::from(1250000u128),
                     ),
                     (
                         Side::Quote,
-                        Price::Fixed(Decimal::from_str("879.00").unwrap()),
-                        Uint128::from(51000u128),
+                        Price::Fixed(Decimal::from_str("87900").unwrap()),
+                        Uint128::from(5100000u128),
                     ),
                 ],
                 None,
@@ -516,22 +515,22 @@ mod tests {
             .unwrap();
         assert_eq!(book.base.len(), 4);
         let entry = book.base[0].clone();
-        assert_eq!(entry.price, Decimal::from_str("912.19").unwrap());
+        assert_eq!(entry.price, Decimal::from_str("91219").unwrap());
         assert_eq!(entry.total, Uint128::from(5099976u128));
         let entry = book.base[1].clone();
-        assert_eq!(entry.price, Decimal::from_str("932.19").unwrap());
+        assert_eq!(entry.price, Decimal::from_str("93219").unwrap());
         assert_eq!(entry.total, Uint128::from(2100000u128));
         let entry = book.base[2].clone();
-        assert_eq!(entry.price, Decimal::from_str("933.17").unwrap());
+        assert_eq!(entry.price, Decimal::from_str("93317").unwrap());
         assert_eq!(entry.total, Uint128::from(1000000u128));
         let entry = book.base[3].clone();
-        assert_eq!(entry.price, Decimal::from_str("1000.00").unwrap());
+        assert_eq!(entry.price, Decimal::from_str("100000").unwrap());
         assert_eq!(entry.total, Uint128::from(2000000u128));
 
         assert_eq!(book.quote.len(), 1);
         let entry = book.quote[0].clone();
-        assert_eq!(entry.price, Decimal::from_str("879.00").unwrap());
-        assert_eq!(entry.total, Uint128::from(51000u128));
+        assert_eq!(entry.price, Decimal::from_str("87900").unwrap());
+        assert_eq!(entry.total, Uint128::from(5100000u128));
 
         let balance = app.wrap().query_all_balances(owner.to_string()).unwrap();
         // Total 102000 btc submitted on base side
@@ -540,7 +539,7 @@ mod tests {
             balance,
             vec![
                 coin(500_000_000 - 10200000, "btc-btc"),
-                coin(500_000_000 - 73500, "eth-usdc")
+                coin(500_000_000 - 7350000, "eth-usdc")
             ]
         );
     }
@@ -568,38 +567,38 @@ mod tests {
                     (Side::Base, Price::Oracle(0), Uint128::from(10000u128)),
                     (
                         Side::Base,
-                        Price::Fixed(Decimal::from_str("1000.00").unwrap()),
+                        Price::Fixed(Decimal::from_str("100000").unwrap()),
                         Uint128::from(10000u128),
                     ),
                     (
                         Side::Base,
-                        Price::Fixed(Decimal::from_str("933.17").unwrap()),
+                        Price::Fixed(Decimal::from_str("93317").unwrap()),
                         Uint128::from(10000u128),
                     ),
                     (
                         Side::Base,
-                        Price::Fixed(Decimal::from_str("932.19").unwrap()),
+                        Price::Fixed(Decimal::from_str("93219").unwrap()),
                         Uint128::from(21000u128),
                     ),
                     (
                         Side::Base,
-                        Price::Fixed(Decimal::from_str("912.19").unwrap()),
+                        Price::Fixed(Decimal::from_str("91219").unwrap()),
                         Uint128::from(51000u128),
                     ),
                     (
                         Side::Quote,
                         Price::Oracle(-1000),
-                        Uint128::from(10000000u128),
+                        Uint128::from(1000000000u128),
                     ),
                     (
                         Side::Quote,
-                        Price::Fixed(Decimal::from_str("900.00").unwrap()),
-                        Uint128::from(12500000u128),
+                        Price::Fixed(Decimal::from_str("90000").unwrap()),
+                        Uint128::from(1250000000u128),
                     ),
                     (
                         Side::Quote,
-                        Price::Fixed(Decimal::from_str("879.00").unwrap()),
-                        Uint128::from(51000000u128),
+                        Price::Fixed(Decimal::from_str("87900").unwrap()),
+                        Uint128::from(5100000000u128),
                     ),
                 ],
                 None,
@@ -632,16 +631,16 @@ mod tests {
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "base"),
             ("offer", "100000"),
-            ("bid", "109"),
-            ("price", "fixed:912.19"),
+            ("bid", "1"),
+            ("price", "fixed:91219"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "109btc-btc"),
+            ("amount", "1btc-btc"),
         ]));
 
-        assert_eq!(sim.returned, Uint128::from(109u128));
+        assert_eq!(sim.returned, Uint128::from(1u128));
 
         let res = app
             .execute_contract(
@@ -657,25 +656,25 @@ mod tests {
             .unwrap();
 
         // Buying 10m USDC-worth of BTC
-        // Best price = 912.19
-        // 10_000_000 / 912.19 = 10962
+        // Best price = 91219
+        // 10_000_000 / 91219 = 109
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
             ("offer", "25001"),
-            ("bid", "22500000"),
+            ("bid", "2250000000"),
             ("price", "oracle:-1000"),
-            ("price", "fixed:900"),
+            ("price", "fixed:90000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
             ("offer", "4999"),
-            ("bid", "4394121"),
-            ("price", "fixed:879"),
+            ("bid", "439412100"),
+            ("price", "fixed:87900"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "26894121eth-usdc"),
+            ("amount", "2689412100eth-usdc"),
         ]));
 
         let res = app
@@ -695,13 +694,13 @@ mod tests {
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
             ("offer", "53022"),
-            ("bid", "46605879"),
-            ("price", "fixed:879"),
+            ("bid", "4660587900"),
+            ("price", "fixed:87900"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "46978btc-btc,46605879eth-usdc"),
+            ("amount", "46978btc-btc,4660587900eth-usdc"),
         ]));
     }
 

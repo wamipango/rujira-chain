@@ -7,8 +7,8 @@ use itertools::{EitherOrBoth, Itertools};
 use rujira_rs::{
     bid_pool::{self, SumSnapshot},
     exchange::{SwapCommit, SwapError, Swappable},
-    fin::{OraclePrice, Price, Side},
-    DecimalScaled,
+    fin::{Price, Side},
+    DecimalScaled, Premiumable,
 };
 
 use crate::{
@@ -38,7 +38,7 @@ impl Pool {
     pub fn iter<'a>(
         storage: &'a dyn Storage,
         side: &'a Side,
-        oracle: &'a impl OraclePrice,
+        oracle: &'a impl Premiumable,
     ) -> impl Iterator<Item = EitherOrBoth<Pool>> + 'a {
         let order = match side {
             Side::Base => cosmwasm_std::Order::Ascending,
@@ -82,7 +82,7 @@ impl Pool {
         storage: &dyn Storage,
         price: &Price,
         side: &Side,
-        oracle: &impl OraclePrice,
+        oracle: &impl Premiumable,
     ) -> Self {
         let key = PoolKey::new(side.clone(), price.clone());
         Self {
@@ -243,7 +243,6 @@ mod tests {
     use cw_storage_plus::Bound;
     use itertools::EitherOrBoth;
     use rujira_rs::fin::{Price, Side};
-    use rujira_rs_testing::oracle::TestOracle;
     use std::str::FromStr;
 
     #[test]
@@ -254,7 +253,7 @@ mod tests {
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
         let price = Price::Fixed(Decimal::one());
-        let oracle = TestOracle(Decimal::one());
+        let oracle = Decimal::one();
         let mut pool = Pool::load(&store, &price, &Side::Quote, &oracle);
         let k = PoolKey::new(Side::Quote, price.clone());
         pool.create_order(&mut store, &timestamp, &owner, offer)
@@ -285,7 +284,7 @@ mod tests {
         let timestamp = Timestamp::default();
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
-        let oracle = TestOracle(Decimal::one());
+        let oracle = Decimal::one();
         Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle)
             .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
@@ -428,7 +427,7 @@ mod tests {
         let timestamp = Timestamp::default();
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
-        let oracle = TestOracle(Decimal::one());
+        let oracle = Decimal::one();
         Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle)
             .create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
