@@ -1,4 +1,6 @@
-use crate::proto::types::{QueryPoolRequest, QueryPoolResponse};
+use crate::proto::types::{
+    QueryNetworkRequest, QueryNetworkResponse, QueryPoolRequest, QueryPoolResponse,
+};
 use cosmwasm_std::{Binary, QuerierWrapper, StdError};
 use prost::{DecodeError, EncodeError, Message};
 use thiserror::Error;
@@ -56,5 +58,14 @@ impl QueryablePair for QueryPoolResponse {
 
     fn grpc_path() -> &'static str {
         "/types.Query/Pool"
+    }
+}
+
+impl QueryablePair for QueryNetworkResponse {
+    type Request = QueryNetworkRequest;
+    type Response = QueryNetworkResponse;
+
+    fn grpc_path() -> &'static str {
+        "/types.Query/Network"
     }
 }

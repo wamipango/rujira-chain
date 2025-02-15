@@ -76,3 +76,26 @@ pub fn mock_pool(request: Binary) -> Result<Binary, Error> {
         _ => Err(StdError::generic_err("Asset not found").into()),
     }
 }
+
+pub fn mock_network() -> Result<Binary, Error> {
+    let network = proto::types::QueryNetworkResponse {
+        bond_reward_rune: "1356955381093".to_string(),
+        total_bond_units: "1042720".to_string(),
+        effective_security_bond: "5569290313641446".to_string(),
+        total_reserve: "7400760525247188".to_string(),
+        vaults_migrating: false,
+        gas_spent_rune: "179282527796318".to_string(),
+        gas_withheld_rune: "231180386614277".to_string(),
+        outbound_fee_multiplier: "1000".to_string(),
+        native_outbound_fee_rune: "2000000".to_string(),
+        native_tx_fee_rune: "2000000".to_string(),
+        tns_register_fee_rune: "1000000000".to_string(),
+        tns_fee_per_block_rune: "20".to_string(),
+        rune_price_in_tor: "135585271".to_string(),
+        tor_price_in_rune: "73754324".to_string(),
+    };
+
+    let mut buf = Vec::new();
+    network.encode(&mut buf).unwrap();
+    Ok(buf.into())
+}
