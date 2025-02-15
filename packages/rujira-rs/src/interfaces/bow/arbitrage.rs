@@ -71,12 +71,12 @@ enum Route {
 impl Route {
     pub fn quote(
         &self,
-        min_price: Option<Decimal>,
-        data: Option<Binary>,
+        _min_price: Option<Decimal>,
+        _data: Option<Binary>,
     ) -> Result<Option<QuoteResponse>, StrategyError> {
         match self {
-            Route::Single(layer1_asset) => todo!(),
-            Route::Dual(layer1_asset, layer1_asset1) => todo!(),
+            Route::Single(_layer1_asset) => todo!(),
+            Route::Dual(_layer1_asset, _layer1_asset1) => todo!(),
         }
     }
 }
