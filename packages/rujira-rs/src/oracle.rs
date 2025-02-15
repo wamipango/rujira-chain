@@ -2,7 +2,10 @@ use cosmwasm_std::{Decimal, QuerierWrapper};
 use thiserror::Error;
 
 use crate::{
-    query::{network::TryFromNetworkError, Pool, PoolError},
+    query::{
+        network::{Network, TryFromNetworkError},
+        Pool, PoolError,
+    },
     Layer1Asset,
 };
 
@@ -12,7 +15,11 @@ pub trait Oracle {
 
 impl Oracle for Layer1Asset {
     fn price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
-        Ok(Pool::load(q, &self)?.asset_tor_price)
+        if self.is_rune() {
+            Ok(Network::load(q)?.rune_price_in_tor)
+        } else {
+            Ok(Pool::load(q, &self)?.asset_tor_price)
+        }
     }
 }
 

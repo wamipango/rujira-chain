@@ -120,6 +120,10 @@ impl Layer1Asset {
             _ => Err(Layer1AssetError::InvalidNativeDenom(denom)),
         }
     }
+
+    pub fn is_rune(&self) -> bool {
+        self.chain == Chain::Thor && self.symbol == "RUNE"
+    }
 }
 
 #[derive(Error, Debug)]
