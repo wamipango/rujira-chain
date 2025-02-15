@@ -38,7 +38,7 @@ impl Pool {
                 match x {
                     Ok((premium, _)) => Some(Self {
                         premium: premium.clone(),
-                        rate: oracle.adjust(&-(premium as i16)),
+                        rate: oracle.adjust(&-(premium as i16 * 100)),
                         // The presence of the key indicates a BidPool should be present,
                         // so we should panic if this is incorrect
                         pool: BID_POOLS.load(storage, premium).unwrap(),
@@ -54,7 +54,7 @@ impl Pool {
     pub fn load(storage: &dyn Storage, premium: &u8, oracle: &impl Premiumable) -> Self {
         Self {
             premium: *premium,
-            rate: oracle.adjust(&-(*premium as i16)),
+            rate: oracle.adjust(&-(*premium as i16 * 100)),
             pool: BID_POOLS.load(storage, *premium).unwrap_or_default(),
             pending_sum_snapshots: vec![],
         }

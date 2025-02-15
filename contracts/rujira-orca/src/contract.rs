@@ -243,7 +243,7 @@ fn order_response(order: &Order, premium: &u8, oracle: &impl Premiumable) -> Ord
     OrderResponse {
         owner: order.owner.to_string(),
         premium: *premium,
-        rate: oracle.adjust(&-(*premium as i16)),
+        rate: oracle.adjust(&-(*premium as i16 * 100)),
         updated_at: order.updated_at,
         offer: order.offer,
         remaining: order.bid.amount().try_into().unwrap(),
@@ -363,10 +363,10 @@ mod tests {
 
         assert_eq!(pools.pools.len(), 3);
         let entry = pools.pools[0].clone();
-        assert_eq!(entry.price, Decimal::from_str("990").unwrap());
+        assert_eq!(entry.price, Decimal::from_str("99000").unwrap());
         assert_eq!(entry.total, Uint128::from(10000u128));
         let entry = pools.pools[1].clone();
-        assert_eq!(entry.price, Decimal::from_str("900").unwrap());
+        assert_eq!(entry.price, Decimal::from_str("90000").unwrap());
         assert_eq!(entry.total, Uint128::from(12500u128));
 
         let balance = app.wrap().query_all_balances(owner.to_string()).unwrap();
@@ -423,17 +423,17 @@ mod tests {
             .unwrap();
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
             ("offer", "100"),
-            ("bid", "90000"),
-            ("rate", "900"),
+            ("bid", "9000000"),
+            ("rate", "90000"),
             ("premium", "10"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "90000eth-usdc"),
+            ("amount", "9000000eth-usdc"),
         ]));
 
-        assert_eq!(sim.returned, Uint128::from(90000u128));
+        assert_eq!(sim.returned, Uint128::from(9000000u128));
 
         let res = app
             .execute_contract(
@@ -444,28 +444,29 @@ mod tests {
                     to: None,
                     callback: None,
                 },
-                &coins(30000, "btc-btc"),
+                &coins(300, "btc-btc"),
             )
             .unwrap();
+
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
-            ("offer", "11012"),
-            ("bid", "9910000"),
-            ("rate", "900"),
+            ("offer", "12"),
+            ("bid", "1000000"),
+            ("rate", "90000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
-            ("offer", "14706"),
+            ("offer", "148"),
             ("bid", "12500000"),
-            ("rate", "850"),
+            ("rate", "85000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
-            ("offer", "4282"),
-            ("bid", "3425600"),
-            ("rate", "800"),
+            ("offer", "140"),
+            ("bid", "11200000"),
+            ("rate", "80000"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "25835600eth-usdc"),
+            ("amount", "24700000eth-usdc"),
         ]));
 
         let res = app
@@ -477,20 +478,21 @@ mod tests {
                     to: None,
                     callback: None,
                 },
-                &coins(100000, "btc-btc"),
+                &coins(1000, "btc-btc"),
             )
             .unwrap();
+        dbg!(&res);
 
         // Check that any unused funds are returned
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
-            ("offer", "59468"),
-            ("bid", "47574400"),
-            ("rate", "800"),
+            ("offer", "498"),
+            ("bid", "39800000"),
+            ("rate", "80000"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "40532btc-btc,47574400eth-usdc"),
+            ("amount", "502btc-btc,39800000eth-usdc"),
         ]));
     }
 }

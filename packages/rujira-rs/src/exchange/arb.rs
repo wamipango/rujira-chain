@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use cosmwasm_std::{Storage, Uint128};
 
 use super::{SwapCommit, SwapError, Swappable};
@@ -85,7 +87,7 @@ pub trait Arbitrage: Swappable + Sized {
 
 impl<T> Arbitrage for T
 where
-    T: Swappable + Clone,
+    T: Swappable + Clone + Debug,
 {
     fn arbitrage(&mut self, other: &mut Self) -> Result<Option<(Uint128, Uint128)>, SwapError> {
         let float = self.total();
@@ -109,6 +111,8 @@ mod tests {
     use crate::exchange::testing::{TestItem, TestIter};
 
     use super::{Arber, Arbitrage};
+
+    // TODO: Test when rounding of b
 
     #[test]
 

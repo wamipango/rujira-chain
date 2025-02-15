@@ -78,7 +78,7 @@ impl Swappable for MarketMakerOffer {
     fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
         let offer_value = Decimal::from_ratio(offer, 1u128)
             .mul(self.price)
-            .to_uint_ceil();
+            .to_uint_floor();
         let pool_value = Decimal::from_ratio(self.total, 1u128)
             .div(self.price)
             .to_uint_floor();
@@ -312,5 +312,16 @@ mod test {
         let (bid_returned, offer_consumed) = o.swap(Uint128::from(500000u128)).unwrap();
         assert_eq!(bid_returned, Uint128::from(8000u128));
         assert_eq!(offer_consumed, Uint128::from(10000u128));
+
+        let mut o = MarketMakerOffer {
+            price: Decimal::from_str("0.00000999").unwrap(),
+            total: Uint128::from(19980u128),
+            side: Side::Base,
+            rate: Decimal::from_str("100100.11").unwrap(),
+            commitment: Default::default(),
+        };
+        let (bid_returned, offer_consumed) = o.swap(Uint128::from(50000000u128)).unwrap();
+        assert_eq!(bid_returned, Uint128::from(50000000u128));
+        assert_eq!(offer_consumed, Uint128::from(499u128));
     }
 }
