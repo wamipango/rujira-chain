@@ -104,7 +104,7 @@ pub fn distribute(
     storage: &mut dyn Storage,
     config: &Config,
     bond_amount_sent: &Uint128,
-) -> StdResult<Uint128> {
+) -> Result<Uint128, ContractError> {
     let mut account = POOL_ACCOUNTS.load(storage)?;
     let mut liquid = POOL_LIQUID.load(storage)?;
     let swap_pending = PENDING_SWAP.load(storage)?;
@@ -150,7 +150,7 @@ pub fn distribute(
         .checked_sub(liquid.size())?
         .checked_sub(account.total)?;
 
-    liquid.deposit(bond_surplus);
+    liquid.deposit(bond_surplus)?;
     POOL_LIQUID.save(storage, &liquid)?;
 
     // Take pending swaps off the queue, add back any remaining

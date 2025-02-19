@@ -105,7 +105,11 @@ pub fn execute_withdraw(
 /// Calculates the maximum liability of the contract based on the remaining merge tokens,
 /// and therefore the surplus supply of allocation, which can be dsitributed to current
 /// Share holders (mergers), and increases TOTAL_ALLOCATED accordingly
-fn allocate(storage: &dyn Storage, config: &Config, factor: Decimal) -> StdResult<SharePool> {
+fn allocate(
+    storage: &dyn Storage,
+    config: &Config,
+    factor: Decimal,
+) -> Result<SharePool, ContractError> {
     let mut pool = POOL.load(storage)?;
     let merged = TOTAL_MERGED.load(storage).unwrap_or_default();
     let remaining = config.merge_supply.checked_sub(merged)?;
@@ -114,7 +118,7 @@ fn allocate(storage: &dyn Storage, config: &Config, factor: Decimal) -> StdResul
         .to_uint_ceil();
 
     let surplus = config.ruji_allocation.sub(pool.size()).sub(liability);
-    pool.deposit(surplus);
+    pool.deposit(surplus)?;
     Ok(pool)
 }
 
@@ -343,7 +347,7 @@ mod tests {
         );
         assert_eq!(
             POOL.load(storage).unwrap().shares(),
-            Uint128::from(2_959_182u128)
+            Uint128::from(2_959_183u128)
         );
         assert_eq!(
             ACCOUNTS.load(storage, Addr::unchecked("account2")).unwrap(),
@@ -370,7 +374,7 @@ mod tests {
         );
         assert_eq!(
             POOL.load(storage).unwrap().shares(),
-            Uint128::from(2_959_182u128)
+            Uint128::from(2_959_183u128)
         );
         ACCOUNTS
             .load(storage, Addr::unchecked("account3"))

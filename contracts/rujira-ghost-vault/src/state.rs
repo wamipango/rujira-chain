@@ -113,10 +113,10 @@ impl State {
         let interest = self.calculate_interest(&config.interest, env.block.time)?;
 
         // Allocate it to the deposit pool
-        self.deposit_pool.deposit(interest);
+        self.deposit_pool.deposit(interest)?;
         // Charge it to the debt pool, so that outstanding debt tokens are required to
         // pay this interest on return
-        self.debt_pool.deposit(interest);
+        self.debt_pool.deposit(interest)?;
         self.last_updated = env.block.time;
 
         Ok(())

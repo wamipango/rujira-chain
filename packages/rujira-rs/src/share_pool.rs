@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal, Uint128};
-use std::ops::{AddAssign, SubAssign};
+use std::ops::{AddAssign, Div, SubAssign};
 use thiserror::Error;
 
 /// Simple share-based pool implementation where your membership entitles you to a share of the pool
@@ -8,7 +8,7 @@ use thiserror::Error;
 #[derive(Default)]
 pub struct SharePool {
     size: Uint128,
-    shares: Uint128,
+    shares: Decimal,
 }
 
 impl SharePool {
@@ -19,14 +19,14 @@ impl SharePool {
         }
         if self.shares.is_zero() {
             self.size.add_assign(amount);
-            self.shares.add_assign(amount);
+            self.shares.add_assign(Decimal::from_ratio(amount, 1u128));
             return Ok(amount);
         }
 
-        let issuance = Decimal::from_ratio(self.shares * amount, self.size).to_uint_floor();
+        let issuance = self.shares * Decimal::from_ratio(amount, self.size);
         self.shares.add_assign(issuance);
         self.size.add_assign(amount);
-        Ok(issuance)
+        Ok(issuance.to_uint_floor())
     }
 
     /// Removes a share from the pool, returning the amount removed from the pool and deducted
@@ -35,20 +35,20 @@ impl SharePool {
             return Err(SharePoolError::ZeroAmount {});
         }
 
-        if amount.gt(&self.shares) {
+        if amount.gt(&self.shares()) {
             return Err(SharePoolError::ShareOverflow {});
         }
 
-        if amount.eq(&self.shares) {
+        if amount.eq(&self.shares()) {
             let claim = self.size;
             self.size = Uint128::zero();
-            self.shares = Uint128::zero();
+            self.shares = Decimal::zero();
             return Ok(claim);
         }
 
-        let claim: Uint128 = Decimal::from_ratio(self.size * amount, self.shares).to_uint_floor();
+        let claim: Uint128 = self.ownership(amount);
         self.size.sub_assign(claim);
-        self.shares.sub_assign(amount);
+        self.shares.sub_assign(Decimal::from_ratio(amount, 1u128));
         Ok(claim)
     }
 
@@ -56,7 +56,7 @@ impl SharePool {
         if self.shares.is_zero() {
             return Decimal::zero();
         }
-        Decimal::from_ratio(self.size, self.shares)
+        Decimal::from_ratio(self.size, 1u128).div(self.shares)
     }
 
     pub fn size(&self) -> Uint128 {
@@ -64,18 +64,34 @@ impl SharePool {
     }
 
     pub fn shares(&self) -> Uint128 {
-        self.shares
+        self.shares.to_uint_floor()
     }
 
     pub fn ownership(&self, shares: Uint128) -> Uint128 {
         if shares.is_zero() {
             return Uint128::zero();
         }
-        Decimal::from_ratio(shares * self.size, self.shares).to_uint_floor()
+
+        Decimal::from_ratio(shares * self.size, 1u128)
+            .div(self.shares)
+            .to_uint_floor()
     }
 
-    pub fn deposit(&mut self, amount: Uint128) {
+    pub fn deposit(&mut self, amount: Uint128) -> Result<(), SharePoolError> {
+        let mut checked = self.clone();
+        checked.size.add_assign(amount);
+        let deposit = Uint128::from(1000u128);
+        let test = checked.join(deposit)?;
+        let value = checked.ownership(test);
+        let ratio = Decimal::from_ratio(value, deposit);
+
+        // If a deposit causes a new `join` of 1000 units to lose more than 1% of its value,
+        // the share pool is in an invalid state, error and don't change state
+        if ratio < Decimal::from_ratio(99u128, 100u128) {
+            return Err(SharePoolError::InvalidDeposit {});
+        }
         self.size.add_assign(amount);
+        Ok(())
     }
 }
 
@@ -85,6 +101,8 @@ pub enum SharePoolError {
     ShareOverflow {},
     #[error("ZeroAmount")]
     ZeroAmount {},
+    #[error("InvalidDeposit")]
+    InvalidDeposit {},
 }
 
 #[cfg(test)]
@@ -99,7 +117,7 @@ mod tests {
         pool.join(Uint128::zero()).unwrap_err();
         let shares = pool.join(Uint128::from(1000u128)).unwrap();
         assert_eq!(shares, Uint128::from(1000u128));
-        assert_eq!(pool.shares, Uint128::from(1000u128));
+        assert_eq!(pool.shares, Decimal::from_ratio(1000u128, 1u128));
         assert_eq!(pool.size, Uint128::from(1000u128));
 
         assert_eq!(
@@ -109,12 +127,12 @@ mod tests {
 
         let shares = pool.join(Uint128::from(5000u128)).unwrap();
         assert_eq!(shares, Uint128::from(5000u128));
-        assert_eq!(pool.shares, Uint128::from(6000u128));
+        assert_eq!(pool.shares, Decimal::from_ratio(6000u128, 1u128));
         assert_eq!(pool.size, Uint128::from(6000u128));
 
-        pool.deposit(Uint128::from(2000u128));
+        pool.deposit(Uint128::from(2000u128)).unwrap();
 
-        assert_eq!(pool.shares, Uint128::from(6000u128));
+        assert_eq!(pool.shares, Decimal::from_ratio(6000u128, 1u128));
         assert_eq!(pool.size, Uint128::from(8000u128));
 
         assert_eq!(
@@ -124,20 +142,35 @@ mod tests {
 
         let shares = pool.join(Uint128::from(1000u128)).unwrap();
         assert_eq!(shares, Uint128::from(750u128));
-        assert_eq!(pool.shares, Uint128::from(6750u128));
+        assert_eq!(pool.shares, Decimal::from_ratio(6750u128, 1u128));
         assert_eq!(pool.size, Uint128::from(9000u128));
         assert_eq!(pool.ownership(shares), Uint128::from(1000u128));
 
         let redeem = pool.leave(Uint128::from(500u128)).unwrap();
         assert_eq!(redeem, Uint128::from(666u128));
-        assert_eq!(pool.shares, Uint128::from(6250u128));
+        assert_eq!(pool.shares, Decimal::from_ratio(6250u128, 1u128));
         assert_eq!(pool.size, Uint128::from(8334u128));
         assert_eq!(pool.ownership(shares), Uint128::from(1000u128));
 
         pool.leave(Uint128::from(6251u128)).unwrap_err();
         let redeem = pool.leave(Uint128::from(6250u128)).unwrap();
         assert_eq!(redeem, Uint128::from(8334u128));
-        assert_eq!(pool.shares, Uint128::zero());
+        assert_eq!(pool.shares, Decimal::zero());
         assert_eq!(pool.size, Uint128::zero());
+    }
+
+    #[test]
+    fn inflation_protection() {
+        // Ensure that the SharePool can't be manipulated as per https://docs.openzeppelin.com/contracts/4.x/erc4626
+        let mut pool = SharePool::default();
+        pool.join(Uint128::one()).unwrap();
+        pool.deposit(Uint128::from(111u128)).unwrap_err();
+        let shares = pool.join(Uint128::from(1000u128)).unwrap();
+        assert_eq!(shares, Uint128::from(1000u128));
+        pool.deposit(Uint128::from(110u128)).unwrap();
+        let shares = pool.join(Uint128::from(1000u128)).unwrap();
+        assert_eq!(shares, Uint128::from(900u128));
+        let value = pool.ownership(shares);
+        assert_eq!(value, Uint128::from(998u128));
     }
 }
