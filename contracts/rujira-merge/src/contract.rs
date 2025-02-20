@@ -25,14 +25,16 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::from(msg);
+    let config = Config::from(msg.clone());
     config.validate(&env.block.time)?;
     config.save(deps.storage)?;
-    ensure_eq!(
-        must_pay(&info, config.ruji_denom.as_str())?,
-        config.ruji_allocation,
-        ContractError::InsufficientFunds {}
-    );
+    if !msg.bypass_min_merge_denom.unwrap_or(false) {
+        ensure_eq!(
+            must_pay(&info, config.ruji_denom.as_str())?,
+            config.ruji_allocation,
+            ContractError::InsufficientFunds {}
+        );
+    }
     init(deps.storage)?;
     Ok(Response::default())
 }
@@ -123,6 +125,7 @@ mod tests {
                 ruji_allocation: Uint128::from(100_000_000u128),
                 decay_starts_at: Timestamp::from_seconds(1_000),
                 decay_ends_at: Timestamp::from_seconds(1_001_000),
+                bypass_min_merge_denom: None,
             },
             &coins(100_000_000, "uruji"),
             "merge",
@@ -141,12 +144,32 @@ mod tests {
                 ruji_allocation: Uint128::from(10_000_000u128),
                 decay_starts_at: Timestamp::from_seconds(1_000),
                 decay_ends_at: Timestamp::from_seconds(1_001_000),
+                bypass_min_merge_denom: None,
             },
             &coins(100_000_000, "uruji"),
             "merge",
             None,
         )
         .unwrap_err();
+
+        // Assert fund validation bypass
+        app.instantiate_contract(
+            code_id,
+            owner.clone(),
+            &InstantiateMsg {
+                merge_denom: "ukuji".to_string(),
+                merge_supply: Uint128::from(250_000_000u128),
+                ruji_denom: "uruji".to_string(),
+                ruji_allocation: Uint128::from(10_000_000u128),
+                decay_starts_at: Timestamp::from_seconds(1_000),
+                decay_ends_at: Timestamp::from_seconds(1_001_000),
+                bypass_min_merge_denom: Some(true),
+            },
+            &coins(100_000_000, "uruji"),
+            "merge",
+            None,
+        )
+        .unwrap();
 
         // Single failure to assert Config verification is executing
         app.instantiate_contract(
@@ -159,6 +182,7 @@ mod tests {
                 ruji_allocation: Uint128::from(100_000_000u128),
                 decay_starts_at: Timestamp::from_seconds(1_000),
                 decay_ends_at: Timestamp::from_seconds(1_001_000),
+                bypass_min_merge_denom: None,
             },
             &coins(100_000_000, "uruji"),
             "merge",
@@ -203,6 +227,7 @@ mod tests {
                     ruji_allocation: Uint128::from(100_000_000u128),
                     decay_starts_at: Timestamp::from_seconds(1_000),
                     decay_ends_at: Timestamp::from_seconds(1_001_000),
+                    bypass_min_merge_denom: None,
                 },
                 &coins(100_000_000, "uruji"),
                 "merge",

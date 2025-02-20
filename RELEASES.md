@@ -4,4 +4,4 @@
 
 | Version | Contract     | Artifact                    | Checksum                                                         | Audit | Code ID Stagenet | Code ID Mainnet |
 | ------- | ------------ | --------------------------- | ---------------------------------------------------------------- | ----- | ---------------- | --------------- |
-| v1.0.0  | rujira-merge | artifacts/rujira_merge.wasm | ec5c76433ddf0827ba5fa21d1584880bfcd8b444e486e748af030c3c5d0d1a08 |       |                  |                 |
+| v1.0.0  | rujira-merge | artifacts/rujira_merge.wasm | 2fca37864585d3410f2d8b7958e829827f1901500eb1fc92a2e746d793c08cec |       |                  |                 |
