@@ -239,22 +239,6 @@ impl Fraction<Uint256> for DecimalScaled {
     }
 }
 
-impl Mul<Decimal256> for DecimalScaled {
-    type Output = Self;
-
-    fn mul(self, rhs: Decimal256) -> Self::Output {
-        if self.is_zero() || rhs.is_zero() {
-            return Self::zero();
-        }
-
-        let int = self.0 .0.mul(rhs.numerator());
-        let prec = Decimal256::DECIMAL_PLACES as i64 - self.0 .1;
-        let mut res = Self((int, prec));
-        res.normalize();
-        res
-    }
-}
-
 impl Mul<Uint256> for DecimalScaled {
     type Output = DecimalScaled;
 
@@ -263,7 +247,11 @@ impl Mul<Uint256> for DecimalScaled {
             return Self::zero();
         }
 
-        let mut res = Self((self.0 .0.mul(rhs), self.0 .1));
+        let mut res = match self.0 .0.checked_mul(rhs) {
+            Ok(val) => Self((val, self.0 .1)),
+            Err(_) => self.truncate(1).mul(rhs),
+        };
+
         res.normalize();
         res
     }
@@ -519,6 +507,16 @@ mod tests {
             DecimalScaled((Uint256::from(1666666666666666666u128), 10)).truncate(1),
             // 166666666.666666666
             DecimalScaled((Uint256::from(166666666666666666u128), 9)),
+        );
+    }
+
+    #[test]
+    fn handle_overflow() {
+        let v = DecimalScaled((Uint256::MAX, 75));
+
+        assert_eq!(
+            v.mul(Uint256::from(10u128)),
+            DecimalScaled((Uint256::MAX.div(Uint256::from(10u128)), 73))
         );
     }
 }
