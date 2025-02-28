@@ -96,7 +96,7 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             Ok(Response::default())
         }
         SudoMsg::AddTargetDenom(denom) => {
-            config.target_denoms.push(denom);
+            config.target_denoms.insert(denom);
             config.save(deps.storage)?;
             Ok(Response::default())
         }

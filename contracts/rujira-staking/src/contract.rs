@@ -427,7 +427,7 @@ mod tests {
         res.assert_event(
             &Event::new("burn")
                 .add_attribute("amount", "500")
-                .add_attribute("denom", format!("x/staging-uruji")),
+                .add_attribute("denom", format!("x/staking-uruji")),
         );
         // total distribution of 30 across 1000 shares, so withdrawal should be 515 uruji
         res.assert_event(

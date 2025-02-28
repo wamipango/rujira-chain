@@ -6,6 +6,7 @@ use cosmwasm_std::{
 };
 use cw_storage_plus::{Bound, Item, Map};
 use rujira_rs::revenue::{ActionResponse, ConfigResponse, InstantiateMsg};
+use std::collections::HashSet;
 
 static CONFIG: Item<Config> = Item::new("config");
 static LAST: Item<String> = Item::new("last");
@@ -20,7 +21,7 @@ pub struct Config {
     pub executor: Addr,
 
     /// The denoms that are transferred to the fee_collector at the end of every execution
-    pub target_denoms: Vec<String>,
+    pub target_denoms: HashSet<String>,
 
     /// The final destinations that `target_denom` is sent to (address, weight)
     pub target_addresses: Vec<(Addr, u8)>,
@@ -31,7 +32,7 @@ impl Config {
         Ok(Self {
             owner: api.addr_validate(&value.owner)?,
             executor: api.addr_validate(&value.executor)?,
-            target_denoms: value.target_denoms,
+            target_denoms: HashSet::from_iter(value.target_denoms.iter().cloned()),
             target_addresses: value
                 .target_addresses
                 .iter()
@@ -54,7 +55,7 @@ impl From<Config> for ConfigResponse {
         Self {
             owner: value.owner.to_string(),
             executor: value.executor.to_string(),
-            target_denoms: value.target_denoms,
+            target_denoms: value.target_denoms.into_iter().collect(),
             target_addresses: value
                 .target_addresses
                 .iter()
