@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QueryMsg",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "pool"
+      ],
+      "properties": {
+        "pool": {
+          "$ref": "#/definitions/Layer1Asset"
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "Chain": {
+      "type": "string",
+      "enum": [
+        "avax",
+        "bch",
+        "bsc",
+        "btc",
+        "doge",
+        "eth",
+        "gaia",
+        "ltc",
+        "thor"
+      ]
+    },
+    "Layer1Asset": {
+      "type": "object",
+      "required": [
+        "chain",
+        "symbol"
+      ],
+      "properties": {
+        "chain": {
+          "$ref": "#/definitions/Chain"
+        },
+        "symbol": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
