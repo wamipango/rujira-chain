@@ -56,16 +56,8 @@ optimize:
   image: docker:latest
   services:
     - docker:dind
-  variables:
-    U: "cosmwasm"
-    V: "0.16.1"
-    M: "x86_64"
-    A: "linux/amd64"  # Mapping from x86_64 to amd64
   script:
-    - export A="linux/${M/x86_64/amd64}"
-    - export S=${M#x86_64}
-    - export S=${S:+-$S}
-    - docker run --platform $A --rm -v "$CI_PROJECT_DIR":/code \
+    - docker run --platform linux/x86_64 --rm -v "$CI_PROJECT_DIR":/code \
         --mount type=volume,source="$(basename "$CI_PROJECT_DIR")_cache",target=/target \
         --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
-        $U/optimizer$S:$V
+        cosmwasm/optimizer:0.16.1
