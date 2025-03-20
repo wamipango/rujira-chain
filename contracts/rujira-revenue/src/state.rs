@@ -21,7 +21,7 @@ pub struct Config {
     pub executor: Addr,
 
     /// The denoms that are transferred to the fee_collector at the end of every execution
-    pub target_denoms: HashSet<String>,
+    target_denoms: HashSet<String>,
 
     /// The final destinations that `target_denom` is sent to (address, weight)
     pub target_addresses: Vec<(Addr, u8)>,
@@ -48,6 +48,16 @@ impl Config {
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
         CONFIG.save(storage, self)
     }
+
+    pub fn target_denoms(&self) -> Vec<String> {
+        let mut target_denoms: Vec<String> = self.target_denoms.clone().into_iter().collect();
+        target_denoms.sort();
+        target_denoms
+    }
+
+    pub fn add_target_denom(&mut self, denom: String) -> bool {
+        self.target_denoms.insert(denom)
+    }
 }
 
 impl From<Config> for ConfigResponse {
@@ -55,7 +65,7 @@ impl From<Config> for ConfigResponse {
         Self {
             owner: value.owner.to_string(),
             executor: value.executor.to_string(),
-            target_denoms: value.target_denoms.into_iter().collect(),
+            target_denoms: value.target_denoms(),
             target_addresses: value
                 .target_addresses
                 .iter()

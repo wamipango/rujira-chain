@@ -51,7 +51,7 @@ pub fn execute(
                 // If there's no compatible action, skip to the reply
                 None => {
                     let mut sends: Vec<CosmosMsg> = vec![];
-                    for target in config.target_denoms.clone() {
+                    for target in config.target_denoms() {
                         distribute_denom(deps.as_ref(), &env, &config, &mut sends, target)?;
                     }
 
@@ -96,7 +96,7 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             Ok(Response::default())
         }
         SudoMsg::AddTargetDenom(denom) => {
-            config.target_denoms.insert(denom);
+            config.add_target_denom(denom);
             config.save(deps.storage)?;
             Ok(Response::default())
         }
@@ -127,7 +127,7 @@ pub fn reply(deps: DepsMut, env: Env, _msg: Reply) -> Result<Response, ContractE
 pub fn execute_reply(deps: Deps, env: Env) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     let mut sends: Vec<CosmosMsg> = vec![];
-    for target in config.target_denoms.clone() {
+    for target in config.target_denoms().clone() {
         distribute_denom(deps, &env, &config, &mut sends, target)?;
     }
 
