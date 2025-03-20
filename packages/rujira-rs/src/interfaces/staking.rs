@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Binary, Uint128};
+use cosmwasm_std::{Binary, Decimal, Uint128};
 
 use crate::TokenMetadata;
 
@@ -12,6 +12,7 @@ pub struct InstantiateMsg {
     ///
     /// `(contract_address, execute_msg, threshold_limit)`
     pub revenue_converter: (String, Binary, Uint128),
+    pub fee: Option<(Decimal, String)>,
 }
 
 #[cw_serde]
@@ -69,6 +70,7 @@ pub struct ConfigResponse {
     pub bond_denom: String,
     pub revenue_denom: String,
     pub revenue_converter: (String, Binary, Uint128),
+    pub fee: Option<(Decimal, String)>,
 }
 
 #[cw_serde]

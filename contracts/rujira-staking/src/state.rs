@@ -104,7 +104,7 @@ pub fn distribute(
     storage: &mut dyn Storage,
     config: &Config,
     bond_amount_sent: &Uint128,
-) -> Result<Uint128, ContractError> {
+) -> Result<(Uint128, Uint128), ContractError> {
     let mut account = POOL_ACCOUNTS.load(storage)?;
     let mut liquid = POOL_LIQUID.load(storage)?;
     let swap_pending = PENDING_SWAP.load(storage)?;
@@ -117,9 +117,17 @@ pub fn distribute(
         .query_balance(env.contract.address.clone(), config.revenue_denom.clone())?
         .amount;
 
-    let revenue_surplus = revenue_balance
+    let revenue_surplus_with_fees = revenue_balance
         .checked_sub(account.pending)?
         .checked_sub(swap_pending)?;
+
+    let fee_amount = match &config.fee {
+        None => Uint128::zero(),
+        Some(fee) => (Decimal::from_atomics(revenue_surplus_with_fees, 0).unwrap()
+            * fee.percentage)
+            .to_uint_ceil(),
+    };
+    let revenue_surplus = revenue_surplus_with_fees - fee_amount;
 
     let account_allocation = if account.total.is_zero() {
         Uint128::zero()
@@ -159,7 +167,7 @@ pub fn distribute(
     let swap_remainder = swap_total.sub(swap_amount);
     PENDING_SWAP.save(storage, &swap_remainder)?;
 
-    Ok(swap_amount)
+    Ok((swap_amount, fee_amount))
 }
 
 pub fn status(env: Env, deps: Deps, config: &Config) -> StdResult<StatusResponse> {
@@ -233,6 +241,7 @@ mod tests {
                 Binary::default(),
                 Uint128::from(100u128),
             ),
+            fee: None,
         };
 
         init(deps.as_mut().storage).unwrap();
@@ -279,7 +288,7 @@ mod tests {
             Uint128::from(1_000u128)
         );
 
-        let msg = distribute(
+        let (swap_amount, _fee_amount) = distribute(
             &env,
             mutdeps.querier,
             mutdeps.storage,
@@ -289,7 +298,7 @@ mod tests {
         .unwrap();
         // Balance of 1000 USDC split across 3000 RUJI - 2000 liquid and 1000 account. so 666 to be swapped, 333 to be allocated
 
-        assert_eq!(msg, Uint128::from(100u128));
+        assert_eq!(swap_amount, Uint128::from(100u128));
 
         assert_eq!(
             PENDING_SWAP.load(mutdeps.storage).unwrap(),
