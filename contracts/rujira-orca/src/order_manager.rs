@@ -324,7 +324,7 @@ mod tests {
         funds += coin(10000, "ruji");
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
-            fee.clone(),
+            fee,
             30,
             info.sender.clone(),
             env.block.time,
@@ -346,7 +346,7 @@ mod tests {
 
         let mut e = OrderManager::new(
             Denoms::new("ruji", "usdc"),
-            fee.clone(),
+            fee,
             30,
             info.sender.clone(),
             env.block.time,

@@ -37,7 +37,7 @@ impl Pool {
             .filter_map(|x: StdResult<(u8, ())>| -> Option<Self> {
                 match x {
                     Ok((premium, _)) => Some(Self {
-                        premium: premium.clone(),
+                        premium,
                         rate: premium.to_rate(oracle),
                         // The presence of the key indicates a BidPool should be present,
                         // so we should panic if this is incorrect

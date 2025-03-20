@@ -18,7 +18,7 @@ impl Oracle for Layer1Asset {
         if self.is_rune() {
             Ok(Network::load(q)?.rune_price_in_tor)
         } else {
-            Ok(Pool::load(q, &self)?.asset_tor_price)
+            Ok(Pool::load(q, self)?.asset_tor_price)
         }
     }
 }

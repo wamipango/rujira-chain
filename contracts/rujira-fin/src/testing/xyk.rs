@@ -323,8 +323,8 @@ fn combined_book() {
             storage,
             &owner,
             vec![
-                coin(1_000_000_000_00, "btc"),
-                coin(1_000_000_000_0000, "usdc"),
+                coin(100_000_000_000, "btc"),
+                coin(10_000_000_000_000, "usdc"),
             ],
         )
     })
@@ -335,7 +335,7 @@ fn combined_book() {
         bow.clone(),
         &bow::ExecuteMsg::Deposit { callback: None },
         // 2 BTC @ 100k USDC
-        &[coin(200_000_00, "btc"), coin(200_000_000_0000, "usdc")],
+        &[coin(20_000_000, "btc"), coin(2_000_000_000_000, "usdc")],
     )
     .unwrap();
 

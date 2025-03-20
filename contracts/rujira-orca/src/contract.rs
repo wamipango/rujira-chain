@@ -184,9 +184,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                 Order::by_owner(deps.storage, &addr, offset, limit)?
                     .iter_mut()
                     .map(|(k, order)| {
-                        let pool = Pool::load(deps.storage, &k, &oracle);
+                        let pool = Pool::load(deps.storage, k, &oracle);
                         pool.sync_order(deps.storage, order)?;
-                        Ok(order_response(order, &k, &oracle))
+                        Ok(order_response(order, k, &oracle))
                     })
                     .collect();
 
@@ -418,7 +418,7 @@ mod tests {
                     to: None,
                     callback: None,
                 },
-                &vec![swap_amount],
+                &[swap_amount],
             )
             .unwrap();
         res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![

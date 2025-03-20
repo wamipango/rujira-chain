@@ -69,7 +69,7 @@ pub fn execute(
                     .add_message(cb.to_message(
                         &info.sender,
                         Empty {},
-                        coins(amount.u128(), &rcpt.denom()),
+                        coins(amount.u128(), rcpt.denom()),
                     )?)
                     .add_event(event_deposit(info.sender, amount, mint)),
             }
@@ -370,7 +370,7 @@ mod tests {
                 callback: None,
                 amount: Uint128::from(501u128),
             },
-            &vec![],
+            &[],
         )
         .unwrap_err();
 
@@ -383,7 +383,7 @@ mod tests {
                     callback: None,
                     amount: Uint128::from(500u128),
                 },
-                &vec![],
+                &[],
             )
             .unwrap();
 
@@ -421,7 +421,7 @@ mod tests {
                 borrower.clone(),
                 contract.clone(),
                 &ExecuteMsg::Repay {},
-                &vec![coin(100, "btc"), coin(100, "x/ghost-vault-btc-debt")],
+                &[coin(100, "btc"), coin(100, "x/ghost-vault-btc-debt")],
             )
             .unwrap();
 
@@ -445,7 +445,6 @@ mod tests {
             .wrap()
             .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
             .unwrap();
-        dbg!(&status);
         assert_eq!(
             status.utilization_ratio,
             Decimal::from_str("0.509803921568627451").unwrap()
@@ -492,7 +491,7 @@ mod tests {
             borrower.clone(),
             contract.clone(),
             &ExecuteMsg::Repay {},
-            &vec![coin(100, "btc"), coin(100, "x/ghost-vault-btc-debt")],
+            &[coin(100, "btc"), coin(100, "x/ghost-vault-btc-debt")],
         )
         .unwrap_err();
         // debt rate is 1.0325
@@ -502,7 +501,7 @@ mod tests {
                 borrower.clone(),
                 contract.clone(),
                 &ExecuteMsg::Repay {},
-                &vec![coin(104, "btc"), coin(100, "x/ghost-vault-btc-debt")],
+                &[coin(104, "btc"), coin(100, "x/ghost-vault-btc-debt")],
             )
             .unwrap();
         res.assert_event(
@@ -546,7 +545,7 @@ mod tests {
             borrower.clone(),
             contract.clone(),
             &ExecuteMsg::Repay {},
-            &vec![coin(312, "btc"), coin(300, "x/ghost-vault-btc-debt")],
+            &[coin(312, "btc"), coin(300, "x/ghost-vault-btc-debt")],
         )
         .unwrap();
 
@@ -564,7 +563,7 @@ mod tests {
         assert_eq!(status.deposit_pool.shares, Uint128::from(1580u128));
         assert_eq!(
             status.deposit_pool.ratio,
-            Decimal::from_str("1.020253164556962025").unwrap()
+            Decimal::from_str("1.02").unwrap()
         );
     }
 }

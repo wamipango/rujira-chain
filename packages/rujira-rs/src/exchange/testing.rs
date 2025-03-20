@@ -18,7 +18,7 @@ impl TestItem {
             price = price.inv().unwrap();
         }
         Self {
-            price: price,
+            price,
             amount: Uint128::from(amount),
             commitment: Default::default(),
         }

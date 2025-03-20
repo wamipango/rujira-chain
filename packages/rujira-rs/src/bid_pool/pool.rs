@@ -92,7 +92,7 @@ impl Pool {
         snapshots.push(SumSnapshot::from(*self));
 
         Ok(DistributionResult {
-            consumed_offer: consumed_offer,
+            consumed_offer,
             consumed_bids,
             snapshots,
         })

@@ -14,7 +14,7 @@ use cw_storage_plus::Map;
 use serde::de::DeserializeOwned;
 use std::str::FromStr;
 
-use crate::fixtures::mock_pool;
+use crate::fixtures::{mock_network, mock_pool};
 
 pub type RujiraApp = App<
     BankKeeper,
@@ -212,6 +212,7 @@ impl Stargate for RujiraStargate {
     ) -> AnyResult<Binary> {
         match request.path.as_str() {
             "/types.Query/Pool" => mock_pool(request.data),
+            "/types.Query/Network" => mock_network(),
             _ => {
                 anyhow::bail!("Unexpected grpc query: request={:?}", request)
             }
@@ -281,7 +282,7 @@ mod tests {
         assert_eq!(res.savers_units, Uint128::from(56192173382u128));
         assert_eq!(res.savers_fill_bps, 8660);
         assert_eq!(res.savers_capacity_remaining, Uint128::from(9193020653u128));
-        assert_eq!(res.synth_mint_paused, false);
+        assert!(!res.synth_mint_paused);
         assert_eq!(res.synth_supply_remaining, Uint128::from(22913550433u128));
         assert_eq!(res.loan_collateral, Uint128::from(167294477784u128));
         assert_eq!(res.loan_collateral_remaining, Uint128::from(0u128));

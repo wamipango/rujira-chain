@@ -277,14 +277,14 @@ mod test {
         };
         let deps = mock_dependencies_with_balances(&[(
             MOCK_CONTRACT_ADDR,
-            &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
+            &[coin(1000, "denom_x"), coin(2000, "denom_y")],
         )]);
         let sender = Addr::unchecked("sender");
 
         xyk.validate(
             deps.as_ref(),
             mock_env(),
-            message_info(&sender, &vec![]),
+            message_info(&sender, &[]),
             coin(50, "denom_x"),
             coin(95, "denom_y"),
         )
@@ -293,7 +293,7 @@ mod test {
         xyk.validate(
             deps.as_ref(),
             mock_env(),
-            message_info(&sender, &vec![]),
+            message_info(&sender, &[]),
             coin(50, "denom_x"),
             coin(96, "denom_y"),
         )
@@ -302,7 +302,7 @@ mod test {
         xyk.validate(
             deps.as_ref(),
             mock_env(),
-            message_info(&sender, &vec![]),
+            message_info(&sender, &[]),
             coin(100, "denom_y"),
             coin(47, "denom_x"),
         )
@@ -311,7 +311,7 @@ mod test {
         xyk.validate(
             deps.as_ref(),
             mock_env(),
-            message_info(&sender, &vec![]),
+            message_info(&sender, &[]),
             coin(100, "denom_y"),
             coin(48, "denom_x"),
         )
@@ -336,7 +336,7 @@ mod test {
                 mock_env(),
                 message_info(
                     &Addr::unchecked("sender"),
-                    &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
+                    &[coin(1000, "denom_x"), coin(2000, "denom_y")],
                 ),
                 Uint128::zero(),
             )
@@ -346,7 +346,7 @@ mod test {
 
         let deps = mock_dependencies_with_balances(&[(
             MOCK_CONTRACT_ADDR,
-            &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
+            &[coin(1000, "denom_x"), coin(2000, "denom_y")],
         )]);
 
         // Adding 50% in correct ratio
@@ -356,7 +356,7 @@ mod test {
                 mock_env(),
                 message_info(
                     &Addr::unchecked("sender"),
-                    &vec![coin(500, "denom_x"), coin(1000, "denom_y")],
+                    &[coin(500, "denom_x"), coin(1000, "denom_y")],
                 ),
                 Uint128::from(1414u128),
             )
@@ -370,7 +370,7 @@ mod test {
                 mock_env(),
                 message_info(
                     &Addr::unchecked("sender"),
-                    &vec![coin(500, "denom_x"), coin(2000, "denom_y")],
+                    &[coin(500, "denom_x"), coin(2000, "denom_y")],
                 ),
                 Uint128::from(1414u128),
             )
@@ -383,7 +383,7 @@ mod test {
                 mock_env(),
                 message_info(
                     &Addr::unchecked("sender"),
-                    &vec![coin(2000, "denom_x"), coin(1000, "denom_y")],
+                    &[coin(2000, "denom_x"), coin(1000, "denom_y")],
                 ),
                 Uint128::from(1414u128),
             )
@@ -403,14 +403,14 @@ mod test {
         // Initial deposit. Share = sqrt(k)
         let deps = mock_dependencies_with_balances(&[(
             MOCK_CONTRACT_ADDR,
-            &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
+            &[coin(1000, "denom_x"), coin(2000, "denom_y")],
         )]);
 
         let amount = xyk
             .calculate_ownership(
                 deps.as_ref(),
                 mock_env(),
-                message_info(&Addr::unchecked("sender"), &vec![]),
+                message_info(&Addr::unchecked("sender"), &[]),
                 Uint128::zero(),
                 Uint128::zero(),
             )
@@ -422,7 +422,7 @@ mod test {
             .calculate_ownership(
                 deps.as_ref(),
                 mock_env(),
-                message_info(&Addr::unchecked("sender"), &vec![]),
+                message_info(&Addr::unchecked("sender"), &[]),
                 Uint128::from(1000u128),
                 Uint128::zero(),
             )
@@ -434,7 +434,7 @@ mod test {
             .calculate_ownership(
                 deps.as_ref(),
                 mock_env(),
-                message_info(&Addr::unchecked("sender"), &vec![]),
+                message_info(&Addr::unchecked("sender"), &[]),
                 Uint128::from(1000u128),
                 Uint128::from(125u128),
             )
@@ -493,7 +493,7 @@ mod test {
 
         let deps = mock_dependencies_with_balances(&[(
             MOCK_CONTRACT_ADDR,
-            &vec![coin(1000, "denom_x"), coin(2000, "denom_y")],
+            &[coin(1000, "denom_x"), coin(2000, "denom_y")],
         )]);
         // Test with low balances
         let quote = xyk
@@ -512,7 +512,7 @@ mod test {
 
         let deps = mock_dependencies_with_balances(&[(
             MOCK_CONTRACT_ADDR,
-            &vec![
+            &[
                 coin(1_000_000_000, "denom_x"),
                 coin(2_000_000_000, "denom_y"),
             ],
@@ -616,7 +616,7 @@ mod test {
 
         let deps = mock_dependencies_with_balances(&[(
             MOCK_CONTRACT_ADDR,
-            &vec![coin(199900100, "btc"), coin(200100000000, "usdc")],
+            &[coin(199900100, "btc"), coin(200100000000, "usdc")],
         )]);
 
         let quote = xyk
@@ -684,7 +684,7 @@ mod test {
         xyk.validate(
             deps.as_ref(),
             mock_env(),
-            message_info(&sender, &vec![]),
+            message_info(&sender, &[]),
             coin(500_000, "btc"),
             coin(499_201_597, "usdc"),
         )

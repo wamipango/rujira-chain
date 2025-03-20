@@ -97,7 +97,7 @@ pub fn execute(
                     .add_message(cb.to_message(
                         &info.sender,
                         Empty {},
-                        coins(minted.u128(), &t.denom()),
+                        coins(minted.u128(), t.denom()),
                     )?)
                     .add_event(event_deposit(
                         info.sender,
@@ -262,7 +262,7 @@ mod tests {
                 addr.clone(),
                 contract.clone(),
                 &ExecuteMsg::Deposit { callback: None },
-                &vec![coin(1000, "ruji"), coin(1000, "usdc")],
+                &[coin(1000, "ruji"), coin(1000, "usdc")],
             )
             .unwrap();
 
@@ -282,7 +282,7 @@ mod tests {
                 addr.clone(),
                 contract.clone(),
                 &ExecuteMsg::Withdraw { callback: None },
-                &vec![coin(200, "x/bow-xyk-ruji-usdc")],
+                &[coin(200, "x/bow-xyk-ruji-usdc")],
             )
             .unwrap();
 

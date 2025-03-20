@@ -34,7 +34,7 @@ impl<'a> IndexList<ContractConfig> for ContractConfigIndexes<'a> {
 
 impl ContractConfig {
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
-        Self::store().save(storage, &self.contract, &self)
+        Self::store().save(storage, &self.contract, self)
     }
 
     pub fn load(storage: &dyn Storage, addr: Addr) -> StdResult<Self> {

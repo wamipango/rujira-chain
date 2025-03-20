@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(config.owner, owner.to_string());
         assert_eq!(
             config.target_denoms,
-            vec!["uruji".to_string(), "another".to_string()],
+            vec!["another".to_string(), "uruji".to_string(),],
         );
         let status: StatusResponse =
             from_json(query(deps.as_ref(), mock_env(), QueryMsg::Status {}).unwrap()).unwrap();
@@ -408,7 +408,7 @@ mod tests {
             .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
             .unwrap();
         assert_eq!(status.last, Some("token-b".to_string()));
-        assert_eq!(res.events[1].clone().ty, "wasm-revenue/run");
+        assert_eq!(res.events[1].clone().ty, "wasm-rujira-revenue/run");
         assert_eq!(res.events[1].clone().attributes[1].clone().key, "denom");
         assert_eq!(res.events[1].clone().attributes[1].clone().value, "token-b");
 

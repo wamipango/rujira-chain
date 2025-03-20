@@ -287,7 +287,7 @@ mod tests {
 
         let share_balance = app
             .wrap()
-            .query_balance(staker_liquid.to_string(), format!("x/staking-uruji"))
+            .query_balance(staker_liquid.to_string(), "x/staking-uruji".to_string())
             .unwrap();
         assert_eq!(share_balance.amount, Uint128::from(1_000u128));
 
@@ -420,14 +420,14 @@ mod tests {
                 staker_liquid.clone(),
                 contract.clone(),
                 &ExecuteMsg::Liquid(LiquidMsg::Unbond {}),
-                &coins(500, format!("x/staking-uruji")),
+                &coins(500, "x/staking-uruji".to_string()),
             )
             .unwrap();
 
         res.assert_event(
             &Event::new("burn")
                 .add_attribute("amount", "500")
-                .add_attribute("denom", format!("x/staking-uruji")),
+                .add_attribute("denom", "x/staking-uruji".to_string()),
         );
         // total distribution of 30 across 1000 shares, so withdrawal should be 515 uruji
         res.assert_event(

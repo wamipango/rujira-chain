@@ -72,7 +72,7 @@ impl Network {
             height: "0".to_string(),
         };
         let res = QueryNetworkResponse::get(q, req)?;
-        Ok(Network::try_from(res)?)
+        Network::try_from(res)
     }
 }
 

@@ -112,7 +112,7 @@ impl Layer1Asset {
     }
 
     pub fn from_native(denom: String) -> std::result::Result<Self, Layer1AssetError> {
-        if denom == "rune".to_string() {
+        if denom == *"rune" {
             return Ok(Self::new(Chain::Thor, "rune"));
         }
         match denom.split('-').collect::<Vec<_>>().as_slice() {

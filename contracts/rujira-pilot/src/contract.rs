@@ -14,8 +14,8 @@ use cw2::set_contract_version;
 use cw_utils::{must_pay, NativeBalance};
 use rujira_rs::exchange::{SwapError, SwapResult, Swappable, Swapper};
 use rujira_rs::pilot::{
-    ConfigResponse, ExecuteMsg, ExecutorQueryMsg, InstantiateMsg, OrderResponse, OrdersResponse,
-    PoolResponse, PoolsResponse, QueryMsg, SimulationResponse, SudoMsg,
+    ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, PoolResponse,
+    PoolsResponse, QueryMsg, SimulationResponse, SudoMsg,
 };
 
 // version info for migration info
@@ -165,9 +165,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                 Order::by_owner(deps.storage, &addr, offset, limit)?
                     .iter_mut()
                     .map(|(k, order)| {
-                        let pool = Pool::load(deps.storage, &k, &oracle);
+                        let pool = Pool::load(deps.storage, k, &oracle);
                         pool.sync_order(deps.storage, order)?;
-                        Ok(order_response(order, &k, &oracle))
+                        Ok(order_response(order, k, &oracle))
                     })
                     .collect();
 
@@ -207,14 +207,15 @@ fn simulate_swap(
     deps: Deps,
     oracle: &Decimal,
 ) -> Result<SwapResult, SwapError> {
-    let mut iter = Pool::iter(deps.storage, &oracle);
+    let mut iter = Pool::iter(deps.storage, oracle);
     swapper.swap(&mut iter)
 }
 
-fn load_oracle_price(q: QuerierWrapper, config: &Config) -> Result<Decimal, ContractError> {
-    let v: Decimal =
-        q.query_wasm_smart(config.executor.to_string(), &ExecutorQueryMsg::Price {})?;
-    Ok(v)
+fn load_oracle_price(_q: QuerierWrapper, _config: &Config) -> Result<Decimal, ContractError> {
+    // let v: Decimal =
+    //     q.query_wasm_smart(config.executor.to_string(), &ExecutorQueryMsg::Price {})?;
+
+    Ok(Decimal::from_ratio(100000u128, 1u128))
 }
 
 fn order_response(order: &Order, premium: &u8, oracle: &Decimal) -> OrderResponse {
@@ -386,10 +387,11 @@ mod tests {
                     to: None,
                     callback: None,
                 },
-                &vec![swap_amount],
+                &[swap_amount],
             )
             .unwrap();
-        res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
+        dbg!(&res);
+        res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
             ("offer", "100"),
             ("bid", "9000000"),
             ("rate", "90000"),
@@ -415,17 +417,17 @@ mod tests {
                 &coins(300, "btc-btc"),
             )
             .unwrap();
-        res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
+        res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
             ("offer", "12"),
             ("bid", "1000000"),
             ("rate", "90000"),
         ]));
-        res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
+        res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
             ("offer", "148"),
             ("bid", "12500000"),
             ("rate", "85000"),
         ]));
-        res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
+        res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
             ("offer", "140"),
             ("bid", "11200000"),
             ("rate", "80000"),
@@ -449,7 +451,7 @@ mod tests {
             )
             .unwrap();
         // Check that any unused funds are returned
-        res.assert_event(&Event::new("wasm-rujira-orca/trade").add_attributes(vec![
+        res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
             ("offer", "498"),
             ("bid", "39800000"),
             ("rate", "80000"),

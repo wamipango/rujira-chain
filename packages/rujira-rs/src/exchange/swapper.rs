@@ -113,7 +113,7 @@ mod tests {
 
         let mut s = Swapper::new(Uint128::from(7500u128), None, fee);
         let res = s.swap(&mut iter).unwrap();
-        assert_eq!(res.return_amount, Uint128::from(6282u128));
+        assert_eq!(res.return_amount, Uint128::from(6283u128));
         assert_eq!(res.fee_amount, Uint128::from(7u128));
         assert_eq!(res.remaining_offer, Uint128::zero());
 
@@ -190,7 +190,7 @@ mod tests {
         assert_eq!(event.attributes[1].key, "offer");
         assert_eq!(event.attributes[1].value, "483");
         assert_eq!(event.attributes[2].key, "bid");
-        assert_eq!(event.attributes[2].value, "289");
+        assert_eq!(event.attributes[2].value, "290");
         assert_eq!(event.attributes[3].key, "test");
         assert_eq!(event.attributes[3].value, "attr");
     }

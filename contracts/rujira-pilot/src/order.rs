@@ -22,7 +22,7 @@ pub struct Order {
 impl Order {
     pub fn load(storage: &dyn Storage, owner: &Addr, premium: &u8) -> Result<Self, ContractError> {
         let (updated_at, offer, bid) = ORDERS
-            .load(storage, (owner.clone(), premium.clone()))
+            .load(storage, (owner.clone(), *premium))
             .map_err(|_| ContractError::NotFound {})?;
         Ok(Self {
             owner: owner.clone(),

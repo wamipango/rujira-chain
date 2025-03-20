@@ -101,7 +101,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 mod tests {
 
     use super::*;
+    use cosmwasm_std::{coins, Timestamp};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
+    use rujira_rs::stream::Schedule;
 
     #[test]
     fn instantiation() {
@@ -114,9 +116,13 @@ mod tests {
             code_id,
             owner,
             &InstantiateMsg {
-                recipients: todo!(),
-                schedule: todo!(),
-                owner: todo!(),
+                recipients: vec![],
+                schedule: Schedule::Fixed {
+                    starts: Timestamp::default(),
+                    ends: Timestamp::default().plus_days(1),
+                    amount: coins(100, "ruji"),
+                },
+                owner: None,
             },
             &[],
             "template",

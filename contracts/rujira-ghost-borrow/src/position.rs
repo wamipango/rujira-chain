@@ -42,7 +42,8 @@ impl Position {
 
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
         if self.is_zero() {
-            Ok(POSITIONS.remove(storage, self.owner.clone()))
+            POSITIONS.remove(storage, self.owner.clone());
+            Ok(())
         } else {
             POSITIONS.save(
                 storage,

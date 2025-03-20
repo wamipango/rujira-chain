@@ -78,9 +78,9 @@ impl Recipients {
     }
 }
 
-impl Into<Vec<(String, u8)>> for Recipients {
-    fn into(self) -> Vec<(String, u8)> {
-        self.0.iter().map(|(a, v)| (a.to_string(), *v)).collect()
+impl From<Recipients> for Vec<(String, u8)> {
+    fn from(val: Recipients) -> Self {
+        val.0.iter().map(|(a, v)| (a.to_string(), *v)).collect()
     }
 }
 
