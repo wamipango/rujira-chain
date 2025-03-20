@@ -6,6 +6,7 @@ stages:
 
 build:
   stage: build
+  needs: []
   image: docker.io/rust:1.75-slim-bullseye
   script:
     - apt update -y
@@ -22,6 +23,7 @@ build:
 
 test:
   stage: test
+  needs: []
   image: docker.io/rust:1.75-slim-bullseye
   script:
     - apt update -y
@@ -35,6 +37,7 @@ test:
       
 schema:
   stage: schema
+  needs: []
   image: docker.io/rust:1.75-slim-bullseye
   script:
     - apt update -y
@@ -49,6 +52,7 @@ schema:
 
 optimize:
   stage: optimize
+  needs: []
   image: docker.io/rust:1.75-slim-bullseye
   script:
     - apt update -y
