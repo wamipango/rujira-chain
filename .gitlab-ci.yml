@@ -38,7 +38,7 @@ schema:
   image: docker.io/rust:1.75-slim-bullseye
   script:
     - apt update -y
-    - apt install curl -y
+    - apt install curl git -y
     - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/cargo/bin
     - just generate-schema
     - git diff --exit-code || { echo "Schema generation resulted in a diff. Please run 'just generate-schema' locally and commit the changes."; exit 1; }
@@ -52,7 +52,7 @@ optimize:
   image: docker.io/rust:1.75-slim-bullseye
   script:
     - apt update -y
-    - apt install curl -y
+    - apt install curl git -y
     - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/cargo/bin
     - bash ./scripts/optimize.sh
     - git diff --exit-code || { echo "Optimization resulted in a diff. Please run './scripts/optimize.sh' locally and commit the changes."; exit 1; }
