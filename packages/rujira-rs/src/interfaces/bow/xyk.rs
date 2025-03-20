@@ -328,7 +328,11 @@ mod test {
         };
 
         // Initial deposit. Share = sqrt(k)
-        let deps = mock_dependencies();
+
+        let deps = mock_dependencies_with_balances(&[(
+            MOCK_CONTRACT_ADDR,
+            &[coin(1000, "denom_x"), coin(2000, "denom_y")],
+        )]);
 
         let (_, amount) = xyk
             .calculate_share(
@@ -346,7 +350,7 @@ mod test {
 
         let deps = mock_dependencies_with_balances(&[(
             MOCK_CONTRACT_ADDR,
-            &[coin(1000, "denom_x"), coin(2000, "denom_y")],
+            &[coin(1500, "denom_x"), coin(3000, "denom_y")],
         )]);
 
         // Adding 50% in correct ratio
@@ -376,6 +380,11 @@ mod test {
             )
             .unwrap();
         assert_eq!(amount, Uint128::from(707u128));
+
+        let deps = mock_dependencies_with_balances(&[(
+            MOCK_CONTRACT_ADDR,
+            &[coin(3000, "denom_x"), coin(3000, "denom_y")],
+        )]);
 
         let (_, amount) = xyk
             .calculate_share(
