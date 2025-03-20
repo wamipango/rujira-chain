@@ -52,6 +52,7 @@ schema:
 
 optimize:
   stage: optimize
+  needs: []
   image: docker:latest
   services:
     - docker:dind
