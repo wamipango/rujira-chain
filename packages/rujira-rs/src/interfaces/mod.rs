@@ -5,6 +5,7 @@ pub mod ghost_borrow;
 pub mod ghost_registry;
 pub mod ghost_vault;
 pub mod merge;
+pub mod mint;
 pub mod orca;
 pub mod pilot;
 pub mod revenue;
