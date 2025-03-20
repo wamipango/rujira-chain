@@ -6,7 +6,6 @@ use cosmwasm_std::{
 };
 use cw_storage_plus::{Bound, Item, Map};
 use rujira_rs::revenue::{ActionResponse, ConfigResponse, InstantiateMsg};
-use std::collections::HashSet;
 
 static CONFIG: Item<Config> = Item::new("config");
 static LAST: Item<String> = Item::new("last");
@@ -21,7 +20,7 @@ pub struct Config {
     pub executor: Addr,
 
     /// The denoms that are transferred to the fee_collector at the end of every execution
-    target_denoms: HashSet<String>,
+    target_denoms: Vec<String>,
 
     /// The final destinations that `target_denom` is sent to (address, weight)
     pub target_addresses: Vec<(Addr, u8)>,
@@ -32,7 +31,7 @@ impl Config {
         Ok(Self {
             owner: api.addr_validate(&value.owner)?,
             executor: api.addr_validate(&value.executor)?,
-            target_denoms: HashSet::from_iter(value.target_denoms.iter().cloned()),
+            target_denoms: value.target_denoms,
             target_addresses: value
                 .target_addresses
                 .iter()
@@ -50,13 +49,14 @@ impl Config {
     }
 
     pub fn target_denoms(&self) -> Vec<String> {
-        let mut target_denoms: Vec<String> = self.target_denoms.clone().into_iter().collect();
-        target_denoms.sort();
-        target_denoms
+        self.clone().target_denoms
     }
 
-    pub fn add_target_denom(&mut self, denom: String) -> bool {
-        self.target_denoms.insert(denom)
+    pub fn add_target_denom(&mut self, denom: String) {
+        if self.target_denoms.contains(&denom) {
+            return;
+        }
+        self.target_denoms.push(denom);
     }
 }
 

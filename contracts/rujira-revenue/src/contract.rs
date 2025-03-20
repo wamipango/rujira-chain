@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(config.owner, owner.to_string());
         assert_eq!(
             config.target_denoms,
-            vec!["another".to_string(), "uruji".to_string(),],
+            vec!["uruji".to_string(), "another".to_string()],
         );
         let status: StatusResponse =
             from_json(query(deps.as_ref(), mock_env(), QueryMsg::Status {}).unwrap()).unwrap();
