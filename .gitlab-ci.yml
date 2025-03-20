@@ -56,8 +56,6 @@ optimize:
   image: docker:latest
   services:
     - docker:dind
-  script: >
-    docker run --platform linux/x86_64 --rm -v "$CI_PROJECT_DIR":/code
-        --mount type=volume,source="$(basename "$CI_PROJECT_DIR")_cache",target=/target
-        --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry
-        cosmwasm/optimizer:0.16.1
+  script:
+    - docker run --platform linux/x86_64 --rm -v "$CI_PROJECT_DIR":/code --mount type=volume,source="$(basename "$CI_PROJECT_DIR")_cache",target=/target --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry cosmwasm/optimizer:0.16.1
+    - git diff --exit-code || { echo "Schema generation resulted in a diff. Please run 'just generate-schema' locally and commit the changes."; exit 1; }
