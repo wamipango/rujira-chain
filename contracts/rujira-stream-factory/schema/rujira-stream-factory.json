@@ -28,6 +28,12 @@
       "schedule"
     ],
     "properties": {
+      "owner": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "recipients": {
         "type": "array",
         "items": {

@@ -5,32 +5,6 @@
     {
       "type": "object",
       "required": [
-        "pause"
-      ],
-      "properties": {
-        "pause": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "resume"
-      ],
-      "properties": {
-        "resume": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
         "update_config"
       ],
       "properties": {
@@ -69,6 +43,17 @@
                 "null"
               ]
             },
+            "oracles": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/definitions/Layer1Asset"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
             "tick": {
               "anyOf": [
                 {
@@ -87,9 +72,39 @@
     }
   ],
   "definitions": {
+    "Chain": {
+      "type": "string",
+      "enum": [
+        "avax",
+        "bch",
+        "bsc",
+        "btc",
+        "doge",
+        "eth",
+        "gaia",
+        "ltc",
+        "thor"
+      ]
+    },
     "Decimal": {
       "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0\n\nThe greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)",
       "type": "string"
+    },
+    "Layer1Asset": {
+      "type": "object",
+      "required": [
+        "chain",
+        "symbol"
+      ],
+      "properties": {
+        "chain": {
+          "$ref": "#/definitions/Chain"
+        },
+        "symbol": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     },
     "Tick": {
       "type": "integer",

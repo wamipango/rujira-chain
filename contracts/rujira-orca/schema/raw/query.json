@@ -19,19 +19,6 @@
     {
       "type": "object",
       "required": [
-        "status"
-      ],
-      "properties": {
-        "status": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
         "simulate"
       ],
       "properties": {

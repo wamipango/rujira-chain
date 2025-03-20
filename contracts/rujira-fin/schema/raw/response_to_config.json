@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConfigResponse",
+  "type": "object",
+  "required": [
+    "denoms",
+    "fee_address",
+    "fee_maker",
+    "fee_taker",
+    "tick"
+  ],
+  "properties": {
+    "denoms": {
+      "description": "See [InstantiateMsg::denoms]",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Denoms"
+        }
+      ]
+    },
+    "fee_address": {
+      "description": "See [InstantiateMsg::fee_address]",
+      "type": "string"
+    },
+    "fee_maker": {
+      "description": "See [InstantiateMsg::fee_maker]",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Decimal"
+        }
+      ]
+    },
+    "fee_taker": {
+      "description": "See [InstantiateMsg::fee_taker]",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Decimal"
+        }
+      ]
+    },
+    "market_maker": {
+      "description": "See [InstantiateMsg::market_maker]",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "oracles": {
+      "description": "See [InstantiateMsg::oracles]",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/Layer1Asset"
+      },
+      "maxItems": 2,
+      "minItems": 2
+    },
+    "tick": {
+      "description": "See [InstantiateMsg::tick]",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Tick"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "Chain": {
+      "type": "string",
+      "enum": [
+        "avax",
+        "bch",
+        "bsc",
+        "btc",
+        "doge",
+        "eth",
+        "gaia",
+        "ltc",
+        "thor"
+      ]
+    },
+    "Decimal": {
+      "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0\n\nThe greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)",
+      "type": "string"
+    },
+    "Denoms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 2
+    },
+    "Layer1Asset": {
+      "type": "object",
+      "required": [
+        "chain",
+        "symbol"
+      ],
+      "properties": {
+        "chain": {
+          "$ref": "#/definitions/Chain"
+        },
+        "symbol": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Tick": {
+      "type": "integer",
+      "format": "uint8",
+      "minimum": 0.0
+    }
+  }
+}

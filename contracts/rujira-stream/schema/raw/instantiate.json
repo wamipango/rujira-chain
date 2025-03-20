@@ -7,6 +7,12 @@
     "schedule"
   ],
   "properties": {
+    "owner": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "recipients": {
       "type": "array",
       "items": {
@@ -75,6 +81,39 @@
                   "type": "integer",
                   "format": "uint64",
                   "minimum": 0.0
+                },
+                "starts": {
+                  "$ref": "#/definitions/Timestamp"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Fixed, single distribution",
+          "type": "object",
+          "required": [
+            "fixed"
+          ],
+          "properties": {
+            "fixed": {
+              "type": "object",
+              "required": [
+                "amount",
+                "ends",
+                "starts"
+              ],
+              "properties": {
+                "amount": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Coin"
+                  }
+                },
+                "ends": {
+                  "$ref": "#/definitions/Timestamp"
                 },
                 "starts": {
                   "$ref": "#/definitions/Timestamp"

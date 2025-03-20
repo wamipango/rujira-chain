@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConfigResponse",
+  "type": "object",
+  "required": [
+    "checksum",
+    "code_id"
+  ],
+  "properties": {
+    "checksum": {
+      "$ref": "#/definitions/HexBinary"
+    },
+    "code_id": {
+      "description": "The Code ID used to deploy and register new ghost-debt markets",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "HexBinary": {
+      "description": "This is a wrapper around Vec<u8> to add hex de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is similar to `cosmwasm_std::Binary` but uses hex. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.",
+      "type": "string"
+    }
+  }
+}

@@ -7,7 +7,6 @@
     "fee_address",
     "fee_maker",
     "fee_taker",
-    "oracles",
     "tick"
   ],
   "properties": {
@@ -47,7 +46,10 @@
       ]
     },
     "oracles": {
-      "type": "array",
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "$ref": "#/definitions/Layer1Asset"
       },

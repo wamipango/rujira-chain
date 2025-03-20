@@ -1,5 +1,8 @@
 stages:
   - build
+  - test
+  - schema
+  - optimize
 
 build:
   stage: build
@@ -12,6 +15,47 @@ build:
     - just cargo-compile
     - just cargo-clippy-check
     - just cargo-fmt-check
+  cache:
+    paths:
+      - .cargo
+      - target
+
+test:
+  stage: test
+  image: docker.io/rust:1.75-slim-bullseye
+  script:
+    - apt update -y
+    - apt install curl -y
+    - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/cargo/bin
+    - just cargo-test
+  cache:
+    paths:
+      - .cargo
+      - target
+      
+schema:
+  stage: schema
+  image: docker.io/rust:1.75-slim-bullseye
+  script:
+    - apt update -y
+    - apt install curl -y
+    - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/cargo/bin
+    - just generate-schema
+    - git diff --exit-code || { echo "Schema generation resulted in a diff. Please run 'just generate-schema' locally and commit the changes."; exit 1; }
+  cache:
+    paths:
+      - .cargo
+      - target
+
+optimize:
+  stage: optimize
+  image: docker.io/rust:1.75-slim-bullseye
+  script:
+    - apt update -y
+    - apt install curl -y
+    - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/cargo/bin
+    - bash ./scripts/optimize.sh
+    - git diff --exit-code || { echo "Optimization resulted in a diff. Please run './scripts/optimize.sh' locally and commit the changes."; exit 1; }
   cache:
     paths:
       - .cargo

@@ -1,6 +1,60 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "QueryMsg",
-  "type": "string",
-  "enum": []
+  "oneOf": [
+    {
+      "description": "Query global config settings",
+      "type": "object",
+      "required": [
+        "config"
+      ],
+      "properties": {
+        "config": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Query global status of lending market",
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Query the status of a registered debt market",
+      "type": "object",
+      "required": [
+        "contract_config"
+      ],
+      "properties": {
+        "contract_config": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Query the status of a registered debt market",
+      "type": "object",
+      "required": [
+        "contract_status"
+      ],
+      "properties": {
+        "contract_status": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
 }

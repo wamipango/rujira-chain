@@ -3,15 +3,34 @@
   "title": "StatusResponse",
   "type": "object",
   "required": [
-    "amount",
-    "shares"
+    "merged",
+    "shares",
+    "size"
   ],
   "properties": {
-    "amount": {
-      "$ref": "#/definitions/Uint128"
+    "merged": {
+      "description": "Total `[InstantiateMsg::merge_denom]` merged",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Uint128"
+        }
+      ]
     },
     "shares": {
-      "$ref": "#/definitions/Uint128"
+      "description": "Total shares issued",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Uint128"
+        }
+      ]
+    },
+    "size": {
+      "description": "Total `[InstantiateMsg::ruji_denom]` allocated to shareholders",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Uint128"
+        }
+      ]
     }
   },
   "additionalProperties": false,
