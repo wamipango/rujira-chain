@@ -173,20 +173,23 @@ pub fn distribute(
 pub fn status(env: Env, deps: Deps, config: &Config) -> StdResult<StatusResponse> {
     let liquid = POOL_LIQUID.load(deps.storage)?;
     let account = POOL_ACCOUNTS.load(deps.storage)?;
+    let swap_pending = PENDING_SWAP.load(deps.storage)?;
 
     let revenue_balance = deps
         .querier
         .query_balance(env.contract.address.clone(), config.revenue_denom.clone())?
         .amount;
 
-    let revenue_surplus = revenue_balance.checked_sub(account.pending)?;
+    let revenue_surplus = revenue_balance
+        .checked_sub(account.pending)?
+        .checked_sub(swap_pending)?;
 
     Ok(StatusResponse {
         account_bond: account.total,
-        account_revenue: account.pending,
+        assigned_revenue: account.pending,
         liquid_bond_shares: liquid.shares(),
         liquid_bond_size: liquid.size(),
-        pending_revenue: revenue_surplus,
+        undistributed_revenue: revenue_surplus,
     })
 }
 

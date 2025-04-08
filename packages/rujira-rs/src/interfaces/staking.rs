@@ -79,7 +79,7 @@ pub struct StatusResponse {
     pub account_bond: Uint128,
 
     /// The total amount of [InstantiateMsg::revenue_denom] available for Account staking to claim
-    pub account_revenue: Uint128,
+    pub assigned_revenue: Uint128,
 
     /// The total shares issued for the liquid bonded tokens
     pub liquid_bond_shares: Uint128,
@@ -88,7 +88,7 @@ pub struct StatusResponse {
     pub liquid_bond_size: Uint128,
 
     /// The amount of [InstantiateMsg::revenue_denom] pending distribution
-    pub pending_revenue: Uint128,
+    pub undistributed_revenue: Uint128,
 }
 
 #[cw_serde]
