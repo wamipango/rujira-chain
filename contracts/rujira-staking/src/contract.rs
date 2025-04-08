@@ -395,10 +395,10 @@ mod tests {
             "After staker_liquid first bond of 1_000",
             &StatusResponse {
                 account_bond: Uint128::zero(),
-                account_revenue: Uint128::zero(),
+                assigned_revenue: Uint128::zero(),
                 liquid_bond_shares: Uint128::from(1_000u128),
                 liquid_bond_size: Uint128::from(1_000u128),
-                pending_revenue: Uint128::zero(),
+                undistributed_revenue: Uint128::zero(),
             },
         );
 
@@ -428,10 +428,10 @@ mod tests {
             "After staker_account_1 first bond of 500",
             &StatusResponse {
                 account_bond: Uint128::from(500u128),
-                account_revenue: Uint128::zero(),
+                assigned_revenue: Uint128::zero(),
                 liquid_bond_shares: Uint128::from(1_000u128),
                 liquid_bond_size: Uint128::from(1_000u128),
-                pending_revenue: Uint128::zero(),
+                undistributed_revenue: Uint128::zero(),
             },
         );
 
@@ -463,18 +463,14 @@ mod tests {
             "After staker_account_2 first bond of 500",
             &StatusResponse {
                 account_bond: Uint128::from(1_000u128),
-                account_revenue: [
+                assigned_revenue: [
                     Uint128::from(33u128),
                     Uint128::from(31u128),
                     Uint128::from(30u128),
                 ][fee_index],
                 liquid_bond_shares: Uint128::from(1_000u128),
                 liquid_bond_size: Uint128::from(1_000u128),
-                pending_revenue: [
-                    Uint128::from(47u128),
-                    Uint128::from(44u128),
-                    Uint128::from(40u128),
-                ][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()][fee_index],
             },
         );
 
@@ -563,14 +559,10 @@ mod tests {
             "After staker_account_1 second bond of 500",
             &StatusResponse {
                 account_bond: Uint128::from(1500u128),
-                account_revenue: expected_account_revenue, // [Uint128::from(25u128), Uint128::from(24u128), Uint128::from(23u128)][fee_index]
+                assigned_revenue: expected_account_revenue, // [Uint128::from(25u128), Uint128::from(24u128), Uint128::from(23u128)][fee_index]
                 liquid_bond_shares: Uint128::from(1000u128),
                 liquid_bond_size: Uint128::from(1010u128),
-                pending_revenue: [
-                    Uint128::from(77u128),
-                    Uint128::from(71u128),
-                    Uint128::from(65u128),
-                ][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()][fee_index],
             },
         );
 
@@ -604,14 +596,11 @@ mod tests {
             "After staker_account_2 claim all",
             &StatusResponse {
                 account_bond: Uint128::from(1500u128),
-                account_revenue: expected_account_revenue - expected_claim_account_2, // [Uint128::zero(), Uint128::from(1u128), Uint128::from(1u128)][fee_index]
+                assigned_revenue: expected_account_revenue - expected_claim_account_2, // [Uint128::zero(), Uint128::one(), Uint128::one()][fee_index]
                 liquid_bond_shares: Uint128::from(1000u128),
                 liquid_bond_size: Uint128::from(1020u128),
-                pending_revenue: [
-                    Uint128::from(57u128),
-                    Uint128::from(50u128),
-                    Uint128::from(45u128),
-                ][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::zero(), Uint128::zero()]
+                    [fee_index],
             },
         );
 
@@ -649,14 +638,11 @@ mod tests {
             "After staker_liquid unbound 500",
             &StatusResponse {
                 account_bond: Uint128::from(1500u128),
-                account_revenue: expected_account_revenue_2, // [Uint128::zero(),  Uint128::one(), Uint128::one()][fee_index]
+                assigned_revenue: expected_account_revenue_2, // [Uint128::zero(),  Uint128::one(), Uint128::one()][fee_index]
                 liquid_bond_shares: Uint128::from(500u128),
                 liquid_bond_size: Uint128::from(515u128),
-                pending_revenue: [
-                    Uint128::from(37u128),
-                    Uint128::from(30u128),
-                    Uint128::from(25u128),
-                ][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::zero(), Uint128::zero()]
+                    [fee_index],
             },
         );
 
@@ -700,18 +686,14 @@ mod tests {
             "After staker_account_1 withdraw of 50",
             &StatusResponse {
                 account_bond: Uint128::from(1450u128),
-                account_revenue: [
+                assigned_revenue: [
                     Uint128::from(25u128),
                     Uint128::from(25u128),
                     Uint128::from(23u128),
                 ][fee_index],
                 liquid_bond_shares: Uint128::from(500u128),
                 liquid_bond_size: Uint128::from(525u128),
-                pending_revenue: [
-                    Uint128::from(42u128),
-                    Uint128::from(35u128),
-                    Uint128::from(29u128),
-                ][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::one()][fee_index],
             },
         );
 
