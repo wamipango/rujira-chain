@@ -1,10 +1,12 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Api, Decimal, StdResult, Storage};
+use cosmwasm_std::{Addr, Api, Decimal, Deps, StdResult, Storage};
 use cw_storage_plus::Item;
 use rujira_rs::{
     fin::{ConfigResponse, Denoms, InstantiateMsg, Tick},
-    Layer1Asset,
+    Layer1Asset, Oracle,
 };
+
+use crate::ContractError;
 
 pub static CONFIG: Item<Config> = Item::new("config");
 
@@ -35,7 +37,18 @@ impl Config {
         })
     }
 
-    pub fn validate(&self) -> StdResult<()> {
+    pub fn validate(&self, deps: Deps) -> Result<(), ContractError> {
+        self.denoms.validate()?;
+        if let Some(oracles) = self.oracles.clone() {
+            oracles[0].price(deps.querier)?;
+            oracles[1].price(deps.querier)?;
+        }
+        if self.fee_maker >= Decimal::one() {
+            return Err(ContractError::Invalid("fee_maker >= 1".into()));
+        }
+        if self.fee_taker >= Decimal::one() {
+            return Err(ContractError::Invalid("fee_take >= 1".into()));
+        }
         Ok(())
     }
 

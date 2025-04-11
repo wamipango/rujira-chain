@@ -53,7 +53,7 @@ impl OrderManager {
     pub fn execute_orders(
         &mut self,
         storage: &mut dyn Storage,
-        o: Vec<(Side, Price, Uint128)>,
+        o: Vec<(Side, Price, Option<Uint128>)>,
         oracle: &impl Premiumable,
     ) -> Result<ExecutionResult, ContractError> {
         for (side, price, target) in o {
@@ -85,28 +85,31 @@ impl OrderManager {
         pool: &mut Pool,
         order: &mut Order,
         side: &Side,
-        target: Uint128,
+        target: Option<Uint128>,
     ) -> Result<(), ContractError> {
         self.maybe_withdraw(storage, pool, order)?;
-        let amount = Uint128::try_from(order.bid.amount()).unwrap();
-        match amount.cmp(&target) {
-            Ordering::Less => {
-                let diff = target - amount;
+        if let Some(target) = target {
+            let amount = Uint128::try_from(order.bid.amount()).unwrap();
+            match amount.cmp(&target) {
+                Ordering::Less => {
+                    let diff = target - amount;
 
-                let amount = pool.increase_order(storage, order, &self.timestamp, diff)?;
-                let coins = coin(amount.u128(), self.denoms.bid(side));
-                self.send += coins;
-                self.events.push(event_increase_order(pool, order, &diff));
+                    let amount = pool.increase_order(storage, order, &self.timestamp, diff)?;
+                    let coins = coin(amount.u128(), self.denoms.bid(side));
+                    self.send += coins;
+                    self.events.push(event_increase_order(pool, order, &diff));
+                }
+                Ordering::Greater => {
+                    let diff = amount - target;
+                    let amount = pool.retract_order(storage, order, &self.timestamp, Some(diff))?;
+                    let coins = coin(amount.u128(), self.denoms.bid(side));
+                    self.receive += coins;
+                    self.events.push(event_retract_order(pool, order, &diff));
+                }
+                Ordering::Equal => {}
             }
-            Ordering::Greater => {
-                let diff = amount - target;
-                let amount = pool.retract_order(storage, order, &self.timestamp, Some(diff))?;
-                let coins = coin(amount.u128(), self.denoms.bid(side));
-                self.receive += coins;
-                self.events.push(event_retract_order(pool, order, &diff));
-            }
-            Ordering::Equal => {}
         }
+
         Ok(())
     }
 
@@ -115,12 +118,14 @@ impl OrderManager {
         storage: &mut dyn Storage,
         pool: &mut Pool,
         side: &Side,
-        target: Uint128,
+        target: Option<Uint128>,
     ) -> Result<(), ContractError> {
-        let order = pool.create_order(storage, &self.timestamp, &self.owner, target)?;
-        let coins = coin(order.amount().u128(), self.denoms.bid(side));
-        self.send += coins;
-        self.events.push(event_create_order(pool, &order));
+        if let Some(target) = target {
+            let order = pool.create_order(storage, &self.timestamp, &self.owner, target)?;
+            let coins = coin(order.amount().u128(), self.denoms.bid(side));
+            self.send += coins;
+            self.events.push(event_create_order(pool, &order));
+        }
         Ok(())
     }
 
@@ -205,7 +210,7 @@ mod tests {
                 vec![(
                     Side::Quote,
                     Price::Fixed(Decimal::from_str("1.0").unwrap()),
-                    Uint128::from(1000u128),
+                    Some(Uint128::from(1000u128)),
                 )],
                 &oracle,
             )
@@ -253,14 +258,14 @@ mod tests {
                     (
                         Side::Quote,
                         Price::Fixed(Decimal::from_str("1.0").unwrap()),
-                        Uint128::from(1000u128),
+                        Some(Uint128::from(1000u128)),
                     ),
-                    (Side::Quote, Price::Oracle(0), Uint128::from(2000u128)),
-                    (Side::Base, Price::Oracle(0), Uint128::from(1200u128)),
+                    (Side::Quote, Price::Oracle(0), Some(Uint128::from(2000u128))),
+                    (Side::Base, Price::Oracle(0), Some(Uint128::from(1200u128))),
                     (
                         Side::Base,
                         Price::Fixed(Decimal::from_str("1.3").unwrap()),
-                        Uint128::from(1300u128),
+                        Some(Uint128::from(1300u128)),
                     ),
                 ],
                 &oracle,
@@ -337,7 +342,7 @@ mod tests {
             vec![(
                 Side::Quote,
                 Price::Fixed(Decimal::from_str("1.0").unwrap()),
-                Uint128::from(1000u128),
+                Some(Uint128::from(1000u128)),
             )],
             &oracle,
         )
@@ -372,14 +377,14 @@ mod tests {
                 (
                     Side::Quote,
                     Price::Fixed(Decimal::from_str("1.0").unwrap()),
-                    Uint128::from(1000u128),
+                    Some(Uint128::from(1000u128)),
                 ),
-                (Side::Quote, Price::Oracle(0), Uint128::from(2000u128)),
-                (Side::Base, Price::Oracle(0), Uint128::from(1200u128)),
+                (Side::Quote, Price::Oracle(0), Some(Uint128::from(2000u128))),
+                (Side::Base, Price::Oracle(0), Some(Uint128::from(1200u128))),
                 (
                     Side::Base,
                     Price::Fixed(Decimal::from_str("1.3").unwrap()),
-                    Uint128::from(1300u128),
+                    Some(Uint128::from(1300u128)),
                 ),
             ],
             &oracle,
@@ -402,16 +407,16 @@ mod tests {
                     (
                         Side::Quote,
                         Price::Fixed(Decimal::from_str("0.99").unwrap()),
-                        Uint128::from(1000u128),
+                        Some(Uint128::from(1000u128)),
                     ),
                     (
                         Side::Quote,
                         Price::Fixed(Decimal::from_str("1.0").unwrap()),
-                        Uint128::zero(),
+                        Some(Uint128::zero()),
                     ),
                     // Split 1200 ito 2 x 600
-                    (Side::Base, Price::Oracle(0), Uint128::from(600u128)),
-                    (Side::Base, Price::Oracle(10), Uint128::from(600u128)),
+                    (Side::Base, Price::Oracle(0), Some(Uint128::from(600u128))),
+                    (Side::Base, Price::Oracle(10), Some(Uint128::from(600u128))),
                 ],
                 &oracle,
             )
@@ -479,8 +484,8 @@ mod tests {
             .execute_orders(
                 &mut deps.storage,
                 vec![
-                    (Side::Base, Price::Oracle(0), Uint128::from(300u128)),
-                    (Side::Base, Price::Oracle(10), Uint128::from(1200u128)),
+                    (Side::Base, Price::Oracle(0), Some(Uint128::from(300u128))),
+                    (Side::Base, Price::Oracle(10), Some(Uint128::from(1200u128))),
                 ],
                 &oracle,
             )
@@ -538,7 +543,7 @@ mod tests {
             vec![(
                 Side::Quote,
                 Price::Fixed(Decimal::from_str("1.001").unwrap()),
-                Uint128::from(1000u128),
+                Some(Uint128::from(1000u128)),
             )],
             &oracle,
         )

@@ -33,7 +33,7 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     let config = Config::new(deps.api, msg)?;
-    config.validate()?;
+    config.validate(deps.as_ref())?;
     config.save(deps.storage)?;
     Ok(Response::default())
 }
@@ -245,6 +245,7 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
                 fee_address,
                 oracles,
             );
+            config.validate(deps.as_ref())?;
             config.save(deps.storage)?;
             Ok(Response::default())
         }
@@ -368,7 +369,7 @@ mod tests {
 
     use super::*;
     use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128};
-    use cw_multi_test::{BasicApp, ContractWrapper, Executor};
+    use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{
         fin::{Denoms, SwapRequest, Tick},
         Layer1Asset,
@@ -412,15 +413,7 @@ mod tests {
 
     #[test]
     fn instantiation() {
-        println!(
-            "{}",
-            to_json_binary(&ExecuteMsg::Order((
-                (vec![(Side::Base, Price::Oracle(1i16), Uint128::one())]),
-                None
-            )))
-            .unwrap()
-        );
-        let mut app = BasicApp::default();
+        let mut app = mock_rujira_app();
         let owner = app.api().addr_make("owner");
 
         let code = Box::new(ContractWrapper::new(execute, instantiate, query));
@@ -431,8 +424,9 @@ mod tests {
             &InstantiateMsg {
                 denoms: Denoms::new("ruji", "eth-usdc"),
                 oracles: Some([
-                    Layer1Asset::try_from("THOR.RUJI").unwrap(),
-                    Layer1Asset::try_from("ETH.USDC").unwrap(),
+                    Layer1Asset::try_from("BTC.BTC").unwrap(),
+                    Layer1Asset::try_from("ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48")
+                        .unwrap(),
                 ]),
                 market_maker: None,
                 tick: Tick::new(4u8),
@@ -464,37 +458,45 @@ mod tests {
             contract.clone(),
             &ExecuteMsg::Order((
                 vec![
-                    (Side::Base, Price::Oracle(0), Uint128::from(1000000u128)),
+                    (
+                        Side::Base,
+                        Price::Oracle(0),
+                        Some(Uint128::from(1000000u128)),
+                    ),
                     (
                         Side::Base,
                         Price::Fixed(Decimal::from_str("100000").unwrap()),
-                        Uint128::from(1000000u128),
+                        Some(Uint128::from(1000000u128)),
                     ),
                     (
                         Side::Base,
                         Price::Fixed(Decimal::from_str("93317").unwrap()),
-                        Uint128::from(1000000u128),
+                        Some(Uint128::from(1000000u128)),
                     ),
                     (
                         Side::Base,
                         Price::Fixed(Decimal::from_str("93219").unwrap()),
-                        Uint128::from(2100000u128),
+                        Some(Uint128::from(2100000u128)),
                     ),
                     (
                         Side::Base,
                         Price::Fixed(Decimal::from_str("91219").unwrap()),
-                        Uint128::from(5100000u128),
+                        Some(Uint128::from(5100000u128)),
                     ),
-                    (Side::Quote, Price::Oracle(1), Uint128::from(1000000u128)),
+                    (
+                        Side::Quote,
+                        Price::Oracle(1),
+                        Some(Uint128::from(1000000u128)),
+                    ),
                     (
                         Side::Quote,
                         Price::Fixed(Decimal::from_str("100010").unwrap()),
-                        Uint128::from(1250000u128),
+                        Some(Uint128::from(1250000u128)),
                     ),
                     (
                         Side::Quote,
                         Price::Fixed(Decimal::from_str("87900").unwrap()),
-                        Uint128::from(5100000u128),
+                        Some(Uint128::from(5100000u128)),
                     ),
                 ],
                 None,
@@ -564,41 +566,41 @@ mod tests {
             contract.clone(),
             &ExecuteMsg::Order((
                 vec![
-                    (Side::Base, Price::Oracle(0), Uint128::from(10000u128)),
+                    (Side::Base, Price::Oracle(0), Some(Uint128::from(10000u128))),
                     (
                         Side::Base,
                         Price::Fixed(Decimal::from_str("100000").unwrap()),
-                        Uint128::from(10000u128),
+                        Some(Uint128::from(10000u128)),
                     ),
                     (
                         Side::Base,
                         Price::Fixed(Decimal::from_str("93317").unwrap()),
-                        Uint128::from(10000u128),
+                        Some(Uint128::from(10000u128)),
                     ),
                     (
                         Side::Base,
                         Price::Fixed(Decimal::from_str("93219").unwrap()),
-                        Uint128::from(21000u128),
+                        Some(Uint128::from(21000u128)),
                     ),
                     (
                         Side::Base,
                         Price::Fixed(Decimal::from_str("91219").unwrap()),
-                        Uint128::from(51000u128),
+                        Some(Uint128::from(51000u128)),
                     ),
                     (
                         Side::Quote,
                         Price::Oracle(-1000),
-                        Uint128::from(1000000000u128),
+                        Some(Uint128::from(1000000000u128)),
                     ),
                     (
                         Side::Quote,
                         Price::Fixed(Decimal::from_str("90000").unwrap()),
-                        Uint128::from(1250000000u128),
+                        Some(Uint128::from(1250000000u128)),
                     ),
                     (
                         Side::Quote,
                         Price::Fixed(Decimal::from_str("87900").unwrap()),
-                        Uint128::from(5100000000u128),
+                        Some(Uint128::from(5100000000u128)),
                     ),
                 ],
                 None,
@@ -793,7 +795,7 @@ mod tests {
                 vec![(
                     Side::Base,
                     Price::Fixed(Decimal::from_str("1000.00").unwrap()),
-                    Uint128::from(100u128),
+                    Some(Uint128::from(100u128)),
                 )],
                 None,
             )),
@@ -808,7 +810,7 @@ mod tests {
                 vec![(
                     Side::Base,
                     Price::Fixed(Decimal::from_str("1000.00").unwrap()),
-                    Uint128::from(1000u128),
+                    Some(Uint128::from(1000u128)),
                 )],
                 None,
             )),
@@ -823,7 +825,7 @@ mod tests {
                 vec![(
                     Side::Base,
                     Price::Fixed(Decimal::from_str("1000.00").unwrap()),
-                    Uint128::from(500u128),
+                    Some(Uint128::from(500u128)),
                 )],
                 None,
             )),
@@ -999,7 +1001,7 @@ mod tests {
                 vec![(
                     Side::Base,
                     Price::Fixed(Decimal::from_str("1000.00").unwrap()),
-                    Uint128::from(100u128),
+                    Some(Uint128::from(100u128)),
                 )],
                 None,
             )),
@@ -1014,7 +1016,7 @@ mod tests {
                 vec![(
                     Side::Base,
                     Price::Fixed(Decimal::from_str("1000.00").unwrap()),
-                    Uint128::from(1000u128),
+                    Some(Uint128::from(1000u128)),
                 )],
                 None,
             )),
@@ -1029,7 +1031,7 @@ mod tests {
                 vec![(
                     Side::Base,
                     Price::Fixed(Decimal::from_str("1000.00").unwrap()),
-                    Uint128::from(500u128),
+                    Some(Uint128::from(500u128)),
                 )],
                 None,
             )),

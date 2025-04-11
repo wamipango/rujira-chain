@@ -31,6 +31,8 @@ pub struct InstantiateMsg {
     pub fee_address: String,
 }
 
+type OrderTarget = (Side, Price, Option<Uint128>);
+
 /// Callable interfaces
 #[cw_serde]
 pub enum ExecuteMsg {
@@ -47,7 +49,7 @@ pub enum ExecuteMsg {
     ///
     /// Funds sent must be equal to the net change of balances. Funds withdrawn in step 0 and retracted in 1's,
     /// can be reused to fund orders in 1 and 3  
-    Order((Vec<(Side, Price, Uint128)>, Option<CallbackData>)),
+    Order((Vec<OrderTarget>, Option<CallbackData>)),
 
     Arb {
         then: Option<Binary>,

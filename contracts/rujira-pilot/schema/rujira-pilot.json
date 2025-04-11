@@ -160,7 +160,14 @@
                       "$ref": "#/definitions/Price"
                     },
                     {
-                      "$ref": "#/definitions/Uint128"
+                      "anyOf": [
+                        {
+                          "$ref": "#/definitions/Uint128"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   ],
                   "maxItems": 3,
