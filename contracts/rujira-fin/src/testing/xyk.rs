@@ -368,14 +368,18 @@ fn combined_book() {
                 (
                     Side::Quote,
                     Price::Fixed(Decimal::from_str("99700.703").unwrap()),
-                    Uint128::from(50_000_000u128),
+                    Some(Uint128::from(50_000_000u128)),
                 ),
                 (
                     Side::Quote,
                     Price::Fixed(Decimal::from_str("99600").unwrap()),
-                    Uint128::from(50_000_000u128),
+                    Some(Uint128::from(50_000_000u128)),
                 ),
-                (Side::Quote, Price::Oracle(0), Uint128::from(50_000_000u128)),
+                (
+                    Side::Quote,
+                    Price::Oracle(0),
+                    Some(Uint128::from(50_000_000u128)),
+                ),
             ],
             None,
         )),
@@ -493,7 +497,7 @@ fn combined_book() {
                 vec![(
                     Side::Quote,
                     Price::Fixed(Decimal::from_str("99600").unwrap()),
-                    Uint128::zero(),
+                    Some(Uint128::zero()),
                 )],
                 None,
             )),
@@ -597,7 +601,7 @@ fn test_arbitrage_quote_single() {
                 vec![(
                     Side::Base,
                     Price::Fixed(Decimal::from_str("998").unwrap()),
-                    Uint128::from(10_000u128),
+                    Some(Uint128::from(10_000u128)),
                 )],
                 None,
             )),
@@ -682,7 +686,7 @@ fn test_arbitrage_quote_multi() {
                 vec![(
                     Side::Quote,
                     Price::Fixed(Decimal::from_str("1004").unwrap()),
-                    Uint128::from(600_000_000u128),
+                    Some(Uint128::from(600_000_000u128)),
                 )],
                 None,
             )),
@@ -727,7 +731,7 @@ fn test_arbitrage_quote_multi() {
                 vec![(
                     Side::Quote,
                     Price::Fixed(Decimal::from_str("1006").unwrap()),
-                    Uint128::from(10_000_000u128),
+                    Some(Uint128::from(10_000_000u128)),
                 )],
                 None,
             )),

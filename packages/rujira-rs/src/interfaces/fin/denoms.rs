@@ -45,4 +45,11 @@ impl Denoms {
 
         Err(StdError::generic_err("invalid denom"))
     }
+
+    pub fn validate(&self) -> StdResult<()> {
+        if self.0[0] == self.0[1] {
+            return Err(StdError::generic_err("identical denoms"));
+        }
+        Ok(())
+    }
 }
