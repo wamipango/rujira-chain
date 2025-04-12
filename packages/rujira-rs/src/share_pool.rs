@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{Decimal, Decimal256, Uint128};
 use std::ops::{AddAssign, Div, SubAssign};
 use thiserror::Error;
 
@@ -71,10 +71,7 @@ impl SharePool {
         if shares.is_zero() {
             return Uint128::zero();
         }
-
-        Decimal::from_ratio(shares * self.size, 1u128)
-            .div(self.shares)
-            .to_uint_floor()
+        self.size.multiply_ratio(shares, self.shares())
     }
 
     pub fn deposit(&mut self, amount: Uint128) -> Result<(), SharePoolError> {
@@ -83,11 +80,11 @@ impl SharePool {
         let deposit = Uint128::from(1000u128);
         let test = checked.join(deposit)?;
         let value = checked.ownership(test);
-        let ratio = Decimal::from_ratio(value, deposit);
+        let ratio = Decimal256::from_ratio(value, deposit);
 
         // If a deposit causes a new `join` of 1000 units to lose more than 1% of its value,
         // the share pool is in an invalid state, error and don't change state
-        if ratio < Decimal::from_ratio(99u128, 100u128) {
+        if ratio < Decimal256::from_ratio(99u128, 100u128) {
             return Err(SharePoolError::InvalidDeposit {});
         }
         self.size.add_assign(amount);
@@ -160,6 +157,16 @@ mod tests {
     }
 
     #[test]
+    fn overflow() {
+        let mut pool = SharePool::default();
+        pool.deposit(Uint128::from(1_000_000_000_000_000_000_000_000u128))
+            .unwrap();
+        pool.join(Uint128::from(100_000_000_000_000_000u128))
+            .unwrap();
+        pool.ownership(Uint128::from(100_000_000_000_000_000u128));
+    }
+
+    #[test]
     fn inflation_protection() {
         // Ensure that the SharePool can't be manipulated as per https://docs.openzeppelin.com/contracts/4.x/erc4626
         let mut pool = SharePool::default();
@@ -171,6 +178,6 @@ mod tests {
         let shares = pool.join(Uint128::from(1000u128)).unwrap();
         assert_eq!(shares, Uint128::from(900u128));
         let value = pool.ownership(shares);
-        assert_eq!(value, Uint128::from(998u128));
+        assert_eq!(value, Uint128::from(999u128));
     }
 }
