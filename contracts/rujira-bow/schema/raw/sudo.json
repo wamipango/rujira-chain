@@ -16,29 +16,12 @@
     }
   ],
   "definitions": {
-    "Arbitrage": {
-      "description": "The Arbitrage strategy quotes for FIN based on the THORChain Pools size & price, and provides instant liquidity for atomic swaps by borrowing from GHOST until the end of the block, when the swap is executed against base layer liquidity, and the loan is repaid. This allows swaps to execute against Fixed Limit Orders, Oracle Limit Orders, and Base Layer Liquidity atomically, with the best overall execution price. Liquidity Providers for this strategy will earn arbitrage profits on this volume",
-      "type": "object",
-      "additionalProperties": false
-    },
     "Decimal": {
       "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0\n\nThe greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)",
       "type": "string"
     },
     "Strategies": {
       "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "arbitrage"
-          ],
-          "properties": {
-            "arbitrage": {
-              "$ref": "#/definitions/Arbitrage"
-            }
-          },
-          "additionalProperties": false
-        },
         {
           "type": "object",
           "required": [
@@ -53,21 +36,25 @@
         }
       ]
     },
-    "Uint256": {
-      "description": "An implementation of u256 that is using strings for JSON encoding/decoding, such that the full u256 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances out of primitive uint types or `new` to provide big endian bytes:\n\n``` # use cosmwasm_std::Uint256; let a = Uint256::from(258u128); let b = Uint256::new([ 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 1u8, 2u8, ]); assert_eq!(a, b); ```",
+    "Uint128": {
+      "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
       "type": "string"
     },
     "Xyk": {
       "type": "object",
       "required": [
-        "min_k",
+        "fee",
+        "min_quote",
         "step",
         "x",
         "y"
       ],
       "properties": {
-        "min_k": {
-          "$ref": "#/definitions/Uint256"
+        "fee": {
+          "$ref": "#/definitions/Decimal"
+        },
+        "min_quote": {
+          "$ref": "#/definitions/Uint128"
         },
         "step": {
           "$ref": "#/definitions/Decimal"

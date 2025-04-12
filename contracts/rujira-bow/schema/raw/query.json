@@ -5,6 +5,19 @@
     {
       "type": "object",
       "required": [
+        "strategy"
+      ],
+      "properties": {
+        "strategy": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
         "quote"
       ],
       "properties": {

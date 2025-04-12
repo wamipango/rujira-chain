@@ -208,6 +208,7 @@ mod test {
                             .unwrap(),
                         ))
                     }
+                    bow::QueryMsg::Strategy {} => todo!(),
                 }
             }
             _ => SystemResult::Err(SystemError::Unknown {}),

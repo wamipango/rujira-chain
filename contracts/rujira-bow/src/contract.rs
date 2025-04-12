@@ -5,8 +5,11 @@ use cosmwasm_std::{
     MessageInfo, Response,
 };
 use cw2::set_contract_version;
-use cw_utils::{must_pay, one_coin};
-use rujira_rs::bow::{ExecuteMsg, InstantiateMsg, QueryMsg, Strategy, SudoMsg};
+use cw_utils::{must_pay, one_coin, NativeBalance};
+use rujira_rs::bow::{
+    ExecuteMsg, InstantiateMsg, QueryMsg, Strategies, Strategy, StrategyResponse, StrategyState,
+    SudoMsg,
+};
 use rujira_rs::TokenFactory;
 
 use crate::config::Config;
@@ -41,6 +44,8 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
+    let mut state = config.strategy.load_state(deps.as_ref(), env.clone())?;
+
     match msg {
         ExecuteMsg::Swap {
             min_return,
@@ -48,17 +53,15 @@ pub fn execute(
             callback,
         } => {
             let offer = one_coin(&info)?;
-            config.strategy.validate(
-                deps.as_ref(),
-                env,
-                info.clone(),
-                offer,
-                min_return.clone(),
-            )?;
+            config
+                .strategy
+                .validate_swap(&mut state, offer, min_return.clone())?;
             let to_address = to
                 .map(|x| deps.api.addr_validate(x.as_str()))
                 .transpose()?
                 .unwrap_or(info.sender);
+
+            config.strategy.commit_state(deps, &state)?;
 
             match callback {
                 None => Ok(
@@ -76,22 +79,16 @@ pub fn execute(
         }
         ExecuteMsg::Deposit { callback } => {
             let t = TokenFactory::new(&env, config.strategy.denom().as_str());
-            let supply = t.supply(deps.querier)?;
-            let (deposited, minted) = config.strategy.calculate_share(
-                deps.as_ref(),
-                env.clone(),
-                info.clone(),
-                supply,
-            )?;
+            let minted = config
+                .strategy
+                .deposit(&mut state, NativeBalance(info.funds))?;
+
+            config.strategy.commit_state(deps, &state)?;
 
             match callback {
                 None => Ok(Response::default()
                     .add_message(t.mint_msg(minted, info.sender.clone()))
-                    .add_event(event_deposit(
-                        info.sender,
-                        deposited,
-                        coin(minted.u128(), t.denom()),
-                    ))),
+                    .add_event(event_deposit(info.sender, coin(minted.u128(), t.denom())))),
                 Some(cb) => Ok(Response::default()
                     .add_message(t.mint_msg(minted, env.contract.address))
                     .add_message(cb.to_message(
@@ -99,24 +96,14 @@ pub fn execute(
                         Empty {},
                         coins(minted.u128(), t.denom()),
                     )?)
-                    .add_event(event_deposit(
-                        info.sender,
-                        deposited,
-                        coin(minted.u128(), t.denom()),
-                    ))),
+                    .add_event(event_deposit(info.sender, coin(minted.u128(), t.denom())))),
             }
         }
         ExecuteMsg::Withdraw { callback } => {
             let t = TokenFactory::new(&env, config.strategy.denom().as_str());
-            let supply = t.supply(deps.querier)?;
             let balance = must_pay(&info, t.denom().as_str())?;
-            let withdrawn = config.strategy.calculate_ownership(
-                deps.as_ref(),
-                env,
-                info.clone(),
-                supply,
-                balance,
-            )?;
+            let withdrawn = config.strategy.withdraw(&mut state, balance)?;
+            config.strategy.commit_state(deps, &state)?;
 
             match callback {
                 None => Ok(Response::default()
@@ -125,11 +112,7 @@ pub fn execute(
                         amount: withdrawn.clone().into_vec(),
                     }))
                     .add_message(t.burn_msg(balance))
-                    .add_event(event_withdraw(
-                        info.sender,
-                        coin(balance.u128(), t.denom()),
-                        withdrawn.into_vec().try_into()?,
-                    ))),
+                    .add_event(event_withdraw(info.sender, coin(balance.u128(), t.denom())))),
                 Some(cb) => Ok(Response::default()
                     .add_message(cb.to_message(
                         &info.sender,
@@ -137,11 +120,7 @@ pub fn execute(
                         withdrawn.clone().into_vec(),
                     )?)
                     .add_message(t.burn_msg(balance))
-                    .add_event(event_withdraw(
-                        info.sender,
-                        coin(balance.u128(), t.denom()),
-                        withdrawn.into_vec().try_into()?,
-                    ))),
+                    .add_event(event_withdraw(info.sender, coin(balance.u128(), t.denom())))),
             }
         }
     }
@@ -164,11 +143,17 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let config = Config::load(deps.storage)?;
+    let state = config.strategy.load_state(deps, env)?;
     match msg {
         QueryMsg::Quote(req) => {
-            let q = config.strategy.quote(deps, env, req)?;
+            let q = config.strategy.quote(&state, req)?;
             Ok(to_json_binary(&q)?)
         }
+        QueryMsg::Strategy {} => match (config.strategy, state) {
+            (Strategies::Xyk(strategy), StrategyState::Xyk(state)) => {
+                Ok(to_json_binary(&StrategyResponse::Xyk((strategy, state)))?)
+            }
+        },
     }
 }
 
@@ -176,7 +161,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 mod tests {
 
     use super::*;
-    use cosmwasm_std::{Decimal, Event, Uint256};
+    use cosmwasm_std::{Decimal, Event, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{
         bow::{Strategies, Xyk},
@@ -206,8 +191,9 @@ mod tests {
                 strategy: Strategies::Xyk(Xyk::new(
                     "ruji".to_string(),
                     "usdc".to_string(),
-                    Decimal::from_ratio(1u128, 1000u128),
-                    Uint256::zero(),
+                    Decimal::permille(1u64),
+                    Uint128::from(Xyk::MIN_MIN_QUOTE),
+                    Decimal::zero(),
                 )),
             },
             &[],
@@ -247,8 +233,9 @@ mod tests {
                     strategy: Strategies::Xyk(Xyk::new(
                         "ruji".to_string(),
                         "usdc".to_string(),
-                        Decimal::from_ratio(1u128, 1000u128),
-                        Uint256::zero(),
+                        Decimal::permille(1u64),
+                        Uint128::from(Xyk::MIN_MIN_QUOTE),
+                        Decimal::zero(),
                     )),
                 },
                 &[],
@@ -266,10 +253,10 @@ mod tests {
             )
             .unwrap();
 
-        res.assert_event(&Event::new("wasm-rujira-bow/deposit").add_attributes(vec![
-            ("deposit", "1000ruji,1000usdc"),
-            ("minted", "1000x/bow-xyk-ruji-usdc"),
-        ]));
+        res.assert_event(
+            &Event::new("wasm-rujira-bow/deposit")
+                .add_attributes(vec![("minted", "1000x/bow-xyk-ruji-usdc")]),
+        );
 
         res.assert_event(&Event::new("mint").add_attributes(vec![
             ("amount", "1000"),
@@ -286,10 +273,36 @@ mod tests {
             )
             .unwrap();
 
-        res.assert_event(&Event::new("wasm-rujira-bow/withdraw").add_attributes(vec![
-            ("share", "200x/bow-xyk-ruji-usdc"),
-            ("withdrawn", "200ruji,200usdc"),
+        res.assert_event(
+            &Event::new("wasm-rujira-bow/withdraw")
+                .add_attributes(vec![("share", "200x/bow-xyk-ruji-usdc")]),
+        );
+
+        res.assert_event(&Event::new("transfer").add_attributes(vec![
+            ("amount", "200ruji,200usdc"),
+            ("recipient", addr.as_str()),
+            ("sender", contract.as_str()),
         ]));
+
+        res.assert_event(
+            &Event::new("burn")
+                .add_attributes(vec![("amount", "200"), ("denom", "x/bow-xyk-ruji-usdc")]),
+        );
+
+        // Ensure the strategy state for withdraw has also been committed
+        let res = app
+            .execute_contract(
+                addr.clone(),
+                contract.clone(),
+                &ExecuteMsg::Withdraw { callback: None },
+                &[coin(200, "x/bow-xyk-ruji-usdc")],
+            )
+            .unwrap();
+
+        res.assert_event(
+            &Event::new("wasm-rujira-bow/withdraw")
+                .add_attributes(vec![("share", "200x/bow-xyk-ruji-usdc")]),
+        );
 
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("amount", "200ruji,200usdc"),

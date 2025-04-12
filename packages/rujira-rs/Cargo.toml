@@ -20,3 +20,6 @@ postcard = { workspace = true }
 cosmwasm-schema-derive = { workspace = true }
 serde = { workspace = true }
 cosmos-sdk-proto = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

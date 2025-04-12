@@ -1,111 +1,116 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Coins, Deps, Env, MessageInfo, Uint128};
+use cosmwasm_std::{Coin, Deps, DepsMut, Env, StdResult, Uint128};
 use cw_utils::NativeBalance;
 
-use super::{arbitrage::Arbitrage, error::StrategyError, xyk::Xyk, QuoteRequest, QuoteResponse};
+use super::{
+    error::StrategyError,
+    xyk::{Xyk, XykState},
+    QuoteRequest, QuoteResponse,
+};
 
-pub trait Strategy {
+pub trait Strategy<T> {
+    fn validate(&self) -> Result<(), StrategyError>;
+
+    /// Manages the strategy's state
+    fn load_state(&self, deps: Deps, env: Env) -> StdResult<T>;
+    fn commit_state(&self, deps: DepsMut, state: &T) -> StdResult<()>;
+
     /// The receipt token denom string for the strategy
     fn denom(&self) -> String;
     /// Validates a swap size against the strategy
     /// Offer is the amount offered _to_ the strategy (ie increase in local balance)
     /// and Ask is amount requested _from_ the strategy (decrease)
-    fn validate(
-        &self,
-        deps: Deps,
-        env: Env,
-        info: MessageInfo,
-        offer: Coin,
-        ask: Coin,
-    ) -> Result<(), StrategyError>;
+    fn validate_swap(&self, state: &mut T, offer: Coin, ask: Coin) -> Result<(), StrategyError>;
 
     /// Quotes for a FIN market maker request
-    fn quote(
-        &self,
-        deps: Deps,
-        env: Env,
-        req: QuoteRequest,
-    ) -> Result<Option<QuoteResponse>, StrategyError>;
+    fn quote(&self, state: &T, req: QuoteRequest) -> Result<Option<QuoteResponse>, StrategyError>;
 
-    /// Calculates the number of share tokens to be minted for a new deposit
-    fn calculate_share(
-        &self,
-        deps: Deps,
-        env: Env,
-        info: MessageInfo,
-        // Current supply of the share token
-        supply: Uint128,
-    ) -> Result<(Coins, Uint128), StrategyError>;
+    /// Deposits the funds in message.info to the strategy, returning
+    /// the amount of shares that it has earned
+    fn deposit(&self, state: &mut T, funds: NativeBalance) -> Result<Uint128, StrategyError>;
 
-    /// Calculates the underlying assets owned by a given share token amount
-    fn calculate_ownership(
-        &self,
-        deps: Deps,
-        env: Env,
-        info: MessageInfo,
-        supply: Uint128,
-        balance: Uint128,
-    ) -> Result<NativeBalance, StrategyError>;
+    /// Withdraws the `amount` of shares from the strategy, returning
+    /// the amount of underlying assets to be repaid
+    fn withdraw(&self, state: &mut T, amount: Uint128) -> Result<NativeBalance, StrategyError>;
 }
 
 #[cw_serde]
 pub enum Strategies {
-    Arbitrage(Arbitrage),
     Xyk(Xyk),
 }
 
-macro_rules! delegate_strategy {
-    ($self:ident, $method:ident $(, $args:expr)*) => {
-        match $self {
-            Strategies::Arbitrage(inner) => inner.$method($($args),*),
-            Strategies::Xyk(inner) => inner.$method($($args),*),
-        }
-    };
+#[cw_serde]
+pub enum StrategyState {
+    Xyk(XykState),
 }
 
-impl Strategy for Strategies {
-    fn denom(&self) -> String {
-        delegate_strategy!(self, denom)
+impl Strategy<StrategyState> for Strategies {
+    fn validate(&self) -> Result<(), StrategyError> {
+        match self {
+            Strategies::Xyk(x) => x.validate(),
+        }
     }
 
-    fn validate(
+    fn denom(&self) -> String {
+        match self {
+            Strategies::Xyk(x) => x.denom(),
+        }
+    }
+
+    fn load_state(&self, deps: Deps, env: Env) -> StdResult<StrategyState> {
+        match self {
+            Strategies::Xyk(x) => x.load_state(deps, env).map(StrategyState::Xyk),
+        }
+    }
+
+    fn commit_state(&self, deps: DepsMut, state: &StrategyState) -> StdResult<()> {
+        match (self, state) {
+            (Strategies::Xyk(x), StrategyState::Xyk(s)) => Ok(x.commit_state(deps, s)?),
+        }
+    }
+
+    fn validate_swap(
         &self,
-        deps: Deps,
-        env: Env,
-        info: MessageInfo,
+        state: &mut StrategyState,
         offer: Coin,
         ask: Coin,
     ) -> Result<(), StrategyError> {
-        delegate_strategy!(self, validate, deps, env, info, offer, ask)
+        match (self, state) {
+            (Strategies::Xyk(x), StrategyState::Xyk(ref mut s)) => x.validate_swap(s, offer, ask),
+            // _ => Err(StrategyError::InvalidStrategyState {}),
+        }
     }
 
     fn quote(
         &self,
-        deps: Deps,
-        env: Env,
+        state: &StrategyState,
         req: QuoteRequest,
     ) -> Result<Option<QuoteResponse>, StrategyError> {
-        delegate_strategy!(self, quote, deps, env, req)
+        match (self, state) {
+            (Strategies::Xyk(x), StrategyState::Xyk(s)) => x.quote(s, req),
+            // _ => Err(StrategyError::InvalidStrategyState {}),
+        }
     }
 
-    fn calculate_share(
+    fn deposit(
         &self,
-        deps: Deps,
-        env: Env,
-        info: MessageInfo,
-        supply: Uint128,
-    ) -> Result<(Coins, Uint128), StrategyError> {
-        delegate_strategy!(self, calculate_share, deps, env, info, supply)
+        state: &mut StrategyState,
+        funds: NativeBalance,
+    ) -> Result<Uint128, StrategyError> {
+        match (self, state) {
+            (Strategies::Xyk(x), StrategyState::Xyk(ref mut s)) => x.deposit(s, funds),
+            // _ => Err(StrategyError::InvalidStrategyState {}),
+        }
     }
 
-    fn calculate_ownership(
+    fn withdraw(
         &self,
-        deps: Deps,
-        env: Env,
-        info: MessageInfo,
-        supply: Uint128,
-        balance: Uint128,
+        state: &mut StrategyState,
+        amount: Uint128,
     ) -> Result<NativeBalance, StrategyError> {
-        delegate_strategy!(self, calculate_ownership, deps, env, info, supply, balance)
+        match (self, state) {
+            (Strategies::Xyk(x), StrategyState::Xyk(ref mut s)) => x.withdraw(s, amount),
+            // _ => Err(StrategyError::InvalidStrategyState {}),
+        }
     }
 }

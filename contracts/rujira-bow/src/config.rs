@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdResult, Storage};
 use cw_storage_plus::Item;
-use rujira_rs::bow::{InstantiateMsg, Strategies};
+use rujira_rs::bow::{InstantiateMsg, Strategies, Strategy};
 
 use crate::ContractError;
 
@@ -24,7 +24,7 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<(), ContractError> {
-        Ok(())
+        Ok(self.strategy.validate()?)
     }
 
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
