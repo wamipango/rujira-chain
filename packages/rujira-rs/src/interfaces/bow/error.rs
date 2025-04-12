@@ -1,4 +1,4 @@
-use cosmwasm_std::{ConversionOverflowError, OverflowError, StdError, Uint128};
+use cosmwasm_std::{Coin, ConversionOverflowError, OverflowError, StdError};
 use cw_utils::PaymentError;
 use thiserror::Error;
 
@@ -33,9 +33,12 @@ pub enum StrategyError {
     #[error("Underflow")]
     Underflow {},
 
+    #[error("InvalidStrategyState")]
+    InvalidStrategyState {},
+
     #[error("InsufficientReturn expected {expected} got {returned}")]
-    InsufficientReturn {
-        expected: Uint128,
-        returned: Uint128,
-    },
+    InsufficientReturn { expected: Coin, returned: Coin },
+
+    #[error("Invalid Config {0}")]
+    InvalidConfig(String),
 }

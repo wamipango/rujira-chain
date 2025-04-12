@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crate::contract::{execute, instantiate, query};
-use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128, Uint256};
+use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128};
 use cw_multi_test::{ContractWrapper, Executor};
 use rujira_bow::contract as bow_contract;
 use rujira_rs::{
@@ -24,7 +24,6 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
     let fin_code_id = app.store_code(fin_code);
     let bow_code_id = app.store_code(bow_code);
 
-    let min_k = Uint256::from(10u128).pow(19);
     let bow = app
         .instantiate_contract(
             bow_code_id,
@@ -41,9 +40,9 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
                 strategy: bow::Strategies::Xyk(Xyk::new(
                     "btc".to_string(),
                     "usdc".to_string(),
-                    Decimal::from_ratio(1u128, 1000u128),
-                    // Requires at least 1 BTC @ 100k, BTC - 8dp, USDC - 6dp
-                    min_k,
+                    Decimal::permille(1),
+                    Uint128::from(10_000u128),
+                    Decimal::zero(),
                 )),
             },
             &[],
@@ -141,19 +140,18 @@ fn mm_book() {
     assert_side(
         book.quote,
         vec![
-            // 2 decimal delta, so 999 price = 99,900
-            ("999.00099", 199_800_199u128),
-            ("997.00698", 199_400_400u128),
-            ("995.01895", 199_000_806u128),
+            ("999.00099", 199_800_198u128),
+            ("997.00598", 199_600_598u128),
+            ("995.01496", 199_400_998u128),
         ],
     );
 
     assert_side(
         book.base,
         vec![
-            ("1001.0011", 199_800u128),
-            ("1003.0061", 199_201u128),
-            ("1005.0018", 197_810u128),
+            ("1001.0061", 199_799u128),
+            ("1003.0111", 199_599u128),
+            ("1005.0161", 199_400u128),
         ],
     );
 
@@ -172,10 +170,10 @@ fn mm_book() {
 
     // Single trade in first MM pool
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
-        ("rate", "1001.0011"),
-        ("price", "mm:1001.001001001001001001"),
+        ("rate", "1001.0061"),
+        ("price", "mm:1001.006011041096301783"),
         ("offer", "100000000"),
-        ("bid", "99900"),
+        ("bid", "99899"),
         ("side", "base"),
     ]));
 
@@ -183,14 +181,14 @@ fn mm_book() {
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", fin.to_string()),
         ("sender", bow.to_string()),
-        ("amount", "99900btc".to_string()),
+        ("amount", "99899btc".to_string()),
     ]));
 
     // Returns the amount less fees to the buyer
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", owner.to_string()),
         ("sender", fin.to_string()),
-        ("amount", "98401btc".to_string()),
+        ("amount", "98400btc".to_string()),
     ]));
 
     // And the fees to the fee address
@@ -203,7 +201,7 @@ fn mm_book() {
     let balances = app.wrap().query_all_balances(bow.clone()).unwrap();
     assert_eq!(
         balances,
-        vec![coin(199900100, "btc"), coin(200100000000, "usdc"),]
+        vec![coin(199900101, "btc"), coin(200100000000, "usdc"),]
     );
 
     let book: BookResponse = app
@@ -222,19 +220,18 @@ fn mm_book() {
     assert_side(
         book.quote,
         vec![
-            // 2 decimal delta, so 999 price = 99,900
-            ("1000.0000", 199_900_000u128),
-            ("0998.00399", 199_500_998u128),
-            ("0996.01395", 199_102_194u128),
+            ("1000.0002", 199_900_048u128),
+            ("0998.00324", 199_699_451u128),
+            ("0996.01022", 199_500_849u128),
         ],
     );
 
     assert_side(
         book.base,
         vec![
-            ("1002.0031", 199_700u128),
-            ("1004.0080", 198_902u128),
-            ("1006.0017", 197_515u128),
+            ("1002.0081", 199_699u128),
+            ("1004.0156", 199_499u128),
+            ("1006.0231", 199_300u128),
         ],
     );
 
@@ -251,29 +248,28 @@ fn mm_book() {
             &coins(500_000, "btc"),
         )
         .unwrap();
-    dbg!(&res);
 
     // 3 trade events
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
-        ("rate", "1000"),
-        ("price", "mm:1000"),
+        ("rate", "1000.0002"),
+        ("price", "mm:1000.000240120060030015"),
         ("offer", "199900"),
-        ("bid", "199900000"),
+        ("bid", "199900048"),
         ("side", "quote"),
     ]));
 
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
-        ("rate", "998.00399"),
-        ("price", "mm:998.003991995997998999"),
-        ("offer", "199900"),
-        ("bid", "199500998"),
+        ("rate", "998.00324"),
+        ("price", "mm:998.003243394519712742"),
+        ("offer", "200099"),
+        ("bid", "199699451"),
         ("side", "quote"),
     ]));
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
-        ("rate", "996.01395"),
-        ("price", "mm:996.013957048309396245"),
-        ("offer", "100200"),
-        ("bid", "99800598"),
+        ("rate", "996.01022"),
+        ("price", "mm:996.010229655516724912"),
+        ("offer", "100001"),
+        ("bid", "99602018"),
         ("side", "quote"),
     ]));
 
@@ -281,21 +277,21 @@ fn mm_book() {
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", fin.to_string()),
         ("sender", bow.to_string()),
-        ("amount", "499201596usdc".to_string()),
+        ("amount", "499201517usdc".to_string()),
     ]));
 
     // Returns the amount less fees to the buyer
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", owner.to_string()),
         ("sender", fin.to_string()),
-        ("amount", "491713572usdc".to_string()),
+        ("amount", "491713494usdc".to_string()),
     ]));
 
     // And the fees to the fee address
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", fees.to_string()),
         ("sender", fin.to_string()),
-        ("amount", "7488024usdc".to_string()),
+        ("amount", "7488023usdc".to_string()),
     ]));
 
     // Check large in first dfirection succeeds
@@ -353,9 +349,9 @@ fn combined_book() {
     assert_side(
         book.quote,
         vec![
-            ("99900.099", 1_998_001_998u128),
-            ("99700.703", 1_993_914_368u128),
-            ("99501.913", 1_989_839_263u128),
+            ("99900.099", 1_998_001_997u128),
+            ("99700.598", 1_996_005_991u128),
+            ("99501.496", 1_994_009_990u128),
         ],
     );
     // Now let's add some user orders
@@ -367,7 +363,7 @@ fn combined_book() {
             vec![
                 (
                     Side::Quote,
-                    Price::Fixed(Decimal::from_str("99700.703").unwrap()),
+                    Price::Fixed(Decimal::from_str("99700.598").unwrap()),
                     Some(Uint128::from(50_000_000u128)),
                 ),
                 (
@@ -397,14 +393,15 @@ fn combined_book() {
             },
         )
         .unwrap();
+
     assert_side(
         book.quote,
         vec![
             ("100000", 50_000_000u128),
-            ("99900.099", 1_998_001_998u128),
-            ("99700.703", 2_043_914_368u128),
+            ("99900.099", 1_998_001_997u128),
+            ("99700.598", 2_046_005_991u128),
             ("99600", 50_000_000u128),
-            ("99501.913", 1_989_839_263u128),
+            ("99501.496", 1_994_009_990u128),
         ],
     );
 
@@ -432,18 +429,18 @@ fn combined_book() {
 
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "99900.099"),
-        ("price", "mm:99900.0999"),
+        ("price", "mm:99900.09985"),
         ("offer", "20000"),
-        ("bid", "1998001998"),
+        ("bid", "1998001997"),
         ("side", "quote"),
     ]));
 
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
-        ("rate", "99700.703"),
-        ("offer", "20501"),
-        ("bid", "2043914368"),
-        ("price", "fixed:99700.703"),
-        ("price", "mm:99700.703435171758587929"),
+        ("rate", "99700.598"),
+        ("offer", "20522"),
+        ("bid", "2046005991"),
+        ("price", "fixed:99700.598"),
+        ("price", "mm:99700.598951048951048951"),
         ("side", "quote"),
     ]));
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
@@ -454,10 +451,10 @@ fn combined_book() {
         ("side", "quote"),
     ]));
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
-        ("rate", "99501.913"),
-        ("price", "mm:99501.913341334133413341"),
-        ("offer", "3996"),
-        ("bid", "397609645"),
+        ("rate", "99501.496"),
+        ("price", "mm:99501.496506986027944111"),
+        ("offer", "3975"),
+        ("bid", "395518448"),
         ("side", "quote"),
     ]));
 
@@ -571,9 +568,9 @@ fn test_arbitrage_quote_single() {
     assert_side(
         book.quote,
         vec![
-            ("999.00099", 199_800_199u128),
-            ("997.00698", 199_400_400u128),
-            ("995.01895", 199_000_806u128),
+            ("999.00099", 199_800_198u128),
+            ("997.00598", 199_600_598u128),
+            ("995.01496", 199_400_998u128),
         ],
     );
 
@@ -669,12 +666,12 @@ fn test_arbitrage_quote_multi() {
     assert_side(
         book.base,
         vec![
-            ("1001.0011", 199_800u128),
-            ("1003.0061", 199_201u128),
-            ("1005.0018", 197_810u128),
-            ("1006.9887", 196_667u128),
-            ("1008.981", 196_174u128),
-            ("1010.9624", 194_793u128),
+            ("1001.0061", 199_799u128),
+            ("1003.0111", 199_599u128),
+            ("1005.0161", 199_400u128),
+            ("1007.0312", 199_200u128),
+            ("1009.0462", 199_001u128),
+            ("1011.0613", 198_803u128),
         ],
     );
 
@@ -698,14 +695,14 @@ fn test_arbitrage_quote_multi() {
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", fin.to_string()),
         ("sender", bow.to_string()),
-        ("amount", "399001btc".to_string()),
+        ("amount", "399398btc".to_string()),
     ]));
 
     // Ensure arb fees are sent
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", fees.as_str()),
         ("sender", fin.as_str()),
-        ("amount", "797205usdc"),
+        ("amount", "795592usdc"),
     ]));
 
     // Now a small one that should take profit in BTC
@@ -721,7 +718,7 @@ fn test_arbitrage_quote_multi() {
         )
         .unwrap();
 
-    assert_side(book.base, vec![("1005.009", 199_401u128)]);
+    assert_side(book.base, vec![("1005.0161", 199_400u128)]);
 
     let res = app
         .execute_contract(

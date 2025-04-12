@@ -3,7 +3,7 @@ use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 
 use crate::{CallbackData, TokenMetadata};
 
-use super::strategy::Strategies;
+use super::{strategy::Strategies, xyk::XykState, Xyk};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -35,6 +35,8 @@ pub enum SudoMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(StrategyResponse)]
+    Strategy {},
     #[returns(QuoteResponse)]
     Quote(QuoteRequest),
 }
@@ -77,4 +79,9 @@ pub struct QuoteResponse {
     /// Provided in order to allow the market maker to load from storage only once, instead of
     /// for each iteration of the query
     pub data: Option<Binary>,
+}
+
+#[cw_serde]
+pub enum StrategyResponse {
+    Xyk((Xyk, XykState)),
 }

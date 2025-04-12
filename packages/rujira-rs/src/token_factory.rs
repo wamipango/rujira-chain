@@ -108,11 +108,18 @@ impl TokenMetadata {
         let x = self.clone();
         Metadata {
             description: x.description,
-            denom_units: vec![DenomUnit {
-                denom: denom.clone(),
-                exponent: 8,
-                aliases: vec![],
-            }],
+            denom_units: vec![
+                DenomUnit {
+                    denom: denom.clone(),
+                    exponent: 0,
+                    aliases: vec![],
+                },
+                DenomUnit {
+                    denom: self.symbol.clone(),
+                    exponent: 8,
+                    aliases: vec![],
+                },
+            ],
             base: denom,
             display: x.display,
             name: x.name,
