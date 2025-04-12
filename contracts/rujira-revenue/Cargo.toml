@@ -1,6 +1,6 @@
 [package]
 name = "rujira-revenue"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["codehans <94654388+codehans@users.noreply.github.com>"]
 edition = "2021"
 
