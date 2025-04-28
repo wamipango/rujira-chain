@@ -77,13 +77,22 @@ pub fn execute(
                 )?)),
             }
         }
-        ExecuteMsg::Deposit { callback } => {
+        ExecuteMsg::Deposit {
+            min_return,
+            callback,
+        } => {
             let t = TokenFactory::new(&env, config.strategy.denom().as_str());
             let minted = config
                 .strategy
                 .deposit(&mut state, NativeBalance(info.funds))?;
 
             config.strategy.commit_state(deps, &state)?;
+
+            if let Some(min) = min_return {
+                if minted.lt(&min) {
+                    return Err(ContractError::InsufficientFunds {});
+                };
+            }
 
             match callback {
                 None => Ok(Response::default()
@@ -244,11 +253,25 @@ mod tests {
             )
             .unwrap();
 
+        app.execute_contract(
+            addr.clone(),
+            contract.clone(),
+            &ExecuteMsg::Deposit {
+                min_return: Some(Uint128::from(1001u128)),
+                callback: None,
+            },
+            &[coin(1000, "ruji"), coin(1000, "usdc")],
+        )
+        .unwrap_err();
+
         let res = app
             .execute_contract(
                 addr.clone(),
                 contract.clone(),
-                &ExecuteMsg::Deposit { callback: None },
+                &ExecuteMsg::Deposit {
+                    min_return: Some(Uint128::from(1000u128)),
+                    callback: None,
+                },
                 &[coin(1000, "ruji"), coin(1000, "usdc")],
             )
             .unwrap();
