@@ -598,12 +598,12 @@ mod test {
             .unwrap()
             .unwrap();
         // Request is to sell X for Y. Price should be lower than base price (2/1)
-        assert_eq!(quote.price, Decimal::from_str("1.998").unwrap());
-        assert_eq!(quote.size, Uint128::from(1_998_000u128));
+        assert_eq!(quote.price, Decimal::from_str("1.998000001999998").unwrap());
+        assert_eq!(quote.size, Uint128::from(1_998_002u128));
         let data: XykState = from_json(quote.data.clone().unwrap()).unwrap();
-        assert_eq!(data.x, Uint128::from(1_001_000_000u128));
-        assert_eq!(data.y, Uint128::from(1_998_001_999u128));
-        assert_eq!(data.k, Uint256::from(2_000_000_000_999_000_000u128));
+        assert_eq!(data.x, Uint128::from(1_001_001_001u128));
+        assert_eq!(data.y, Uint128::from(1_998_003_997u128));
+        assert_eq!(data.k, Uint256::from(2_000_004_000_999_000_997u128));
 
         // Test subsequent quote
         let quote = xyk
@@ -621,13 +621,13 @@ mod test {
             .unwrap();
         assert_eq!(
             quote.price,
-            Decimal::from_str("1.994009990009990009").unwrap()
+            Decimal::from_str("1.994009995994009995").unwrap()
         );
-        assert_eq!(quote.size, Uint128::from(1_996_004u128));
+        assert_eq!(quote.size, Uint128::from(1_996_006u128));
         let data: XykState = from_json(quote.data.unwrap()).unwrap();
-        assert_eq!(data.x, Uint128::from(1_002_001_000u128));
-        assert_eq!(data.y, Uint128::from(1_996_005_994u128));
-        assert_eq!(data.k, Uint256::from(2_000_000_001_993_994_000u128));
+        assert_eq!(data.x, Uint128::from(1_002_002_002u128));
+        assert_eq!(data.y, Uint128::from(1_996_007_990u128));
+        assert_eq!(data.k, Uint256::from(2_000_004_001_987_995_980u128));
 
         // Test inverse
         let mut state = XykState::new();
