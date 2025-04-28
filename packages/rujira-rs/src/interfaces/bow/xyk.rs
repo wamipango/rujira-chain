@@ -241,10 +241,13 @@ impl Strategy<XykState> for Xyk {
         state: &mut XykState,
         funds: NativeBalance,
     ) -> Result<Uint128, StrategyError> {
-        let x = balance_of(&funds, &self.x)?;
-        let y = balance_of(&funds, &self.y)?;
+        let x = balance_of(&funds, &self.x);
+        let y = balance_of(&funds, &self.y);
 
         let minted = if state.shares.is_zero() {
+            if x.is_zero() && y.is_zero() {
+                return Err(StrategyError::InvalidDeposit {});
+            }
             Uint256::from(x).mul(Uint256::from(y)).isqrt()
         } else {
             // Issue shares based on the change in sqrt(k),
@@ -277,7 +280,7 @@ impl Strategy<XykState> for Xyk {
         }
         .try_into()?;
 
-        state.set(x, y);
+        state.set(state.x.add(x), state.y.add(y));
         state.shares += minted;
         Ok(minted)
     }
@@ -313,16 +316,15 @@ impl Strategy<XykState> for Xyk {
     }
 }
 
-fn balance_of(balance: &NativeBalance, denom: &String) -> Result<Uint128, StrategyError> {
-    Ok(balance
+fn balance_of(balance: &NativeBalance, denom: &String) -> Uint128 {
+    balance
         .clone()
         .into_vec()
         .iter()
         .enumerate()
         .find(|(_i, c)| c.denom == *denom)
-        .ok_or(StrategyError::InvalidDeposit {})?
-        .1
-        .amount)
+        .map(|x| x.1.amount)
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -401,6 +403,8 @@ mod test {
             .unwrap();
 
         assert_eq!(amount, Uint128::from(1414u128));
+        assert_eq!(state.x, Uint128::from(1000u128));
+        assert_eq!(state.y, Uint128::from(2000u128));
 
         let amount = xyk
             .deposit(
@@ -409,6 +413,8 @@ mod test {
             )
             .unwrap();
         assert_eq!(amount, Uint128::from(707u128));
+        assert_eq!(state.x, Uint128::from(1500u128));
+        assert_eq!(state.y, Uint128::from(3000u128));
 
         // Adding more than 50% on one side
         let mut state = XykState::new();
@@ -419,6 +425,8 @@ mod test {
             )
             .unwrap();
         assert_eq!(amount, Uint128::from(1000u128));
+        assert_eq!(state.x, Uint128::from(500u128));
+        assert_eq!(state.y, Uint128::from(2000u128));
 
         // Change in sqrt(k) = 1000 -> 2738 = 1738;
         // Min even allocation (250:1000) = 500
@@ -432,6 +440,27 @@ mod test {
             )
             .unwrap();
         assert_eq!(amount, Uint128::from(1677u128));
+        assert_eq!(state.x, Uint128::from(2500u128));
+        assert_eq!(state.y, Uint128::from(3000u128));
+
+        // Single sided deposit
+        let mut state = XykState::new();
+        let amount = xyk
+            .deposit(
+                &mut state,
+                NativeBalance(vec![coin(500, "x"), coin(2000, "y")]),
+            )
+            .unwrap();
+        assert_eq!(amount, Uint128::from(1000u128));
+        assert_eq!(state.x, Uint128::from(500u128));
+        assert_eq!(state.y, Uint128::from(2000u128));
+
+        let amount = xyk
+            .deposit(&mut state, NativeBalance(vec![coin(1000, "y")]))
+            .unwrap();
+        assert_eq!(amount, Uint128::from(213u128));
+        assert_eq!(state.x, Uint128::from(500u128));
+        assert_eq!(state.y, Uint128::from(3000u128));
     }
 
     #[test]
