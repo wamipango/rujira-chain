@@ -58,6 +58,17 @@
                   "type": "null"
                 }
               ]
+            },
+            "min_return": {
+              "description": "The minimum amount of LP shares to be returned",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "additionalProperties": false

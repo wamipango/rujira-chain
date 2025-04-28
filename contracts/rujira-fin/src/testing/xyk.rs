@@ -114,7 +114,10 @@ fn mm_book() {
     app.execute_contract(
         owner.clone(),
         bow.clone(),
-        &bow::ExecuteMsg::Deposit { callback: None },
+        &bow::ExecuteMsg::Deposit {
+            callback: None,
+            min_return: None,
+        },
         // 2 BTC @ 100k USDC
         &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
     )
@@ -329,7 +332,10 @@ fn combined_book() {
     app.execute_contract(
         owner.clone(),
         bow.clone(),
-        &bow::ExecuteMsg::Deposit { callback: None },
+        &bow::ExecuteMsg::Deposit {
+            callback: None,
+            min_return: None,
+        },
         // 2 BTC @ 100k USDC
         &[coin(20_000_000, "btc"), coin(2_000_000_000_000, "usdc")],
     )
@@ -548,7 +554,10 @@ fn test_arbitrage_quote_single() {
     app.execute_contract(
         owner.clone(),
         bow.clone(),
-        &bow::ExecuteMsg::Deposit { callback: None },
+        &bow::ExecuteMsg::Deposit {
+            callback: None,
+            min_return: None,
+        },
         // 2 BTC @ 100k USDC
         &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
     )
@@ -646,7 +655,10 @@ fn test_arbitrage_quote_multi() {
     app.execute_contract(
         owner.clone(),
         bow.clone(),
-        &bow::ExecuteMsg::Deposit { callback: None },
+        &bow::ExecuteMsg::Deposit {
+            callback: None,
+            min_return: None,
+        },
         // 2 BTC @ 100k USDC
         &[coin(200_000_000, "btc"), coin(200_000_000_000, "usdc")],
     )

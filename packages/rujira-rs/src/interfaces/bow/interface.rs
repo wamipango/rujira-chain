@@ -20,6 +20,8 @@ pub enum ExecuteMsg {
         callback: Option<CallbackData>,
     },
     Deposit {
+        /// The minimum amount of LP shares to be returned
+        min_return: Option<Uint128>,
         callback: Option<CallbackData>,
     },
     Withdraw {
