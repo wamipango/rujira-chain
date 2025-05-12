@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, Storage, Uint128, WasmMsg,
+    coins, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Reply, Response,
+    StdResult, Storage, SubMsg, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
@@ -24,6 +24,7 @@ use crate::state::{
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+const REPLY_ID: u64 = 0;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -61,11 +62,14 @@ pub fn execute(
         }
     }?;
     if swap_amount.gt(&Uint128::zero()) {
-        res = res.add_message(WasmMsg::Execute {
-            contract_addr: config.revenue_converter.0.to_string(),
-            msg: config.revenue_converter.1.clone(),
-            funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
-        });
+        res = res.add_submessage(SubMsg::reply_on_error(
+            WasmMsg::Execute {
+                contract_addr: config.revenue_converter.0.to_string(),
+                msg: config.revenue_converter.1.clone(),
+                funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
+            },
+            REPLY_ID,
+        ));
     }
     if fee_amount.gt(&Uint128::zero()) {
         res = res.add_message(BankMsg::Send {
@@ -95,6 +99,15 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             config.save(deps.storage)?;
             Ok(Response::default())
         }
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(_deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, ContractError> {
+    // Match on ID for completeness
+    match reply.id {
+        REPLY_ID => Ok(Response::default()),
+        _ => Err(ContractError::Unauthorized {}),
     }
 }
 
