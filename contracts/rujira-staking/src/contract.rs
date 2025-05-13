@@ -308,19 +308,38 @@ mod tests {
         assert_eq!(account, *expected);
     }
 
-    fn init_app(test_fee: Option<TestFee>) -> (cw_multi_test::App<cw_multi_test::BankKeeper, cosmwasm_std::testing::MockApi, cosmwasm_std::MemoryStorage, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::WasmKeeper<cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::IbcMsg, cosmwasm_std::IbcQuery, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, rujira_rs_testing::RujiraStargate>, Addr, Addr, Addr, Addr, Addr, usize, Option<(Decimal, String)>, Decimal) {
+    struct Fees {
+        pub index: usize,
+        pub value: Option<(Decimal, String)>,
+        pub percent: Decimal,
+    }
+
+    struct Stakers {
+        pub liquid: Addr,
+        pub account_1: Addr,
+        pub account_2: Addr,
+    }
+
+    fn init_app(test_fee: Option<TestFee>) -> (RujiraApp, Addr, Addr, Stakers, Fees) {
         let mut app = mock_rujira_app();
         let apps = app.api().addr_make("apps");
         let owner = app.api().addr_make("owner");
-        let staker_liquid = app.api().addr_make("staker_liquid");
-        let staker_account_1 = app.api().addr_make("staker_account_1");
-        let staker_account_2 = app.api().addr_make("staker_account_2");
+        let stakers = Stakers {
+            liquid: app.api().addr_make("stakers.liquid"),
+            account_1: app.api().addr_make("stakers.account_1"),
+            account_2: app.api().addr_make("stakers.account_2"),
+        };
         let (fee_index, fee) = match test_fee {
             None => (0, None),
             Some(TestFee::FivePercent) => (1, Some((Decimal::percent(5), owner.to_string()))),
             Some(TestFee::TenPercent) => (2, Some((Decimal::percent(10), owner.to_string()))),
         };
         let fee_percentage = fee.as_ref().unwrap_or(&(Decimal::zero(), "".to_string())).0;
+        let fees = Fees {
+            index: fee_index,
+            value: fee,
+            percent: fee_percentage,
+        };
         app.init_modules(|router, _, storage| {
             router
                 .bank
@@ -333,18 +352,18 @@ mod tests {
                 .unwrap();
             router
                 .bank
-                .init_balance(storage, &staker_liquid, coins(500_000_000, "uruji"))
+                .init_balance(storage, &stakers.liquid, coins(500_000_000, "uruji"))
                 .unwrap();
             router
                 .bank
-                .init_balance(storage, &staker_account_1, coins(500_000_000, "uruji"))
+                .init_balance(storage, &stakers.account_1, coins(500_000_000, "uruji"))
                 .unwrap();
             router
                 .bank
-                .init_balance(storage, &staker_account_2, coins(500_000_000, "uruji"))
+                .init_balance(storage, &stakers.account_2, coins(500_000_000, "uruji"))
                 .unwrap()
         });
-        (app, apps, owner, staker_liquid, staker_account_1, staker_account_2, fee_index, fee, fee_percentage)
+        (app, apps, owner, stakers, fees)
     } 
 
     fn create_swap_contract(
@@ -413,22 +432,18 @@ mod tests {
         let (mut app, 
             apps, 
             owner, 
-            staker_liquid, 
-            staker_account_1, 
-            staker_account_2, 
-            fee_index, 
-            fee, 
-            fee_percentage) = init_app(test_fee);
+            stakers, 
+            fees) = init_app(test_fee);
         let swap_contract = create_swap_contract(&mut app, &owner);
-        let contract = create_staking_contract(&mut app, &owner, fee, swap_contract, false);
+        let contract = create_staking_contract(&mut app, &owner, fees.value, swap_contract, false);
 
         // Liquid bonds its first 1_000
-        bond_liquid(&mut app, &contract, &staker_liquid, 1_000, "uruji");
+        bond_liquid(&mut app, &contract, &stakers.liquid, 1_000, "uruji");
 
         // share balance
         assert_balance(
             &app,
-            &staker_liquid,
+            &stakers.liquid,
             "x/staking-uruji",
             Uint128::from(1_000u128),
         );
@@ -441,7 +456,7 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_liquid first bond of 1_000",
+            "After stakers.liquid first bond of 1_000",
             &StatusResponse {
                 account_bond: Uint128::zero(),
                 assigned_revenue: Uint128::zero(),
@@ -457,13 +472,13 @@ mod tests {
         // share balance
         assert_balance(
             &app,
-            &staker_liquid,
+            &stakers.liquid,
             "x/staking-uruji",
             Uint128::from(1_000u128),
         );
 
-        // staker_account_1 bonds its first 500
-        bond_account(&mut app, &contract, &staker_account_1, 500, "uruji");
+        // stakers.account_1 bonds its first 500
+        bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");
 
         /*--- Acc_1 Bond 500 ----------------------
               | Acc_1    | Acc_2 | Accounts    | Liquid    | Total
@@ -474,7 +489,7 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_account_1 first bond of 500",
+            "After stakers.account_1 first bond of 500",
             &StatusResponse {
                 account_bond: Uint128::from(500u128),
                 assigned_revenue: Uint128::zero(),
@@ -486,7 +501,7 @@ mod tests {
 
         let revenue_amount = 100;
         let revenue_amount_fee =
-            (Decimal::from_atomics(revenue_amount, 0).unwrap() * fee_percentage).to_uint_ceil();
+            (Decimal::from_atomics(revenue_amount, 0).unwrap() * fees.percent).to_uint_ceil();
         let revenue_amount_remaining = revenue_amount - revenue_amount_fee.u128();
 
         // Revenue collection 1
@@ -497,8 +512,8 @@ mod tests {
         )
         .unwrap();
 
-        // staker_account_2 bonds its first 500
-        bond_account(&mut app, &contract, &staker_account_2, 500, "uruji");
+        // stakers.account_2 bonds its first 500
+        bond_account(&mut app, &contract, &stakers.account_2, 500, "uruji");
 
         /*--- Acc_2 Bond 500 ----------------------
               | Acc_1 | Acc_2 | Accounts | Liquid | Total
@@ -509,17 +524,17 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_account_2 first bond of 500",
+            "After stakers.account_2 first bond of 500",
             &StatusResponse {
                 account_bond: Uint128::from(1_000u128),
                 assigned_revenue: [
                     Uint128::from(33u128),
                     Uint128::from(31u128),
                     Uint128::from(30u128),
-                ][fee_index],
+                ][fees.index],
                 liquid_bond_shares: Uint128::from(1_000u128),
                 liquid_bond_size: Uint128::from(1_000u128),
-                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()][fees.index],
             },
         );
 
@@ -533,7 +548,7 @@ mod tests {
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_1.to_string(),
+                addr: stakers.account_1.to_string(),
                 bonded: Uint128::from(500u128),
                 pending_revenue: expected_pending_revenue_500_1500,
             },
@@ -544,7 +559,7 @@ mod tests {
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_2.to_string(),
+                addr: stakers.account_2.to_string(),
                 bonded: Uint128::from(500u128),
                 pending_revenue: Uint128::zero(),
             },
@@ -559,8 +574,8 @@ mod tests {
         .unwrap();
 
         // Another bond to trigger a distribution
-        // staker_account_1 bonds its second 500, total 1000
-        bond_account(&mut app, &contract, &staker_account_1, 500, "uruji");
+        // stakers.account_1 bonds its second 500, total 1000
+        bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");
 
         let expected_pending_revenue_500_2000 =
             Decimal::from_ratio(revenue_amount_remaining * 500, 2000u128).to_uint_floor();
@@ -572,7 +587,7 @@ mod tests {
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_1.to_string(),
+                addr: stakers.account_1.to_string(),
                 bonded: Uint128::from(1000u128),
                 pending_revenue: Uint128::zero(),
             },
@@ -580,14 +595,14 @@ mod tests {
 
         let expected_claim_account_1 =
             expected_pending_revenue_500_1500 + expected_pending_revenue_500_2000;
-        assert_balance(&app, &staker_account_1, "uusdc", expected_claim_account_1); // WITHOUT_FEE: 58, WITH_FEE_5%: 54, WITH_FEE_10%: ??
+        assert_balance(&app, &stakers.account_1, "uusdc", expected_claim_account_1); // WITHOUT_FEE: 58, WITH_FEE_5%: 54, WITH_FEE_10%: ??
 
         // 1500/500 split of 100 (##3)
         assert_account(
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_2.to_string(),
+                addr: stakers.account_2.to_string(),
                 bonded: Uint128::from(500u128),
                 pending_revenue: expected_pending_revenue_500_2000, // WITHOUT_FEE: 25, WITH_FEE: 23, WITH_FEE_10%: ??
             },
@@ -605,20 +620,20 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_account_1 second bond of 500",
+            "After stakers.account_1 second bond of 500",
             &StatusResponse {
                 account_bond: Uint128::from(1500u128),
-                assigned_revenue: expected_account_revenue, // [Uint128::from(25u128), Uint128::from(24u128), Uint128::from(23u128)][fee_index]
+                assigned_revenue: expected_account_revenue, // [Uint128::from(25u128), Uint128::from(24u128), Uint128::from(23u128)][fees.index]
                 liquid_bond_shares: Uint128::from(1000u128),
                 liquid_bond_size: Uint128::from(1010u128),
-                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()][fees.index],
             },
         );
 
-        // staker_account_2 claims all
+        // stakers.account_2 claims all
         let res = app
             .execute_contract(
-                staker_account_2.clone(),
+                stakers.account_2.clone(),
                 contract.clone(),
                 &ExecuteMsg::Account(AccountMsg::Claim {}),
                 &[],
@@ -630,7 +645,7 @@ mod tests {
         res.assert_event(
             &Event::new("transfer")
                 .add_attribute("amount", expected_amount_attribute_value)
-                .add_attribute("recipient", staker_account_2.clone()),
+                .add_attribute("recipient", stakers.account_2.clone()),
         );
 
         /*--- Acc_2 Claim All ----------------------
@@ -642,21 +657,21 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_account_2 claim all",
+            "After stakers.account_2 claim all",
             &StatusResponse {
                 account_bond: Uint128::from(1500u128),
-                assigned_revenue: expected_account_revenue - expected_claim_account_2, // [Uint128::zero(), Uint128::one(), Uint128::one()][fee_index]
+                assigned_revenue: expected_account_revenue - expected_claim_account_2, // [Uint128::zero(), Uint128::one(), Uint128::one()][fees.index]
                 liquid_bond_shares: Uint128::from(1000u128),
                 liquid_bond_size: Uint128::from(1020u128),
                 undistributed_revenue: [Uint128::one(), Uint128::zero(), Uint128::zero()]
-                    [fee_index],
+                    [fees.index],
             },
         );
 
-        // staker_liquid undounds 500
+        // stakers.liquid undounds 500
         let res = app
             .execute_contract(
-                staker_liquid.clone(),
+                stakers.liquid.clone(),
                 contract.clone(),
                 &ExecuteMsg::Liquid(LiquidMsg::Unbond {}),
                 &coins(500, "x/staking-uruji".to_string()),
@@ -673,7 +688,7 @@ mod tests {
         res.assert_event(
             &Event::new("transfer")
                 .add_attribute("amount", "515uruji")
-                .add_attribute("recipient", staker_liquid),
+                .add_attribute("recipient", stakers.liquid),
         );
 
         /*--- Liquid Unbound 500 ----------------------
@@ -684,14 +699,14 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_liquid unbound 500",
+            "After stakers.liquid unbound 500",
             &StatusResponse {
                 account_bond: Uint128::from(1500u128),
-                assigned_revenue: expected_account_revenue_2, // [Uint128::zero(),  Uint128::one(), Uint128::one()][fee_index]
+                assigned_revenue: expected_account_revenue_2, // [Uint128::zero(),  Uint128::one(), Uint128::one()][fees.index]
                 liquid_bond_shares: Uint128::from(500u128),
                 liquid_bond_size: Uint128::from(515u128),
                 undistributed_revenue: [Uint128::one(), Uint128::zero(), Uint128::zero()]
-                    [fee_index],
+                    [fees.index],
             },
         );
 
@@ -707,7 +722,7 @@ mod tests {
 
         let res = app
             .execute_contract(
-                staker_account_1.clone(),
+                stakers.account_1.clone(),
                 contract.clone(),
                 &ExecuteMsg::Account(AccountMsg::Withdraw {
                     amount: Some(Uint128::from(50u128)),
@@ -716,12 +731,12 @@ mod tests {
             )
             .unwrap();
 
-        let expected_auto_claim = [50u128, 46u128, 44u128][fee_index];
+        let expected_auto_claim = [50u128, 46u128, 44u128][fees.index];
         let expected_amount_attribute_value_2 = format!("50uruji,{}uusdc", expected_auto_claim);
         res.assert_event(
             &Event::new("transfer")
                 .add_attribute("amount", expected_amount_attribute_value_2) // WITHOUT_FEE: 50uruji,50uusdc, WITH_FEE: 50uruji,46uusdc
-                .add_attribute("recipient", staker_account_1.clone()),
+                .add_attribute("recipient", stakers.account_1.clone()),
         );
 
         /*--- Liquid Unbound 500 ----------------------
@@ -732,17 +747,17 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_account_1 withdraw of 50",
+            "After stakers.account_1 withdraw of 50",
             &StatusResponse {
                 account_bond: Uint128::from(1450u128),
                 assigned_revenue: [
                     Uint128::from(25u128),
                     Uint128::from(25u128),
                     Uint128::from(23u128),
-                ][fee_index],
+                ][fees.index],
                 liquid_bond_shares: Uint128::from(500u128),
                 liquid_bond_size: Uint128::from(525u128),
-                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::one()][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::one()][fees.index],
             },
         );
 
@@ -750,7 +765,7 @@ mod tests {
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_1.to_string(),
+                addr: stakers.account_1.to_string(),
                 bonded: Uint128::from(950u128),
                 pending_revenue: Uint128::zero(),
             },
@@ -760,7 +775,7 @@ mod tests {
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_2.to_string(),
+                addr: stakers.account_2.to_string(),
                 bonded: Uint128::from(500u128),
                 pending_revenue: expected_pending_revenue_500_2000, // WITHOUT_FEE: 25u128, WITH_FEE: 23u128
             },
@@ -769,17 +784,17 @@ mod tests {
 
     #[test]
     fn swap_sends_back_funds() {
-        let (mut app, apps, owner, staker_liquid, _, _, _, fee, _) = init_app(None);
+        let (mut app, apps, owner, stakers, fees) = init_app(None);
         let swap_contract = create_swap_contract(&mut app, &owner);
-        let contract = create_staking_contract(&mut app, &owner, fee, swap_contract, true);
+        let contract = create_staking_contract(&mut app, &owner, fees.value, swap_contract, true);
 
         // Liquid bonds its first 1_000
-        bond_liquid(&mut app, &contract, &staker_liquid, 1_000, "uruji");
+        bond_liquid(&mut app, &contract, &stakers.liquid, 1_000, "uruji");
 
         // share balance
         assert_balance(
             &app,
-            &staker_liquid,
+            &stakers.liquid,
             "x/staking-uruji",
             Uint128::from(1_000u128),
         );
@@ -787,7 +802,7 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_liquid first bond of 1_000",
+            "After stakers.liquid first bond of 1_000",
             &StatusResponse {
                 account_bond: Uint128::zero(),
                 assigned_revenue: Uint128::zero(),
@@ -811,12 +826,12 @@ mod tests {
         .unwrap();
 
         // Liquid bonds 2_000 more
-        bond_liquid(&mut app, &contract, &staker_liquid, 2_000, "uruji");
+        bond_liquid(&mut app, &contract, &stakers.liquid, 2_000, "uruji");
 
         assert_state(
             &app,
             &contract,
-            "After staker_liquid bonds 2_000 more",
+            "After stakers.liquid bonds 2_000 more",
             &StatusResponse {
                 account_bond: Uint128::zero(),
                 assigned_revenue: Uint128::zero(),
