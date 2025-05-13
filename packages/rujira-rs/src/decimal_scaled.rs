@@ -193,7 +193,14 @@ impl Add for DecimalScaled {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        self.map_equalised(rhs, |a, b, i| Self((a.add(b), i)), Add::add)
+        self.map_equalised(
+            rhs,
+            |a, b, i| match a.checked_add(b) {
+                Ok(v) => Self((v, i)),
+                Err(_) => self.truncate(1).add(rhs.truncate(1)),
+            },
+            Add::add,
+        )
     }
 }
 
@@ -450,6 +457,18 @@ mod tests {
         assert_eq!(
             DecimalScaled((Uint256::one(), 80)) + DecimalScaled((Uint256::one(), 100)),
             DecimalScaled((Uint256::from(100000000000000000001u128), 100))
+        );
+
+        assert_eq!(
+            DecimalScaled((Uint256::MAX, 50)) + DecimalScaled((Uint256::MAX, 60)),
+            DecimalScaled((
+                Uint256::MAX
+                    // We need to take the scale down one to have space to add
+                    .div(Uint256::from(10u128))
+                    // Divide rhs by 1e10, plus the extra one from above
+                    .add(Uint256::MAX.div(Uint256::from(100000000000u128))),
+                49
+            ))
         );
     }
     #[test]
