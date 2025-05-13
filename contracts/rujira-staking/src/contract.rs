@@ -307,9 +307,8 @@ mod tests {
             .unwrap();
         assert_eq!(account, *expected);
     }
-    // ----------
 
-    fn lifecycle(test_fee: Option<TestFee>) {
+    fn init_app(test_fee: Option<TestFee>) -> (cw_multi_test::App<cw_multi_test::BankKeeper, cosmwasm_std::testing::MockApi, cosmwasm_std::MemoryStorage, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::WasmKeeper<cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::IbcMsg, cosmwasm_std::IbcQuery, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, rujira_rs_testing::RujiraStargate>, Addr, Addr, Addr, Addr, Addr, usize, Option<(Decimal, String)>, Decimal) {
         let mut app = mock_rujira_app();
         let apps = app.api().addr_make("apps");
         let owner = app.api().addr_make("owner");
@@ -327,7 +326,7 @@ mod tests {
                 .bank
                 .init_balance(storage, &owner, coins(500_000_000, "uruji"))
                 .unwrap();
-
+    
             router
                 .bank
                 .init_balance(storage, &apps, coins(500_000_000, "uusdc"))
@@ -345,7 +344,13 @@ mod tests {
                 .init_balance(storage, &staker_account_2, coins(500_000_000, "uruji"))
                 .unwrap()
         });
+        (app, apps, owner, staker_liquid, staker_account_1, staker_account_2, fee_index, fee, fee_percentage)
+    } 
 
+    fn create_swap_contract(
+        app: &mut cw_multi_test::App<cw_multi_test::BankKeeper, cosmwasm_std::testing::MockApi, cosmwasm_std::MemoryStorage, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::WasmKeeper<cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::IbcMsg, cosmwasm_std::IbcQuery, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, rujira_rs_testing::RujiraStargate>, 
+        owner: &Addr
+    ) -> Addr {
         let swap_code_id = app.store_code(mock_swap_contract());
         let swap_contract = app
             .instantiate_contract(
@@ -357,7 +362,16 @@ mod tests {
                 None,
             )
             .unwrap();
+        swap_contract
+    }    
 
+    fn create_staking_contract(
+        app: &mut cw_multi_test::App<cw_multi_test::BankKeeper, cosmwasm_std::testing::MockApi, cosmwasm_std::MemoryStorage, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::WasmKeeper<cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::IbcMsg, cosmwasm_std::IbcQuery, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, rujira_rs_testing::RujiraStargate>, 
+        owner: &Addr, 
+        fee: Option<(Decimal, String)>, 
+        swap_contract: Addr,
+        return_funds_on_swap: bool
+    ) -> Addr {
         let code = Box::new(ContractWrapper::new(execute, instantiate, query));
         let code_id = app.store_code(code);
         let contract = app
@@ -371,6 +385,7 @@ mod tests {
                         swap_contract.to_string(),
                         to_json_binary(&MsgSwap {
                             min_return: coin(10, "uruji"),
+                            return_funds: return_funds_on_swap
                         })
                         .unwrap(),
                         Uint128::from(20u128),
@@ -390,6 +405,22 @@ mod tests {
                 None,
             )
             .unwrap();
+        contract
+    }    
+    // ----------
+
+    fn lifecycle(test_fee: Option<TestFee>) {
+        let (mut app, 
+            apps, 
+            owner, 
+            staker_liquid, 
+            staker_account_1, 
+            staker_account_2, 
+            fee_index, 
+            fee, 
+            fee_percentage) = init_app(test_fee);
+        let swap_contract = create_swap_contract(&mut app, &owner);
+        let contract = create_staking_contract(&mut app, &owner, fee, swap_contract, false);
 
         // Liquid bonds its first 1_000
         bond_liquid(&mut app, &contract, &staker_liquid, 1_000, "uruji");
@@ -735,4 +766,73 @@ mod tests {
             },
         );
     }
+
+    #[test]
+    fn swap_sends_back_funds() {
+        let (mut app, apps, owner, staker_liquid, _, _, _, fee, _) = init_app(None);
+        let swap_contract = create_swap_contract(&mut app, &owner);
+        let contract = create_staking_contract(&mut app, &owner, fee, swap_contract, true);
+
+        // Liquid bonds its first 1_000
+        bond_liquid(&mut app, &contract, &staker_liquid, 1_000, "uruji");
+
+        // share balance
+        assert_balance(
+            &app,
+            &staker_liquid,
+            "x/staking-uruji",
+            Uint128::from(1_000u128),
+        );
+
+        assert_state(
+            &app,
+            &contract,
+            "After staker_liquid first bond of 1_000",
+            &StatusResponse {
+                account_bond: Uint128::zero(),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(1_000u128),
+                liquid_bond_size: Uint128::from(1_000u128),
+                undistributed_revenue: Uint128::zero(),
+            },
+        );
+
+        // contract balance
+        assert_balance(&app, &contract, "uruji", Uint128::from(1_000u128));
+
+        let revenue_amount = 100;
+
+        // Revenue collection 1
+        app.send_tokens(
+            apps.clone(),
+            contract.clone(),
+            &coins(revenue_amount, "uusdc"),
+        )
+        .unwrap();
+
+        // Liquid bonds 2_000 more
+        bond_liquid(&mut app, &contract, &staker_liquid, 2_000, "uruji");
+
+        assert_state(
+            &app,
+            &contract,
+            "After staker_liquid bonds 2_000 more",
+            &StatusResponse {
+                account_bond: Uint128::zero(),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(3_000u128),
+                liquid_bond_size: Uint128::from(3_000u128),
+                // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       and are still accounted as undistributed revenue
+                undistributed_revenue: Uint128::from(20u128), 
+            },
+        );
+
+        // contract balance
+        assert_balance(&app, &contract, "uruji", Uint128::from(3_010u128));
+        // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
+        //       and the uusdc balance will never decrease
+        assert_balance(&app, &contract, "uusdc", Uint128::from(revenue_amount));
+    }
+
 }
