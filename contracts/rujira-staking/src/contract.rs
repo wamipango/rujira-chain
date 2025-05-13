@@ -848,6 +848,73 @@ mod tests {
         // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
         //       and the uusdc balance will never decrease
         assert_balance(&app, &contract, "uusdc", Uint128::from(revenue_amount));
+
+        // stakers.account_1 bonds its first 500
+        bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");        
+
+        assert_state(
+            &app,
+            &contract,
+            "stakers.account_1 bonds its first 500",
+            &StatusResponse {
+                account_bond: Uint128::from(500u128),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(3_000u128),
+                liquid_bond_size: Uint128::from(3_010u128),
+                // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       and are still accounted as undistributed revenue
+                undistributed_revenue: Uint128::from(20u128), 
+            },
+        );
+
+        assert_account(
+            &app,
+            &contract,
+            &AccountResponse {
+                addr: stakers.account_1.to_string(),
+                bonded: Uint128::from(500u128),
+                pending_revenue: Uint128::zero(),
+            },
+        );        
+
+        // Revenue collection 1
+        app.send_tokens(
+            apps.clone(),
+            contract.clone(),
+            &coins(revenue_amount, "uusdc"),
+        )
+        .unwrap();
+
+        assert_balance(&app, &contract, "uusdc", Uint128::from(200u128));
+
+        // stakers.account_1 bonds 1500 more
+        bond_account(&mut app, &contract, &stakers.account_1, 1500, "uruji");        
+
+        assert_state(
+            &app,
+            &contract,
+            "stakers.account_1 bonds its first 500",
+            &StatusResponse {
+                account_bond: Uint128::from(2000u128),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(3_000u128),
+                liquid_bond_size: Uint128::from(3_020u128),
+                // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       and are still accounted as undistributed revenue
+                undistributed_revenue: Uint128::from(21u128), 
+            },
+        );
+
+        assert_account(
+            &app,
+            &contract,
+            &AccountResponse {
+                addr: stakers.account_1.to_string(),
+                bonded: Uint128::from(2000u128),
+                pending_revenue: Uint128::zero(),
+            },
+        );        
+
     }
 
 }
