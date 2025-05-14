@@ -48,15 +48,27 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     let time = env.block.time;
+    let balance = deps
+        .querier
+        .query_balance(env.contract.address, config.ruji_denom.clone())?
+        .amount;
     match msg {
         ExecuteMsg::Deposit {} => {
             let amount = must_pay(&info, &config.merge_denom)?;
-            let shares = execute_deposit(deps.storage, &config, time, &info.sender, amount)?;
+            let shares =
+                execute_deposit(deps.storage, &config, time, &balance, &info.sender, amount)?;
             Ok(Response::default().add_event(event_deposit(info.sender, amount, shares)))
         }
         ExecuteMsg::Withdraw { share_amount } => {
             nonpayable(&info)?;
-            let amount = execute_withdraw(deps.storage, &config, time, &info.sender, share_amount)?;
+            let amount = execute_withdraw(
+                deps.storage,
+                &config,
+                time,
+                &balance,
+                &info.sender,
+                share_amount,
+            )?;
             Ok(Response::default()
                 .add_message(BankMsg::Send {
                     to_address: info.sender.to_string(),
@@ -345,5 +357,81 @@ mod tests {
                 size: Uint128::from(200_000u128),
             }
         );
+
+        app.update_block(|x| {
+            x.time = x.time.plus_seconds(2_000);
+        });
+
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Withdraw {
+                    share_amount: Uint128::from(50_000u128),
+                },
+                &[],
+            )
+            .unwrap();
+
+        res.assert_event(&Event::new("transfer").add_attributes(vec![
+            ("recipient", owner.as_str()),
+            ("sender", contract.as_str()),
+            ("amount", "74900uruji"),
+        ]));
+
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Withdraw {
+                    share_amount: Uint128::from(50_000u128),
+                },
+                &[],
+            )
+            .unwrap();
+
+        res.assert_event(&Event::new("transfer").add_attributes(vec![
+            ("recipient", owner.as_str()),
+            ("sender", contract.as_str()),
+            ("amount", "74900uruji"),
+        ]));
+
+        app.update_block(|x| {
+            x.time = x.time.plus_seconds(2_000);
+        });
+
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Withdraw {
+                    share_amount: Uint128::from(50_000u128),
+                },
+                &[],
+            )
+            .unwrap();
+
+        res.assert_event(&Event::new("transfer").add_attributes(vec![
+            ("recipient", owner.as_str()),
+            ("sender", contract.as_str()),
+            ("amount", "174500uruji"),
+        ]));
+
+        let res = app
+            .execute_contract(
+                owner.clone(),
+                contract.clone(),
+                &ExecuteMsg::Withdraw {
+                    share_amount: Uint128::from(50_000u128),
+                },
+                &[],
+            )
+            .unwrap();
+
+        res.assert_event(&Event::new("transfer").add_attributes(vec![
+            ("recipient", owner.as_str()),
+            ("sender", contract.as_str()),
+            ("amount", "174500uruji"),
+        ]));
     }
 }
