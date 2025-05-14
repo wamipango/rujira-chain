@@ -49,6 +49,7 @@ pub fn execute_deposit(
     storage: &mut dyn Storage,
     config: &Config,
     now: Timestamp,
+    ruji_balance: &Uint128,
     account: &Addr,
     amount: Uint128,
 ) -> Result<Uint128, ContractError> {
@@ -56,7 +57,7 @@ pub fn execute_deposit(
     // 1. We allocate before we process the deposit in order to increase the share ratio _after_ the
     // suplus has been applied to it. Otherwise a new depositor would instantly earn a share of the
     // surplus accrued since the last `allocate`
-    let mut pool = allocate(storage, config, factor)?;
+    let mut pool = allocate(storage, config, ruji_balance, factor)?;
 
     // The value of the merge amount, denominated in RUJI, with the decay factor applied
     let value = merge_ratio(config, &factor).mul(Decimal::from_ratio(amount, Uint128::one()));
@@ -85,11 +86,12 @@ pub fn execute_withdraw(
     storage: &mut dyn Storage,
     config: &Config,
     now: Timestamp,
+    ruji_balance: &Uint128,
     account: &Addr,
     amount: Uint128,
 ) -> Result<Uint128, ContractError> {
     let factor = decay_factor(config, &now);
-    let mut pool = allocate(storage, config, factor)?;
+    let mut pool = allocate(storage, config, ruji_balance, factor)?;
     let (account_shares, merged) = ACCOUNTS.load(storage, account.clone()).unwrap_or_default();
     let checked_amount = min(account_shares, amount);
     let allocation = pool.leave(checked_amount)?;
@@ -108,6 +110,7 @@ pub fn execute_withdraw(
 fn allocate(
     storage: &dyn Storage,
     config: &Config,
+    ruji_balance: &Uint128,
     factor: Decimal,
 ) -> Result<SharePool, ContractError> {
     let mut pool = POOL.load(storage)?;
@@ -117,7 +120,7 @@ fn allocate(
         .mul(Decimal::from_ratio(remaining, Uint128::one()))
         .to_uint_ceil();
 
-    let surplus = config.ruji_allocation.sub(pool.size()).sub(liability);
+    let surplus = ruji_balance.sub(pool.size()).sub(liability);
     pool.deposit(surplus)?;
     Ok(pool)
 }
@@ -170,6 +173,7 @@ mod tests {
             storage,
             &config,
             now,
+            &Uint128::from(100_000_000u128),
             &account,
             Uint128::from(5_000_000u128),
         )
@@ -199,6 +203,7 @@ mod tests {
             storage,
             &config,
             now,
+            &Uint128::from(100_000_000u128),
             &account,
             Uint128::from(10_000_000u128),
         )
@@ -226,6 +231,7 @@ mod tests {
             storage,
             &config,
             now,
+            &Uint128::from(100_000_000u128),
             &account,
             Uint128::from(2_000_000u128),
         )
@@ -269,6 +275,7 @@ mod tests {
             storage,
             &config,
             Timestamp::from_seconds(0),
+            &Uint128::from(100_000_000u128),
             &Addr::unchecked("account"),
             Uint128::from(5_000_000u128),
         )
@@ -295,6 +302,7 @@ mod tests {
             storage,
             &config,
             Timestamp::from_seconds(101_000),
+            &Uint128::from(100_000_000u128),
             &Addr::unchecked("account2"),
             Uint128::from(2_500_000u128),
         )
@@ -328,6 +336,7 @@ mod tests {
             storage,
             &config,
             Timestamp::from_seconds(101_000),
+            &Uint128::from(100_000_000u128),
             &Addr::unchecked("account2"),
             Uint128::from(2_500_000u128),
         )
@@ -359,6 +368,7 @@ mod tests {
             storage,
             &config,
             Timestamp::from_seconds(1_001_001),
+            &Uint128::from(100_000_000u128),
             &Addr::unchecked("account3"),
             Uint128::from(2_500_000u128),
         )
@@ -379,5 +389,98 @@ mod tests {
         ACCOUNTS
             .load(storage, Addr::unchecked("account3"))
             .unwrap_err();
+    }
+
+    #[test]
+    fn test_allocation_after_withdrawal() {
+        let config = Config {
+            merge_denom: "ukuji".to_string(),
+            merge_supply: Uint128::from(200_000_000u128),
+            ruji_denom: "uruji".to_string(),
+            ruji_allocation: Uint128::from(100_000_000u128),
+            decay_starts_at: Timestamp::from_seconds(0),
+            decay_ends_at: Timestamp::from_seconds(1_000_000),
+        };
+        let mut deps = mock_dependencies();
+        let storage = deps.as_mut().storage;
+
+        init(storage).unwrap();
+
+        let shares = execute_deposit(
+            storage,
+            &config,
+            Timestamp::from_seconds(0),
+            &Uint128::from(100_000_000u128),
+            &Addr::unchecked("account"),
+            Uint128::from(5_000_000u128),
+        )
+        .unwrap();
+        assert_eq!(shares, Uint128::from(2_500_000u128));
+        assert_eq!(
+            TOTAL_MERGED.load(storage).unwrap(),
+            Uint128::from(5_000_000u128)
+        );
+        assert_eq!(
+            POOL.load(storage).unwrap().size(),
+            Uint128::from(2_500_000u128)
+        );
+        assert_eq!(
+            POOL.load(storage).unwrap().shares(),
+            Uint128::from(2_500_000u128)
+        );
+        assert_eq!(
+            ACCOUNTS.load(storage, Addr::unchecked("account")).unwrap(),
+            (Uint128::from(2_500_000u128), Uint128::from(5_000_000u128))
+        );
+
+        // Withdraw 20% shares, 10% of the way into the merge
+        // 100m RUJI merge supply. 5m KUJI merged. 195 KUJI unallocated, 10% distributed = 195m KUJI * 0.1 = 9.75m RUJI
+        // Total ownership = 9.75 + 2.5m = 12.25
+        // Withdrawal = 2.45
+        let shares = execute_withdraw(
+            storage,
+            &config,
+            Timestamp::from_seconds(100_000),
+            &Uint128::from(100_000_000u128),
+            &Addr::unchecked("account"),
+            Uint128::from(500_000u128),
+        )
+        .unwrap();
+
+        assert_eq!(shares, Uint128::from(2_450_000u128));
+
+        // Withdrawing again at the same time, should withdraw the same amount
+        let ruji = execute_withdraw(
+            storage,
+            &config,
+            Timestamp::from_seconds(100_000),
+            // RUJI withdrwan from contract in prior execution
+            &Uint128::from(100_000_000u128).sub(Uint128::from(2_450_000u128)),
+            &Addr::unchecked("account"),
+            Uint128::from(500_000u128),
+        )
+        .unwrap();
+
+        assert_eq!(ruji, Uint128::from(2_450_000u128));
+
+        // Withdrawing another 20%, 20% way through
+        // 9.75m RUJI allocated across remaining
+        // 12.25 RUJI ownership - withdrawn (2.45 * 2) = 7.35
+        // 7.35 + additional 9.75 = 17.1
+        // withdraw 1/3 = 5.7m
+        let ruji = execute_withdraw(
+            storage,
+            &config,
+            Timestamp::from_seconds(200_000),
+            // RUJI withdrawn from contract in prior executions
+            &Uint128::from(100_000_000u128)
+                .sub(Uint128::from(2_450_000u128))
+                .sub(Uint128::from(2_450_000u128)),
+            &Addr::unchecked("account"),
+            Uint128::from(500_000u128),
+        )
+        .unwrap();
+
+        assert_eq!(ruji, Uint128::from(5_700_000u128));
     }
 }
