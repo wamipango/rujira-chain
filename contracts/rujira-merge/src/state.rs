@@ -464,7 +464,7 @@ mod tests {
         assert_eq!(ruji, Uint128::from(2_450_000u128));
 
         // Withdrawing another 20%, 20% way through
-        // 9.75m RUJI allocated across remaining 
+        // 9.75m RUJI allocated across remaining
         // 12.25 RUJI ownership - withdrawn (2.45 * 2) = 7.35
         // 7.35 + additional 9.75 = 17.1
         // withdraw 1/3 = 5.7m
