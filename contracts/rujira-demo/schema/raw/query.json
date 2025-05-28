@@ -16,20 +16,6 @@
     }
   ],
   "definitions": {
-    "Chain": {
-      "type": "string",
-      "enum": [
-        "avax",
-        "bch",
-        "bsc",
-        "btc",
-        "doge",
-        "eth",
-        "gaia",
-        "ltc",
-        "thor"
-      ]
-    },
     "Layer1Asset": {
       "type": "object",
       "required": [
@@ -38,7 +24,7 @@
       ],
       "properties": {
         "chain": {
-          "$ref": "#/definitions/Chain"
+          "type": "string"
         },
         "symbol": {
           "type": "string"
