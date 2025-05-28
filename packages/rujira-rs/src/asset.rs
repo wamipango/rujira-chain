@@ -7,10 +7,7 @@ use std::{
 use cosmwasm_schema::cw_serde;
 use thiserror::Error;
 
-use crate::{
-    chain::{Chain, ChainParseError},
-    memoed::Memoed,
-};
+use crate::memoed::Memoed;
 
 #[cw_serde]
 pub enum Asset {
@@ -54,14 +51,14 @@ impl Display for NativeAsset {
 
 #[cw_serde]
 pub struct SecuredAsset {
-    chain: Chain,
+    chain: String,
     symbol: String,
 }
 
 impl SecuredAsset {
-    pub fn new(chain: Chain, symbol: &str) -> Self {
+    pub fn new(chain: &str, symbol: &str) -> Self {
         Self {
-            chain,
+            chain: chain.to_string(),
             symbol: symbol.to_string(),
         }
     }
@@ -87,14 +84,14 @@ impl Display for SecuredAsset {
 
 #[cw_serde]
 pub struct Layer1Asset {
-    chain: Chain,
+    chain: String,
     symbol: String,
 }
 
 impl Layer1Asset {
-    pub fn new(chain: Chain, symbol: &str) -> Self {
+    pub fn new(chain: &str, symbol: &str) -> Self {
         Self {
-            chain,
+            chain: chain.to_string(),
             symbol: symbol.to_string(),
         }
     }
@@ -113,24 +110,21 @@ impl Layer1Asset {
 
     pub fn from_native(denom: String) -> std::result::Result<Self, Layer1AssetError> {
         if denom == *"rune" {
-            return Ok(Self::new(Chain::Thor, "rune"));
+            return Ok(Self::new("THOR", "rune"));
         }
         match denom.split('-').collect::<Vec<_>>().as_slice() {
-            [chain, symbol] => Ok(Self::new(Chain::try_from(*chain)?, symbol)),
+            [chain, symbol] => Ok(Self::new(chain, symbol)),
             _ => Err(Layer1AssetError::InvalidNativeDenom(denom)),
         }
     }
 
     pub fn is_rune(&self) -> bool {
-        self.chain == Chain::Thor && self.symbol == "RUNE"
+        self.chain == "THOR" && self.symbol == "RUNE"
     }
 }
 
 #[derive(Error, Debug)]
 pub enum Layer1AssetError {
-    #[error("{0}")]
-    ChainParse(#[from] ChainParseError),
-
     #[error("Invalid layer 1 string {0}")]
     Invalid(String),
 
@@ -165,10 +159,7 @@ impl TryFrom<&str> for Layer1Asset {
 
     fn try_from(value: &str) -> result::Result<Self, Self::Error> {
         match value.split(".").collect::<Vec<_>>().as_slice() {
-            [chain, symbol] => Ok(Self {
-                chain: Chain::try_from(*chain)?,
-                symbol: symbol.to_string(),
-            }),
+            [chain, symbol] => Ok(Self::new(chain, symbol)),
             _ => Err(Layer1AssetError::Invalid(value.to_owned())),
         }
     }
@@ -218,15 +209,12 @@ mod tests {
 
     #[test]
     fn bridge() {
-        let native = SecuredAsset::new(Chain::Btc, "BTC");
+        let native = SecuredAsset::new("BTC", "BTC");
         assert_eq!(native.to_string(), "BTC-BTC");
         assert_eq!(native.denom_string(), "btc-btc");
         assert_eq!(format!("{}", native), "BTC-BTC");
 
-        let native = SecuredAsset::new(
-            Chain::Eth,
-            "RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb",
-        );
+        let native = SecuredAsset::new("ETH", "RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb");
         assert_eq!(
             native.to_string(),
             "ETH-RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb"
@@ -241,15 +229,12 @@ mod tests {
 
     #[test]
     fn l1() {
-        let l1 = Layer1Asset::new(Chain::Btc, "BTC");
+        let l1 = Layer1Asset::new("BTC", "BTC");
         assert_eq!(l1.to_string(), "BTC.BTC");
         assert_eq!(l1.denom_string(), "btc.btc");
         assert_eq!(format!("{}", l1), "BTC.BTC");
 
-        let l1 = Layer1Asset::new(
-            Chain::Eth,
-            "RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb",
-        );
+        let l1 = Layer1Asset::new("ETH", "RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb");
         assert_eq!(
             l1.to_string(),
             "ETH.RUNE-0x3155ba85d5f96b2d030a4966af206230e46849cb"
@@ -267,7 +252,7 @@ mod tests {
         let asset: Asset = NativeAsset::new("RUNE").into();
         assert_eq!(asset.to_memo(), "rune");
 
-        let asset: Asset = SecuredAsset::new(Chain::Btc, "BTC").into();
+        let asset: Asset = SecuredAsset::new("BTC", "BTC").into();
         assert_eq!(asset.to_memo(), "btc-btc");
     }
 }
