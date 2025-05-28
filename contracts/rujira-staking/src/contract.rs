@@ -111,10 +111,11 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractEr
     // Match on ID for completeness
     match msg.id {
         REPLY_ID => {
-            let returned_amount = extract_transfer_amount_from_reply(&msg, &env);
-            if let Some(coin) = &returned_amount {
-                if coin.denom == "rune" && !coin.amount.is_zero() {
-                    let _ = return_pending_swap(deps.storage, coin.amount);
+            let config = Config::load(deps.storage)?;
+            let returned_amount = extract_transfer_amount_from_reply(&msg, &env, &config.revenue_denom);
+            if let Some(amount) = returned_amount {
+                if !amount.is_zero() {
+                    let _ = return_pending_swap(deps.storage, amount);
                 }
             }
             Ok(Response::default())
@@ -291,6 +292,21 @@ mod tests {
     fn assert_balance(app: &RujiraApp, account: &Addr, denom: &str, amount: Uint128) {
         let balance = app.wrap().query_balance(account.clone(), denom).unwrap();
         assert_eq!(balance.amount, amount);
+    }
+
+    fn get_pending_swap(app: &RujiraApp, contract: &Addr) -> Uint128 {
+        let pending_swap_key = "s".as_bytes();
+        let raw_value = app.wrap().query_wasm_raw(contract, pending_swap_key).unwrap().unwrap();
+        let raw_value_str = String::from_utf8(raw_value).unwrap();
+        let inner_value = raw_value_str.trim_matches('"'); // We need to remove the external quotes
+        let value: u128 = inner_value.parse().unwrap();
+        return Uint128::from(value);
+    }
+
+    fn assert_pending_swap(app: &RujiraApp, contract: &Addr, expected: Uint128) {
+        let pending_swap = get_pending_swap(app, contract);
+        dbg!(pending_swap);
+        assert_eq!(get_pending_swap(app, contract), expected);
     }
 
     fn assert_state(app: &RujiraApp, contract: &Addr, comment: &str, expected: &StatusResponse) {
@@ -832,6 +848,8 @@ mod tests {
         )
         .unwrap();
 
+        assert_pending_swap(&app, &contract, Uint128::from(0u128));
+
         // Liquid bonds 2_000 more
         bond_liquid(&mut app, &contract, &stakers.liquid, 2_000, "uruji");
 
@@ -844,9 +862,9 @@ mod tests {
                 assigned_revenue: Uint128::zero(),
                 liquid_bond_shares: Uint128::from(3_000u128),
                 liquid_bond_size: Uint128::from(3_000u128),
-                // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
-                //       and are still accounted as undistributed revenue
-                undistributed_revenue: Uint128::from(20u128), 
+                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       but they must not be accounted as undistributed revenue
+                undistributed_revenue: Uint128::zero(), 
             },
         );
 
@@ -856,8 +874,12 @@ mod tests {
         //       and the uusdc balance will never decrease
         assert_balance(&app, &contract, "uusdc", Uint128::from(revenue_amount));
 
+        assert_pending_swap(&app, &contract, Uint128::from(100u128));
+
         // stakers.account_1 bonds its first 500
         bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");        
+
+        assert_pending_swap(&app, &contract, Uint128::from(100u128));
 
         assert_state(
             &app,
@@ -868,9 +890,9 @@ mod tests {
                 assigned_revenue: Uint128::zero(),
                 liquid_bond_shares: Uint128::from(3_000u128),
                 liquid_bond_size: Uint128::from(3_010u128),
-                // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
-                //       and are still accounted as undistributed revenue
-                undistributed_revenue: Uint128::from(20u128), 
+                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       but they must not be accounted as undistributed revenue
+                undistributed_revenue: Uint128::zero(), 
             },
         );
 
@@ -897,6 +919,8 @@ mod tests {
         // stakers.account_1 bonds 1500 more
         bond_account(&mut app, &contract, &stakers.account_1, 1500, "uruji");        
 
+        assert_pending_swap(&app, &contract, Uint128::from(185u128));
+
         assert_state(
             &app,
             &contract,
@@ -906,9 +930,9 @@ mod tests {
                 assigned_revenue: Uint128::zero(),
                 liquid_bond_shares: Uint128::from(3_000u128),
                 liquid_bond_size: Uint128::from(3_020u128),
-                // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
-                //       and are still accounted as undistributed revenue
-                undistributed_revenue: Uint128::from(21u128), 
+                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       but they must not be accounted as undistributed revenue
+                undistributed_revenue: Uint128::from(1u128), 
             },
         );
 

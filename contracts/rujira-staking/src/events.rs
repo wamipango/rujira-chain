@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{Addr, Coin, Env, Event, Reply, SubMsgResult, Uint128};
+use cosmwasm_std::{Addr, Coins, Env, Event, Reply, SubMsgResult, Uint128};
 
 pub fn event_account_bond(owner: Addr, amount: Uint128) -> Event {
     Event::new(format!("{}/account.bond", env!("CARGO_PKG_NAME")))
@@ -35,7 +35,7 @@ pub fn event_liquid_unbond(owner: Addr, shares: Uint128, returned: Uint128) -> E
         .add_attribute("returned", returned)
 }
 
-pub fn extract_transfer_amount_from_reply(msg: &Reply, env: &Env) -> Option<Coin> {
+pub fn extract_transfer_amount_from_reply(msg: &Reply, env: &Env, denom: &str) -> Option<Uint128> {
     if let SubMsgResult::Ok(result) = &msg.result {
         for event in &result.events {
             if event.ty != "transfer" {
@@ -54,8 +54,10 @@ pub fn extract_transfer_amount_from_reply(msg: &Reply, env: &Env) -> Option<Coin
             }
 
             if let (Some(r), Some(a)) = (recipient, amount) {
-                if r == env.contract.address.as_str() {
-                    return Coin::from_str(&a).ok();
+                let coins = Coins::from_str(&a).ok().unwrap();
+                let denom_value = coins.amount_of(denom);                
+                if r == env.contract.address.as_str() && denom_value > Uint128::zero() {
+                    return Some(denom_value);
                 }
             }
         }
