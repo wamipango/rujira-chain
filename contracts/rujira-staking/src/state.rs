@@ -170,6 +170,11 @@ pub fn distribute(
     Ok((swap_amount, fee_amount))
 }
 
+pub fn return_pending_swap(storage: &mut dyn Storage, returned_amount: Uint128) -> StdResult<()> {
+    let swap_pending = PENDING_SWAP.load(storage)?;
+    return PENDING_SWAP.save(storage, &(swap_pending + returned_amount));
+}
+
 pub fn status(env: Env, deps: Deps, config: &Config) -> StdResult<StatusResponse> {
     let liquid = POOL_LIQUID.load(deps.storage)?;
     let account = POOL_ACCOUNTS.load(deps.storage)?;

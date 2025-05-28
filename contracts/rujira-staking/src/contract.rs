@@ -15,11 +15,10 @@ use crate::config::Config;
 use crate::error::ContractError;
 use crate::events::{
     event_account_bond, event_account_claim, event_account_withdraw, event_liquid_bond,
-    event_liquid_unbond,
+    event_liquid_unbond, extract_transfer_amount_from_reply,
 };
 use crate::state::{
-    account, distribute, execute_account_bond, execute_account_claim, execute_account_withdraw,
-    execute_liquid_bond, execute_liquid_unbond, init, status,
+    account, distribute, execute_account_bond, execute_account_claim, execute_account_withdraw, execute_liquid_bond, execute_liquid_unbond, init, return_pending_swap, status
 };
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -67,7 +66,7 @@ pub fn execute(
         }
     }?;
     if swap_amount.gt(&Uint128::zero()) {
-        res = res.add_submessage(SubMsg::reply_on_error(
+        res = res.add_submessage(SubMsg::reply_always(
             WasmMsg::Execute {
                 contract_addr: config.revenue_converter.0.to_string(),
                 msg: config.revenue_converter.1.clone(),
@@ -108,10 +107,18 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn reply(_deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, ContractError> {
+pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
     // Match on ID for completeness
-    match reply.id {
-        REPLY_ID => Ok(Response::default()),
+    match msg.id {
+        REPLY_ID => {
+            let returned_amount = extract_transfer_amount_from_reply(&msg, &env);
+            if let Some(coin) = &returned_amount {
+                if coin.denom == "rune" && !coin.amount.is_zero() {
+                    let _ = return_pending_swap(deps.storage, coin.amount);
+                }
+            }
+            Ok(Response::default())
+        },
         _ => Err(ContractError::Unauthorized {}),
     }
 }
@@ -391,7 +398,7 @@ mod tests {
         swap_contract: Addr,
         return_funds_on_swap: bool
     ) -> Addr {
-        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query).with_reply(reply));
         let code_id = app.store_code(code);
         let contract = app
             .instantiate_contract(
