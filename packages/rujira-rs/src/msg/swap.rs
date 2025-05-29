@@ -169,15 +169,15 @@ impl Memoed for Option<Dex> {
 mod tests {
     use cosmwasm_std::Uint256;
 
-    use crate::{asset::SecuredAsset, chain::Chain};
+    use crate::asset::SecuredAsset;
 
     use super::*;
 
     #[test]
     fn encoding() {
         let msg = MsgSwap::new(
-            Coin::new(SecuredAsset::new(Chain::Btc, "BTC"), Uint256::from(100u128)),
-            SecuredAsset::new(Chain::Eth, "ETH"),
+            Coin::new(SecuredAsset::new("BTC", "BTC"), Uint256::from(100u128)),
+            SecuredAsset::new("ETH", "ETH"),
             Destination::Refundable {
                 destination_addr: Addr::unchecked("recipient"),
                 refund_addr: Addr::unchecked("refund"),
@@ -200,8 +200,8 @@ mod tests {
         );
 
         let msg = MsgSwap::new(
-            Coin::new(SecuredAsset::new(Chain::Btc, "BTC"), Uint256::from(100u128)),
-            SecuredAsset::new(Chain::Eth, "ETH"),
+            Coin::new(SecuredAsset::new("BTC", "BTC"), Uint256::from(100u128)),
+            SecuredAsset::new("ETH", "ETH"),
             Destination::Direct(Addr::unchecked("recipient")),
             Some(Slip::Limit(Uint256::from(200u128))),
             Some(Affiliate::new(Addr::unchecked("affiliate"), 5)),
@@ -217,8 +217,8 @@ mod tests {
         );
 
         let msg = MsgSwap::new(
-            Coin::new(SecuredAsset::new(Chain::Btc, "BTC"), Uint256::from(100u128)),
-            SecuredAsset::new(Chain::Eth, "ETH"),
+            Coin::new(SecuredAsset::new("BTC", "BTC"), Uint256::from(100u128)),
+            SecuredAsset::new("ETH", "ETH"),
             Destination::Direct(Addr::unchecked("recipient")),
             None,
             None,
@@ -231,8 +231,8 @@ mod tests {
         assert_eq!(msg.to_memo(), "=:eth-eth:recipient::::dexagg:target");
 
         let msg = MsgSwap::new(
-            Coin::new(SecuredAsset::new(Chain::Btc, "BTC"), Uint256::from(100u128)),
-            SecuredAsset::new(Chain::Eth, "ETH"),
+            Coin::new(SecuredAsset::new("BTC", "BTC"), Uint256::from(100u128)),
+            SecuredAsset::new("ETH", "ETH"),
             Destination::Direct(Addr::unchecked("recipient")),
             None,
             None,

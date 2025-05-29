@@ -252,7 +252,7 @@ mod tests {
     use cosmwasm_std::Decimal;
     use rujira_rs::{
         query::{Pool, PoolStatus},
-        Asset, Chain, Layer1Asset,
+        Asset, Layer1Asset,
     };
 
     use super::*;
@@ -260,12 +260,9 @@ mod tests {
     #[test]
     fn query_pool() {
         let app = mock_rujira_app();
-        let asset = Layer1Asset::new(Chain::Btc, "BTC");
+        let asset = Layer1Asset::new("BTC", "BTC");
         let res = Pool::load(app.wrap(), &asset).unwrap();
-        assert_eq!(
-            res.asset,
-            Asset::Layer1(Layer1Asset::new(Chain::Btc, "BTC")),
-        );
+        assert_eq!(res.asset, Asset::Layer1(Layer1Asset::new("BTC", "BTC")),);
         assert_eq!(res.short_code, "b".to_string());
         assert_eq!(res.status, PoolStatus::Available);
         assert_eq!(res.decimals, 8);

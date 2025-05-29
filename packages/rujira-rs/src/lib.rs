@@ -2,7 +2,6 @@ mod account_pool;
 mod asset;
 pub mod bid_pool;
 mod callback;
-mod chain;
 mod coin;
 mod coins;
 mod decimal_scaled;
@@ -22,7 +21,6 @@ pub use account_pool::{AccountPool, AccountPoolAccount};
 pub use asset::{Asset, Layer1Asset, NativeAsset, SecuredAsset};
 
 pub use callback::{CallbackData, CallbackMsg};
-pub use chain::Chain;
 pub use decimal_scaled::DecimalScaled;
 pub use interfaces::*;
 pub use oracle::{Oracle, OracleError};
