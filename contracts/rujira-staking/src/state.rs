@@ -14,11 +14,13 @@ static POOL_LIQUID: Item<SharePool> = Item::new("l");
 static ACCOUNTS: Map<Addr, AccountPoolAccount> = Map::new("a");
 static POOL_ACCOUNTS: Item<AccountPool> = Item::new("p");
 static PENDING_SWAP: Item<Uint128> = Item::new("s");
+static ONGOING_SWAP: Item<Uint128> = Item::new("o");
 
 pub fn init(storage: &mut dyn Storage) -> StdResult<()> {
     POOL_LIQUID.save(storage, &Default::default())?;
     POOL_ACCOUNTS.save(storage, &Default::default())?;
     PENDING_SWAP.save(storage, &Default::default())?;
+    ONGOING_SWAP.save(storage, &Default::default())?;
     Ok(())
 }
 
@@ -170,9 +172,17 @@ pub fn distribute(
     Ok((swap_amount, fee_amount))
 }
 
-pub fn return_pending_swap(storage: &mut dyn Storage, returned_amount: Uint128) -> StdResult<()> {
+pub fn increase_pending_swap(storage: &mut dyn Storage, amount: Uint128) -> StdResult<()> {
     let swap_pending = PENDING_SWAP.load(storage)?;
-    PENDING_SWAP.save(storage, &(swap_pending + returned_amount))
+    PENDING_SWAP.save(storage, &(swap_pending + amount))
+}
+
+pub fn get_ongoing_swap(storage: &mut dyn Storage) -> StdResult<Uint128> {
+    ONGOING_SWAP.load(storage)
+}
+
+pub fn set_ongoing_swap(storage: &mut dyn Storage, value: Uint128) -> StdResult<()> {
+    ONGOING_SWAP.save(storage, &value)
 }
 
 pub fn status(env: Env, deps: Deps, config: &Config) -> StdResult<StatusResponse> {
