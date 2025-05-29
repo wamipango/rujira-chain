@@ -55,7 +55,7 @@ pub fn extract_transfer_amount_from_reply(msg: &Reply, env: &Env, denom: &str) -
 
             if let (Some(r), Some(a)) = (recipient, amount) {
                 let coins = Coins::from_str(&a).ok().unwrap();
-                let denom_value = coins.amount_of(denom);                
+                let denom_value = coins.amount_of(denom);
                 if r == env.contract.address.as_str() && denom_value > Uint128::zero() {
                     return Some(denom_value);
                 }

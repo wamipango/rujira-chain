@@ -18,7 +18,8 @@ use crate::events::{
     event_liquid_unbond, extract_transfer_amount_from_reply,
 };
 use crate::state::{
-    account, distribute, execute_account_bond, execute_account_claim, execute_account_withdraw, execute_liquid_bond, execute_liquid_unbond, init, return_pending_swap, status
+    account, distribute, execute_account_bond, execute_account_claim, execute_account_withdraw,
+    execute_liquid_bond, execute_liquid_unbond, init, return_pending_swap, status,
 };
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -112,14 +113,15 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractEr
     match msg.id {
         REPLY_ID => {
             let config = Config::load(deps.storage)?;
-            let returned_amount = extract_transfer_amount_from_reply(&msg, &env, &config.revenue_denom);
+            let returned_amount =
+                extract_transfer_amount_from_reply(&msg, &env, &config.revenue_denom);
             if let Some(amount) = returned_amount {
                 if !amount.is_zero() {
                     let _ = return_pending_swap(deps.storage, amount);
                 }
             }
             Ok(Response::default())
-        },
+        }
         _ => Err(ContractError::Unauthorized {}),
     }
 }
@@ -296,11 +298,15 @@ mod tests {
 
     fn get_pending_swap(app: &RujiraApp, contract: &Addr) -> Uint128 {
         let pending_swap_key = "s".as_bytes();
-        let raw_value = app.wrap().query_wasm_raw(contract, pending_swap_key).unwrap().unwrap();
+        let raw_value = app
+            .wrap()
+            .query_wasm_raw(contract, pending_swap_key)
+            .unwrap()
+            .unwrap();
         let raw_value_str = String::from_utf8(raw_value).unwrap();
         let inner_value = raw_value_str.trim_matches('"'); // We need to remove the external quotes
         let value: u128 = inner_value.parse().unwrap();
-        return Uint128::from(value);
+        Uint128::from(value)
     }
 
     fn assert_pending_swap(app: &RujiraApp, contract: &Addr, expected: Uint128) {
@@ -368,7 +374,6 @@ mod tests {
                 .bank
                 .init_balance(storage, &owner, coins(500_000_000, "uruji"))
                 .unwrap();
-    
             router
                 .bank
                 .init_balance(storage, &apps, coins(500_000_000, "uusdc"))
@@ -387,76 +392,65 @@ mod tests {
                 .unwrap()
         });
         (app, apps, owner, stakers, fees)
-    } 
+    }
 
-    fn create_swap_contract(
-        app: &mut cw_multi_test::App<cw_multi_test::BankKeeper, cosmwasm_std::testing::MockApi, cosmwasm_std::MemoryStorage, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::WasmKeeper<cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::IbcMsg, cosmwasm_std::IbcQuery, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, rujira_rs_testing::RujiraStargate>, 
-        owner: &Addr
-    ) -> Addr {
+    fn create_swap_contract(app: &mut RujiraApp, owner: &Addr) -> Addr {
         let swap_code_id = app.store_code(mock_swap_contract());
-        let swap_contract = app
-            .instantiate_contract(
-                swap_code_id,
-                owner.clone(),
-                &(),
-                &coins(10_000_000u128, "uruji"),
-                "swapper",
-                None,
-            )
-            .unwrap();
-        swap_contract
-    }    
+        app.instantiate_contract(
+            swap_code_id,
+            owner.clone(),
+            &(),
+            &coins(10_000_000u128, "uruji"),
+            "swapper",
+            None,
+        )
+        .unwrap()
+    }
 
     fn create_staking_contract(
-        app: &mut cw_multi_test::App<cw_multi_test::BankKeeper, cosmwasm_std::testing::MockApi, cosmwasm_std::MemoryStorage, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::WasmKeeper<cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::IbcMsg, cosmwasm_std::IbcQuery, cosmwasm_std::Empty>, cw_multi_test::FailingModule<cosmwasm_std::Empty, cosmwasm_std::Empty, cosmwasm_std::Empty>, rujira_rs_testing::RujiraStargate>, 
-        owner: &Addr, 
-        fee: Option<(Decimal, String)>, 
+        app: &mut RujiraApp,
+        owner: &Addr,
+        fee: Option<(Decimal, String)>,
         swap_contract: Addr,
-        return_funds_on_swap: bool
+        return_funds_on_swap: bool,
     ) -> Addr {
         let code = Box::new(ContractWrapper::new(execute, instantiate, query).with_reply(reply));
         let code_id = app.store_code(code);
-        let contract = app
-            .instantiate_contract(
-                code_id,
-                owner.clone(),
-                &InstantiateMsg {
-                    bond_denom: "uruji".to_string(),
-                    revenue_denom: "uusdc".to_string(),
-                    revenue_converter: (
-                        swap_contract.to_string(),
-                        to_json_binary(&MsgSwap {
-                            min_return: coin(10, "uruji"),
-                            return_funds: return_funds_on_swap
-                        })
-                        .unwrap(),
-                        Uint128::from(20u128),
-                    ),
-                    fee,
-                    receipt_token_metadata: TokenMetadata {
-                        description: "description".to_string(),
-                        name: "Liquid Staked RUJI".to_string(),
-                        display: "sRUJI".to_string(),
-                        symbol: "sRUJI".to_string(),
-                        uri: None,
-                        uri_hash: None,
-                    },
+        app.instantiate_contract(
+            code_id,
+            owner.clone(),
+            &InstantiateMsg {
+                bond_denom: "uruji".to_string(),
+                revenue_denom: "uusdc".to_string(),
+                revenue_converter: (
+                    swap_contract.to_string(),
+                    to_json_binary(&MsgSwap {
+                        min_return: coin(10, "uruji"),
+                        return_funds: return_funds_on_swap,
+                    })
+                    .unwrap(),
+                    Uint128::from(20u128),
+                ),
+                fee,
+                receipt_token_metadata: TokenMetadata {
+                    description: "description".to_string(),
+                    name: "Liquid Staked RUJI".to_string(),
+                    display: "sRUJI".to_string(),
+                    symbol: "sRUJI".to_string(),
+                    uri: None,
+                    uri_hash: None,
                 },
-                &[],
-                "staking",
-                None,
-            )
-            .unwrap();
-        contract
-    }    
+            },
+            &[],
+            "staking",
+            None,
+        )
+        .unwrap()
+    }
     // ----------
 
     fn lifecycle(test_fee: Option<TestFee>) {
-        let (mut app, 
-            apps, 
-            owner, 
-            stakers, 
-            fees) = init_app(test_fee);
+        let (mut app, apps, owner, stakers, fees) = init_app(test_fee);
         let swap_contract = create_swap_contract(&mut app, &owner);
         let contract = create_staking_contract(&mut app, &owner, fees.value, swap_contract, false);
 
@@ -557,7 +551,8 @@ mod tests {
                 ][fees.index],
                 liquid_bond_shares: Uint128::from(1_000u128),
                 liquid_bond_size: Uint128::from(1_000u128),
-                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()][fees.index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()]
+                    [fees.index],
             },
         );
 
@@ -649,7 +644,8 @@ mod tests {
                 assigned_revenue: expected_account_revenue, // [Uint128::from(25u128), Uint128::from(24u128), Uint128::from(23u128)][fees.index]
                 liquid_bond_shares: Uint128::from(1000u128),
                 liquid_bond_size: Uint128::from(1010u128),
-                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()][fees.index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()]
+                    [fees.index],
             },
         );
 
@@ -864,7 +860,7 @@ mod tests {
                 liquid_bond_size: Uint128::from(3_000u128),
                 // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
                 //       but they must not be accounted as undistributed revenue
-                undistributed_revenue: Uint128::zero(), 
+                undistributed_revenue: Uint128::zero(),
             },
         );
 
@@ -877,7 +873,7 @@ mod tests {
         assert_pending_swap(&app, &contract, Uint128::from(100u128));
 
         // stakers.account_1 bonds its first 500
-        bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");        
+        bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");
 
         assert_pending_swap(&app, &contract, Uint128::from(100u128));
 
@@ -892,7 +888,7 @@ mod tests {
                 liquid_bond_size: Uint128::from(3_010u128),
                 // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
                 //       but they must not be accounted as undistributed revenue
-                undistributed_revenue: Uint128::zero(), 
+                undistributed_revenue: Uint128::zero(),
             },
         );
 
@@ -904,7 +900,7 @@ mod tests {
                 bonded: Uint128::from(500u128),
                 pending_revenue: Uint128::zero(),
             },
-        );        
+        );
 
         // Revenue collection 1
         app.send_tokens(
@@ -917,7 +913,7 @@ mod tests {
         assert_balance(&app, &contract, "uusdc", Uint128::from(200u128));
 
         // stakers.account_1 bonds 1500 more
-        bond_account(&mut app, &contract, &stakers.account_1, 1500, "uruji");        
+        bond_account(&mut app, &contract, &stakers.account_1, 1500, "uruji");
 
         assert_pending_swap(&app, &contract, Uint128::from(185u128));
 
@@ -932,7 +928,7 @@ mod tests {
                 liquid_bond_size: Uint128::from(3_020u128),
                 // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
                 //       but they must not be accounted as undistributed revenue
-                undistributed_revenue: Uint128::from(1u128), 
+                undistributed_revenue: Uint128::from(1u128),
             },
         );
 
@@ -944,8 +940,6 @@ mod tests {
                 bonded: Uint128::from(2000u128),
                 pending_revenue: Uint128::zero(),
             },
-        );        
-
+        );
     }
-
 }
