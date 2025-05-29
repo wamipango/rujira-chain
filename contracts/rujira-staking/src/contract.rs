@@ -1,8 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Reply, Response,
-    StdResult, Storage, SubMsg, SubMsgResult, Uint128, WasmMsg,
+    coins, from_json, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdResult, Storage, SubMsg, SubMsgResult, Uint128, WasmMsg
 };
 use cw2::set_contract_version;
 use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
@@ -19,8 +18,7 @@ use crate::events::{
 };
 use crate::state::{
     account, distribute, execute_account_bond, execute_account_claim, execute_account_withdraw,
-    execute_liquid_bond, execute_liquid_unbond, get_ongoing_swap, increase_pending_swap, init,
-    set_ongoing_swap, status,
+    execute_liquid_bond, execute_liquid_unbond, increase_pending_swap, init, status,
 };
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -68,7 +66,6 @@ pub fn execute(
         }
     }?;
     if swap_amount.gt(&Uint128::zero()) {
-        let _ = set_ongoing_swap(deps.storage, swap_amount);
         res = res.add_submessage(SubMsg::reply_always(
             WasmMsg::Execute {
                 contract_addr: config.revenue_converter.0.to_string(),
@@ -76,7 +73,9 @@ pub fn execute(
                 funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
             },
             REPLY_ID,
-        ));
+        )
+        // .with_payload(to_json_binary(&swap_amount)?))
+        .with_payload(vec![1, 2, 3, 4]))
     }
     if fee_amount.gt(&Uint128::zero()) {
         res = res.add_message(BankMsg::Send {
@@ -116,8 +115,10 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractEr
         REPLY_ID => {
             if let SubMsgResult::Err(_) = &msg.result {
                 // The swap operation failed, we need to return all the swap amount
-                let ongoing_swap = get_ongoing_swap(deps.storage).unwrap();
-                let _ = increase_pending_swap(deps.storage, ongoing_swap);
+                dbg!("AAAA", &msg.payload);
+                assert_eq!(msg.payload, Binary::new(vec![1, 2, 3, 4]));
+                let ongoing_swap = from_json(&msg.payload)?;
+                increase_pending_swap(deps.storage, ongoing_swap)?;
             } else {
                 // The swap operation succeded, we need to check if there were any returned funds
                 let config = Config::load(deps.storage)?;
@@ -125,7 +126,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractEr
                     extract_transfer_amount_from_reply(&msg, &env, &config.revenue_denom);
                 if let Some(amount) = returned_amount {
                     if !amount.is_zero() {
-                        let _ = increase_pending_swap(deps.storage, amount);
+                        increase_pending_swap(deps.storage, amount)?;
                     }
                 }
             }
