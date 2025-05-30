@@ -1,7 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, from_json, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdResult, Storage, SubMsg, SubMsgResult, Uint128, WasmMsg
+    coins, from_json, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo,
+    Reply, Response, StdResult, Storage, SubMsg, SubMsgResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
@@ -66,7 +67,7 @@ pub fn execute(
         }
     }?;
     if swap_amount.gt(&Uint128::zero()) {
-        res = res.add_submessage(SubMsg::reply_always(
+        let sub_msg = SubMsg::reply_always(
             WasmMsg::Execute {
                 contract_addr: config.revenue_converter.0.to_string(),
                 msg: config.revenue_converter.1.clone(),
@@ -74,8 +75,8 @@ pub fn execute(
             },
             REPLY_ID,
         )
-        // .with_payload(to_json_binary(&swap_amount)?))
-        .with_payload(vec![1, 2, 3, 4]))
+        .with_payload(to_json_binary(&swap_amount)?);
+        res = res.add_submessage(sub_msg)
     }
     if fee_amount.gt(&Uint128::zero()) {
         res = res.add_message(BankMsg::Send {
@@ -115,9 +116,8 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractEr
         REPLY_ID => {
             if let SubMsgResult::Err(_) = &msg.result {
                 // The swap operation failed, we need to return all the swap amount
-                dbg!("AAAA", &msg.payload);
-                assert_eq!(msg.payload, Binary::new(vec![1, 2, 3, 4]));
                 let ongoing_swap = from_json(&msg.payload)?;
+                dbg!(ongoing_swap);
                 increase_pending_swap(deps.storage, ongoing_swap)?;
             } else {
                 // The swap operation succeded, we need to check if there were any returned funds
@@ -320,8 +320,6 @@ mod tests {
     }
 
     fn assert_pending_swap(app: &RujiraApp, contract: &Addr, expected: Uint128) {
-        let pending_swap = get_pending_swap(app, contract);
-        dbg!(pending_swap);
         assert_eq!(get_pending_swap(app, contract), expected);
     }
 
@@ -330,7 +328,6 @@ mod tests {
             .wrap()
             .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
             .unwrap();
-        dbg!(comment, &status);
         assert_eq!(status, *expected);
     }
 
