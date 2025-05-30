@@ -534,6 +534,7 @@ mod tests {
         assert_eq!(entry.price, Decimal::from_str("87900").unwrap());
         assert_eq!(entry.total, Uint128::from(5100000u128));
 
+        #[allow(deprecated)]
         let balance = app.wrap().query_all_balances(owner.to_string()).unwrap();
         // Total 102000 btc submitted on base side
         // Total 73500 usdc submitted on quote side

@@ -80,6 +80,7 @@ mod tests {
         )
         .unwrap();
 
+        #[allow(deprecated)]
         let balance = app.wrap().query_all_balances(owner).unwrap();
         assert_eq!(balance, coins(100, "x/id"));
     }

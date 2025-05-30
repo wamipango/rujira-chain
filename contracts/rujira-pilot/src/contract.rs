@@ -338,6 +338,7 @@ mod tests {
         assert_eq!(entry.price, Decimal::from_str("90000").unwrap());
         assert_eq!(entry.total, Uint128::from(12500u128));
 
+        #[allow(deprecated)]
         let balance = app.wrap().query_all_balances(owner.to_string()).unwrap();
         assert_eq!(
             balance,

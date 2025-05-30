@@ -6,6 +6,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
+use rujira_rs::reply::sub_msg_response_to_info;
 use rujira_rs::staking::{
     AccountMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, SudoMsg,
 };
@@ -15,7 +16,7 @@ use crate::config::Config;
 use crate::error::ContractError;
 use crate::events::{
     event_account_bond, event_account_claim, event_account_withdraw, event_liquid_bond,
-    event_liquid_unbond, extract_transfer_amount_from_reply,
+    event_liquid_unbond,
 };
 use crate::state::{
     account, distribute, execute_account_bond, execute_account_claim, execute_account_withdraw,
@@ -114,17 +115,22 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractEr
     // Match on ID for completeness
     match msg.id {
         REPLY_ID => {
-            if let SubMsgResult::Err(_) = &msg.result {
-                // The swap operation failed, we need to return all the swap amount
-                let ongoing_swap = from_json(&msg.payload)?;
-                dbg!(ongoing_swap);
-                increase_pending_swap(deps.storage, ongoing_swap)?;
-            } else {
-                // The swap operation succeded, we need to check if there were any returned funds
-                let config = Config::load(deps.storage)?;
-                let returned_amount =
-                    extract_transfer_amount_from_reply(&msg, &env, &config.revenue_denom);
-                if let Some(amount) = returned_amount {
+            match &msg.result {
+                SubMsgResult::Err(_) => {
+                    // Swap failed, we need to return all the swap amount
+                    let ongoing_swap = from_json(&msg.payload)?;
+                    increase_pending_swap(deps.storage, ongoing_swap)?;
+                }
+                SubMsgResult::Ok(res) => {
+                    // Swap succeeded, we need to check if there were any returned funds
+                    let info = sub_msg_response_to_info(res, &deps, &env)?;
+                    let config = Config::load(deps.storage)?;
+                    let amount = info
+                        .funds
+                        .iter()
+                        .find(|c| c.denom == config.revenue_denom)
+                        .map(|c| c.amount)
+                        .unwrap_or_else(Uint128::zero);
                     if !amount.is_zero() {
                         increase_pending_swap(deps.storage, amount)?;
                     }
@@ -323,11 +329,12 @@ mod tests {
         assert_eq!(get_pending_swap(app, contract), expected);
     }
 
-    fn assert_state(app: &RujiraApp, contract: &Addr, comment: &str, expected: &StatusResponse) {
+    fn assert_state(app: &RujiraApp, contract: &Addr, _comment: &str, expected: &StatusResponse) {
         let status: StatusResponse = app
             .wrap()
             .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
             .unwrap();
+        // dbg!(comment, &status);
         assert_eq!(status, *expected);
     }
 

@@ -198,6 +198,7 @@ fn mm_book() {
         ("amount", "1499btc".to_string()),
     ]));
 
+    #[allow(deprecated)]
     let balances = app.wrap().query_all_balances(bow.clone()).unwrap();
     assert_eq!(
         balances,
