@@ -13,6 +13,7 @@ mod oracle;
 mod premium;
 pub mod proto;
 pub mod query;
+pub mod reply;
 pub mod schema;
 mod share_pool;
 mod token_factory;

@@ -1,11 +1,12 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, Storage, Uint128, WasmMsg,
+    coins, from_json, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo,
+    Reply, Response, StdResult, Storage, SubMsg, SubMsgResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
+use rujira_rs::reply::sub_msg_response_to_info;
 use rujira_rs::staking::{
     AccountMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, SudoMsg,
 };
@@ -19,11 +20,12 @@ use crate::events::{
 };
 use crate::state::{
     account, distribute, execute_account_bond, execute_account_claim, execute_account_withdraw,
-    execute_liquid_bond, execute_liquid_unbond, init, status,
+    execute_liquid_bond, execute_liquid_unbond, increase_pending_swap, init, status,
 };
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+const REPLY_ID: u64 = 0;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -39,6 +41,11 @@ pub fn instantiate(
     init(deps.storage)?;
     let share_denom = TokenFactory::new(&env, format!("staking-{}", config.bond_denom).as_str());
     Ok(Response::default().add_message(share_denom.create_msg(msg.receipt_token_metadata)))
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
+    Ok(Response::default())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -61,11 +68,16 @@ pub fn execute(
         }
     }?;
     if swap_amount.gt(&Uint128::zero()) {
-        res = res.add_message(WasmMsg::Execute {
-            contract_addr: config.revenue_converter.0.to_string(),
-            msg: config.revenue_converter.1.clone(),
-            funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
-        });
+        let sub_msg = SubMsg::reply_always(
+            WasmMsg::Execute {
+                contract_addr: config.revenue_converter.0.to_string(),
+                msg: config.revenue_converter.1.clone(),
+                funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
+            },
+            REPLY_ID,
+        )
+        .with_payload(to_json_binary(&swap_amount)?);
+        res = res.add_submessage(sub_msg)
     }
     if fee_amount.gt(&Uint128::zero()) {
         res = res.add_message(BankMsg::Send {
@@ -95,6 +107,38 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             config.save(deps.storage)?;
             Ok(Response::default())
         }
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
+    // Match on ID for completeness
+    match msg.id {
+        REPLY_ID => {
+            match &msg.result {
+                SubMsgResult::Err(_) => {
+                    // Swap failed, we need to return all the swap amount
+                    let ongoing_swap = from_json(&msg.payload)?;
+                    increase_pending_swap(deps.storage, ongoing_swap)?;
+                }
+                SubMsgResult::Ok(res) => {
+                    // Swap succeeded, we need to check if there were any returned funds
+                    let info = sub_msg_response_to_info(res, &deps, &env)?;
+                    let config = Config::load(deps.storage)?;
+                    let amount = info
+                        .funds
+                        .iter()
+                        .find(|c| c.denom == config.revenue_denom)
+                        .map(|c| c.amount)
+                        .unwrap_or_else(Uint128::zero);
+                    if !amount.is_zero() {
+                        increase_pending_swap(deps.storage, amount)?;
+                    }
+                }
+            }
+            Ok(Response::default())
+        }
+        _ => Err(ContractError::Unauthorized {}),
     }
 }
 
@@ -268,12 +312,29 @@ mod tests {
         assert_eq!(balance.amount, amount);
     }
 
-    fn assert_state(app: &RujiraApp, contract: &Addr, comment: &str, expected: &StatusResponse) {
+    fn get_pending_swap(app: &RujiraApp, contract: &Addr) -> Uint128 {
+        let pending_swap_key = "s".as_bytes();
+        let raw_value = app
+            .wrap()
+            .query_wasm_raw(contract, pending_swap_key)
+            .unwrap()
+            .unwrap();
+        let raw_value_str = String::from_utf8(raw_value).unwrap();
+        let inner_value = raw_value_str.trim_matches('"'); // We need to remove the external quotes
+        let value: u128 = inner_value.parse().unwrap();
+        Uint128::from(value)
+    }
+
+    fn assert_pending_swap(app: &RujiraApp, contract: &Addr, expected: Uint128) {
+        assert_eq!(get_pending_swap(app, contract), expected);
+    }
+
+    fn assert_state(app: &RujiraApp, contract: &Addr, _comment: &str, expected: &StatusResponse) {
         let status: StatusResponse = app
             .wrap()
             .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
             .unwrap();
-        dbg!(comment, &status);
+        // dbg!(comment, &status);
         assert_eq!(status, *expected);
     }
 
@@ -289,97 +350,138 @@ mod tests {
             .unwrap();
         assert_eq!(account, *expected);
     }
-    // ----------
 
-    fn lifecycle(test_fee: Option<TestFee>) {
+    struct Fees {
+        pub index: usize,
+        pub value: Option<(Decimal, String)>,
+        pub percent: Decimal,
+    }
+
+    struct Stakers {
+        pub liquid: Addr,
+        pub account_1: Addr,
+        pub account_2: Addr,
+    }
+
+    fn init_app(test_fee: Option<TestFee>) -> (RujiraApp, Addr, Addr, Stakers, Fees) {
         let mut app = mock_rujira_app();
         let apps = app.api().addr_make("apps");
         let owner = app.api().addr_make("owner");
-        let staker_liquid = app.api().addr_make("staker_liquid");
-        let staker_account_1 = app.api().addr_make("staker_account_1");
-        let staker_account_2 = app.api().addr_make("staker_account_2");
+        let stakers = Stakers {
+            liquid: app.api().addr_make("stakers.liquid"),
+            account_1: app.api().addr_make("stakers.account_1"),
+            account_2: app.api().addr_make("stakers.account_2"),
+        };
         let (fee_index, fee) = match test_fee {
             None => (0, None),
             Some(TestFee::FivePercent) => (1, Some((Decimal::percent(5), owner.to_string()))),
             Some(TestFee::TenPercent) => (2, Some((Decimal::percent(10), owner.to_string()))),
         };
         let fee_percentage = fee.as_ref().unwrap_or(&(Decimal::zero(), "".to_string())).0;
+        let fees = Fees {
+            index: fee_index,
+            value: fee,
+            percent: fee_percentage,
+        };
         app.init_modules(|router, _, storage| {
             router
                 .bank
                 .init_balance(storage, &owner, coins(500_000_000, "uruji"))
                 .unwrap();
-
             router
                 .bank
                 .init_balance(storage, &apps, coins(500_000_000, "uusdc"))
                 .unwrap();
             router
                 .bank
-                .init_balance(storage, &staker_liquid, coins(500_000_000, "uruji"))
+                .init_balance(storage, &stakers.liquid, coins(500_000_000, "uruji"))
                 .unwrap();
             router
                 .bank
-                .init_balance(storage, &staker_account_1, coins(500_000_000, "uruji"))
+                .init_balance(storage, &stakers.account_1, coins(500_000_000, "uruji"))
                 .unwrap();
             router
                 .bank
-                .init_balance(storage, &staker_account_2, coins(500_000_000, "uruji"))
+                .init_balance(storage, &stakers.account_2, coins(500_000_000, "uruji"))
                 .unwrap()
         });
+        (app, apps, owner, stakers, fees)
+    }
 
+    fn create_swap_contract(app: &mut RujiraApp, owner: &Addr) -> Addr {
         let swap_code_id = app.store_code(mock_swap_contract());
-        let swap_contract = app
-            .instantiate_contract(
-                swap_code_id,
-                owner.clone(),
-                &(),
-                &coins(10_000_000u128, "uruji"),
-                "swapper",
-                None,
-            )
-            .unwrap();
+        app.instantiate_contract(
+            swap_code_id,
+            owner.clone(),
+            &(),
+            &coins(10_000_000u128, "uruji"),
+            "swapper",
+            None,
+        )
+        .unwrap()
+    }
 
-        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+    fn create_staking_contract(
+        app: &mut RujiraApp,
+        owner: &Addr,
+        fee: Option<(Decimal, String)>,
+        swap_contract: Addr,
+        converter_message: Binary,
+    ) -> Addr {
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query).with_reply(reply));
         let code_id = app.store_code(code);
-        let contract = app
-            .instantiate_contract(
-                code_id,
-                owner.clone(),
-                &InstantiateMsg {
-                    bond_denom: "uruji".to_string(),
-                    revenue_denom: "uusdc".to_string(),
-                    revenue_converter: (
-                        swap_contract.to_string(),
-                        to_json_binary(&MsgSwap {
-                            min_return: coin(10, "uruji"),
-                        })
-                        .unwrap(),
-                        Uint128::from(20u128),
-                    ),
-                    fee,
-                    receipt_token_metadata: TokenMetadata {
-                        description: "description".to_string(),
-                        name: "Liquid Staked RUJI".to_string(),
-                        display: "sRUJI".to_string(),
-                        symbol: "sRUJI".to_string(),
-                        uri: None,
-                        uri_hash: None,
-                    },
+        app.instantiate_contract(
+            code_id,
+            owner.clone(),
+            &InstantiateMsg {
+                bond_denom: "uruji".to_string(),
+                revenue_denom: "uusdc".to_string(),
+                revenue_converter: (
+                    swap_contract.to_string(),
+                    converter_message,
+                    Uint128::from(20u128),
+                ),
+                fee,
+                receipt_token_metadata: TokenMetadata {
+                    description: "description".to_string(),
+                    name: "Liquid Staked RUJI".to_string(),
+                    display: "sRUJI".to_string(),
+                    symbol: "sRUJI".to_string(),
+                    uri: None,
+                    uri_hash: None,
                 },
-                &[],
-                "staking",
-                None,
-            )
-            .unwrap();
+            },
+            &[],
+            "staking",
+            None,
+        )
+        .unwrap()
+    }
+    // ----------
+
+    fn lifecycle(test_fee: Option<TestFee>) {
+        let (mut app, apps, owner, stakers, fees) = init_app(test_fee);
+        let swap_contract = create_swap_contract(&mut app, &owner);
+        let converter_message = to_json_binary(&MsgSwap {
+            min_return: coin(10, "uruji"),
+            return_funds: false,
+        })
+        .unwrap();
+        let contract = create_staking_contract(
+            &mut app,
+            &owner,
+            fees.value,
+            swap_contract,
+            converter_message,
+        );
 
         // Liquid bonds its first 1_000
-        bond_liquid(&mut app, &contract, &staker_liquid, 1_000, "uruji");
+        bond_liquid(&mut app, &contract, &stakers.liquid, 1_000, "uruji");
 
         // share balance
         assert_balance(
             &app,
-            &staker_liquid,
+            &stakers.liquid,
             "x/staking-uruji",
             Uint128::from(1_000u128),
         );
@@ -392,7 +494,7 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_liquid first bond of 1_000",
+            "After stakers.liquid first bond of 1_000",
             &StatusResponse {
                 account_bond: Uint128::zero(),
                 assigned_revenue: Uint128::zero(),
@@ -408,13 +510,13 @@ mod tests {
         // share balance
         assert_balance(
             &app,
-            &staker_liquid,
+            &stakers.liquid,
             "x/staking-uruji",
             Uint128::from(1_000u128),
         );
 
-        // staker_account_1 bonds its first 500
-        bond_account(&mut app, &contract, &staker_account_1, 500, "uruji");
+        // stakers.account_1 bonds its first 500
+        bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");
 
         /*--- Acc_1 Bond 500 ----------------------
               | Acc_1    | Acc_2 | Accounts    | Liquid    | Total
@@ -425,7 +527,7 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_account_1 first bond of 500",
+            "After stakers.account_1 first bond of 500",
             &StatusResponse {
                 account_bond: Uint128::from(500u128),
                 assigned_revenue: Uint128::zero(),
@@ -437,7 +539,7 @@ mod tests {
 
         let revenue_amount = 100;
         let revenue_amount_fee =
-            (Decimal::from_atomics(revenue_amount, 0).unwrap() * fee_percentage).to_uint_ceil();
+            (Decimal::from_atomics(revenue_amount, 0).unwrap() * fees.percent).to_uint_ceil();
         let revenue_amount_remaining = revenue_amount - revenue_amount_fee.u128();
 
         // Revenue collection 1
@@ -448,8 +550,8 @@ mod tests {
         )
         .unwrap();
 
-        // staker_account_2 bonds its first 500
-        bond_account(&mut app, &contract, &staker_account_2, 500, "uruji");
+        // stakers.account_2 bonds its first 500
+        bond_account(&mut app, &contract, &stakers.account_2, 500, "uruji");
 
         /*--- Acc_2 Bond 500 ----------------------
               | Acc_1 | Acc_2 | Accounts | Liquid | Total
@@ -460,17 +562,18 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_account_2 first bond of 500",
+            "After stakers.account_2 first bond of 500",
             &StatusResponse {
                 account_bond: Uint128::from(1_000u128),
                 assigned_revenue: [
                     Uint128::from(33u128),
                     Uint128::from(31u128),
                     Uint128::from(30u128),
-                ][fee_index],
+                ][fees.index],
                 liquid_bond_shares: Uint128::from(1_000u128),
                 liquid_bond_size: Uint128::from(1_000u128),
-                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()]
+                    [fees.index],
             },
         );
 
@@ -484,7 +587,7 @@ mod tests {
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_1.to_string(),
+                addr: stakers.account_1.to_string(),
                 bonded: Uint128::from(500u128),
                 pending_revenue: expected_pending_revenue_500_1500,
             },
@@ -495,7 +598,7 @@ mod tests {
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_2.to_string(),
+                addr: stakers.account_2.to_string(),
                 bonded: Uint128::from(500u128),
                 pending_revenue: Uint128::zero(),
             },
@@ -510,8 +613,8 @@ mod tests {
         .unwrap();
 
         // Another bond to trigger a distribution
-        // staker_account_1 bonds its second 500, total 1000
-        bond_account(&mut app, &contract, &staker_account_1, 500, "uruji");
+        // stakers.account_1 bonds its second 500, total 1000
+        bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");
 
         let expected_pending_revenue_500_2000 =
             Decimal::from_ratio(revenue_amount_remaining * 500, 2000u128).to_uint_floor();
@@ -523,7 +626,7 @@ mod tests {
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_1.to_string(),
+                addr: stakers.account_1.to_string(),
                 bonded: Uint128::from(1000u128),
                 pending_revenue: Uint128::zero(),
             },
@@ -531,14 +634,14 @@ mod tests {
 
         let expected_claim_account_1 =
             expected_pending_revenue_500_1500 + expected_pending_revenue_500_2000;
-        assert_balance(&app, &staker_account_1, "uusdc", expected_claim_account_1); // WITHOUT_FEE: 58, WITH_FEE_5%: 54, WITH_FEE_10%: ??
+        assert_balance(&app, &stakers.account_1, "uusdc", expected_claim_account_1); // WITHOUT_FEE: 58, WITH_FEE_5%: 54, WITH_FEE_10%: ??
 
         // 1500/500 split of 100 (##3)
         assert_account(
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_2.to_string(),
+                addr: stakers.account_2.to_string(),
                 bonded: Uint128::from(500u128),
                 pending_revenue: expected_pending_revenue_500_2000, // WITHOUT_FEE: 25, WITH_FEE: 23, WITH_FEE_10%: ??
             },
@@ -556,20 +659,21 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_account_1 second bond of 500",
+            "After stakers.account_1 second bond of 500",
             &StatusResponse {
                 account_bond: Uint128::from(1500u128),
-                assigned_revenue: expected_account_revenue, // [Uint128::from(25u128), Uint128::from(24u128), Uint128::from(23u128)][fee_index]
+                assigned_revenue: expected_account_revenue, // [Uint128::from(25u128), Uint128::from(24u128), Uint128::from(23u128)][fees.index]
                 liquid_bond_shares: Uint128::from(1000u128),
                 liquid_bond_size: Uint128::from(1010u128),
-                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::zero()]
+                    [fees.index],
             },
         );
 
-        // staker_account_2 claims all
+        // stakers.account_2 claims all
         let res = app
             .execute_contract(
-                staker_account_2.clone(),
+                stakers.account_2.clone(),
                 contract.clone(),
                 &ExecuteMsg::Account(AccountMsg::Claim {}),
                 &[],
@@ -581,7 +685,7 @@ mod tests {
         res.assert_event(
             &Event::new("transfer")
                 .add_attribute("amount", expected_amount_attribute_value)
-                .add_attribute("recipient", staker_account_2.clone()),
+                .add_attribute("recipient", stakers.account_2.clone()),
         );
 
         /*--- Acc_2 Claim All ----------------------
@@ -593,21 +697,21 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_account_2 claim all",
+            "After stakers.account_2 claim all",
             &StatusResponse {
                 account_bond: Uint128::from(1500u128),
-                assigned_revenue: expected_account_revenue - expected_claim_account_2, // [Uint128::zero(), Uint128::one(), Uint128::one()][fee_index]
+                assigned_revenue: expected_account_revenue - expected_claim_account_2, // [Uint128::zero(), Uint128::one(), Uint128::one()][fees.index]
                 liquid_bond_shares: Uint128::from(1000u128),
                 liquid_bond_size: Uint128::from(1020u128),
                 undistributed_revenue: [Uint128::one(), Uint128::zero(), Uint128::zero()]
-                    [fee_index],
+                    [fees.index],
             },
         );
 
-        // staker_liquid undounds 500
+        // stakers.liquid undounds 500
         let res = app
             .execute_contract(
-                staker_liquid.clone(),
+                stakers.liquid.clone(),
                 contract.clone(),
                 &ExecuteMsg::Liquid(LiquidMsg::Unbond {}),
                 &coins(500, "x/staking-uruji".to_string()),
@@ -624,7 +728,7 @@ mod tests {
         res.assert_event(
             &Event::new("transfer")
                 .add_attribute("amount", "515uruji")
-                .add_attribute("recipient", staker_liquid),
+                .add_attribute("recipient", stakers.liquid),
         );
 
         /*--- Liquid Unbound 500 ----------------------
@@ -635,14 +739,14 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_liquid unbound 500",
+            "After stakers.liquid unbound 500",
             &StatusResponse {
                 account_bond: Uint128::from(1500u128),
-                assigned_revenue: expected_account_revenue_2, // [Uint128::zero(),  Uint128::one(), Uint128::one()][fee_index]
+                assigned_revenue: expected_account_revenue_2, // [Uint128::zero(),  Uint128::one(), Uint128::one()][fees.index]
                 liquid_bond_shares: Uint128::from(500u128),
                 liquid_bond_size: Uint128::from(515u128),
                 undistributed_revenue: [Uint128::one(), Uint128::zero(), Uint128::zero()]
-                    [fee_index],
+                    [fees.index],
             },
         );
 
@@ -658,7 +762,7 @@ mod tests {
 
         let res = app
             .execute_contract(
-                staker_account_1.clone(),
+                stakers.account_1.clone(),
                 contract.clone(),
                 &ExecuteMsg::Account(AccountMsg::Withdraw {
                     amount: Some(Uint128::from(50u128)),
@@ -667,12 +771,12 @@ mod tests {
             )
             .unwrap();
 
-        let expected_auto_claim = [50u128, 46u128, 44u128][fee_index];
+        let expected_auto_claim = [50u128, 46u128, 44u128][fees.index];
         let expected_amount_attribute_value_2 = format!("50uruji,{}uusdc", expected_auto_claim);
         res.assert_event(
             &Event::new("transfer")
                 .add_attribute("amount", expected_amount_attribute_value_2) // WITHOUT_FEE: 50uruji,50uusdc, WITH_FEE: 50uruji,46uusdc
-                .add_attribute("recipient", staker_account_1.clone()),
+                .add_attribute("recipient", stakers.account_1.clone()),
         );
 
         /*--- Liquid Unbound 500 ----------------------
@@ -683,17 +787,17 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "After staker_account_1 withdraw of 50",
+            "After stakers.account_1 withdraw of 50",
             &StatusResponse {
                 account_bond: Uint128::from(1450u128),
                 assigned_revenue: [
                     Uint128::from(25u128),
                     Uint128::from(25u128),
                     Uint128::from(23u128),
-                ][fee_index],
+                ][fees.index],
                 liquid_bond_shares: Uint128::from(500u128),
                 liquid_bond_size: Uint128::from(525u128),
-                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::one()][fee_index],
+                undistributed_revenue: [Uint128::one(), Uint128::one(), Uint128::one()][fees.index],
             },
         );
 
@@ -701,7 +805,7 @@ mod tests {
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_1.to_string(),
+                addr: stakers.account_1.to_string(),
                 bonded: Uint128::from(950u128),
                 pending_revenue: Uint128::zero(),
             },
@@ -711,9 +815,311 @@ mod tests {
             &app,
             &contract,
             &AccountResponse {
-                addr: staker_account_2.to_string(),
+                addr: stakers.account_2.to_string(),
                 bonded: Uint128::from(500u128),
                 pending_revenue: expected_pending_revenue_500_2000, // WITHOUT_FEE: 25u128, WITH_FEE: 23u128
+            },
+        );
+    }
+
+    #[test]
+    fn swap_sends_back_funds() {
+        let (mut app, apps, owner, stakers, fees) = init_app(None);
+        let swap_contract = create_swap_contract(&mut app, &owner);
+        let converter_message = to_json_binary(&MsgSwap {
+            min_return: coin(10, "uruji"),
+            return_funds: true,
+        })
+        .unwrap();
+        let contract = create_staking_contract(
+            &mut app,
+            &owner,
+            fees.value,
+            swap_contract,
+            converter_message,
+        );
+
+        // Liquid bonds its first 1_000
+        bond_liquid(&mut app, &contract, &stakers.liquid, 1_000, "uruji");
+
+        // share balance
+        assert_balance(
+            &app,
+            &stakers.liquid,
+            "x/staking-uruji",
+            Uint128::from(1_000u128),
+        );
+
+        assert_state(
+            &app,
+            &contract,
+            "After stakers.liquid first bond of 1_000",
+            &StatusResponse {
+                account_bond: Uint128::zero(),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(1_000u128),
+                liquid_bond_size: Uint128::from(1_000u128),
+                undistributed_revenue: Uint128::zero(),
+            },
+        );
+
+        // contract balance
+        assert_balance(&app, &contract, "uruji", Uint128::from(1_000u128));
+
+        let revenue_amount = 100;
+
+        // Revenue collection 1
+        app.send_tokens(
+            apps.clone(),
+            contract.clone(),
+            &coins(revenue_amount, "uusdc"),
+        )
+        .unwrap();
+
+        assert_pending_swap(&app, &contract, Uint128::from(0u128));
+
+        // Liquid bonds 2_000 more
+        bond_liquid(&mut app, &contract, &stakers.liquid, 2_000, "uruji");
+
+        assert_state(
+            &app,
+            &contract,
+            "After stakers.liquid bonds 2_000 more",
+            &StatusResponse {
+                account_bond: Uint128::zero(),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(3_000u128),
+                liquid_bond_size: Uint128::from(3_000u128),
+                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       but they must not be accounted as undistributed revenue
+                undistributed_revenue: Uint128::zero(),
+            },
+        );
+
+        // contract balance
+        assert_balance(&app, &contract, "uruji", Uint128::from(3_010u128));
+        // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
+        //       and the uusdc balance will never decrease
+        assert_balance(&app, &contract, "uusdc", Uint128::from(revenue_amount));
+
+        assert_pending_swap(&app, &contract, Uint128::from(100u128));
+
+        // stakers.account_1 bonds its first 500
+        bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");
+
+        assert_pending_swap(&app, &contract, Uint128::from(100u128));
+
+        assert_state(
+            &app,
+            &contract,
+            "stakers.account_1 bonds its first 500",
+            &StatusResponse {
+                account_bond: Uint128::from(500u128),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(3_000u128),
+                liquid_bond_size: Uint128::from(3_010u128),
+                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       but they must not be accounted as undistributed revenue
+                undistributed_revenue: Uint128::zero(),
+            },
+        );
+
+        assert_account(
+            &app,
+            &contract,
+            &AccountResponse {
+                addr: stakers.account_1.to_string(),
+                bonded: Uint128::from(500u128),
+                pending_revenue: Uint128::zero(),
+            },
+        );
+
+        // Revenue collection 1
+        app.send_tokens(
+            apps.clone(),
+            contract.clone(),
+            &coins(revenue_amount, "uusdc"),
+        )
+        .unwrap();
+
+        assert_balance(&app, &contract, "uusdc", Uint128::from(200u128));
+
+        // stakers.account_1 bonds 1500 more
+        bond_account(&mut app, &contract, &stakers.account_1, 1500, "uruji");
+
+        assert_pending_swap(&app, &contract, Uint128::from(185u128));
+
+        assert_state(
+            &app,
+            &contract,
+            "stakers.account_1 bonds its first 500",
+            &StatusResponse {
+                account_bond: Uint128::from(2000u128),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(3_000u128),
+                liquid_bond_size: Uint128::from(3_020u128),
+                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       but they must not be accounted as undistributed revenue
+                undistributed_revenue: Uint128::from(1u128),
+            },
+        );
+
+        assert_account(
+            &app,
+            &contract,
+            &AccountResponse {
+                addr: stakers.account_1.to_string(),
+                bonded: Uint128::from(2000u128),
+                pending_revenue: Uint128::zero(),
+            },
+        );
+    }
+
+    #[test]
+    fn swap_with_error() {
+        let (mut app, apps, owner, stakers, fees) = init_app(None);
+        let swap_contract = create_swap_contract(&mut app, &owner);
+        let converter_message = to_json_binary("not a valid message").unwrap();
+        let contract = create_staking_contract(
+            &mut app,
+            &owner,
+            fees.value,
+            swap_contract,
+            converter_message,
+        );
+
+        // Liquid bonds its first 1_000
+        bond_liquid(&mut app, &contract, &stakers.liquid, 1_000, "uruji");
+
+        // share balance
+        assert_balance(
+            &app,
+            &stakers.liquid,
+            "x/staking-uruji",
+            Uint128::from(1_000u128),
+        );
+
+        assert_state(
+            &app,
+            &contract,
+            "After stakers.liquid first bond of 1_000",
+            &StatusResponse {
+                account_bond: Uint128::zero(),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(1_000u128),
+                liquid_bond_size: Uint128::from(1_000u128),
+                undistributed_revenue: Uint128::zero(),
+            },
+        );
+
+        // contract balance
+        assert_balance(&app, &contract, "uruji", Uint128::from(1_000u128));
+
+        let revenue_amount = 100;
+
+        // Revenue collection 1
+        app.send_tokens(
+            apps.clone(),
+            contract.clone(),
+            &coins(revenue_amount, "uusdc"),
+        )
+        .unwrap();
+
+        assert_pending_swap(&app, &contract, Uint128::from(0u128));
+
+        // Liquid bonds 2_000 more
+        bond_liquid(&mut app, &contract, &stakers.liquid, 2_000, "uruji");
+
+        assert_state(
+            &app,
+            &contract,
+            "After stakers.liquid bonds 2_000 more",
+            &StatusResponse {
+                account_bond: Uint128::zero(),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(3_000u128),
+                liquid_bond_size: Uint128::from(3_000u128),
+                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       but they must not be accounted as undistributed revenue
+                undistributed_revenue: Uint128::zero(),
+            },
+        );
+
+        // contract balance
+        assert_balance(&app, &contract, "uruji", Uint128::from(3_000u128));
+        // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
+        //       and the uusdc balance will never decrease
+        assert_balance(&app, &contract, "uusdc", Uint128::from(revenue_amount));
+
+        assert_pending_swap(&app, &contract, Uint128::from(100u128));
+
+        // stakers.account_1 bonds its first 500
+        bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");
+
+        assert_pending_swap(&app, &contract, Uint128::from(100u128));
+
+        assert_state(
+            &app,
+            &contract,
+            "stakers.account_1 bonds its first 500",
+            &StatusResponse {
+                account_bond: Uint128::from(500u128),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(3_000u128),
+                liquid_bond_size: Uint128::from(3_000u128),
+                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       but they must not be accounted as undistributed revenue
+                undistributed_revenue: Uint128::zero(),
+            },
+        );
+
+        assert_account(
+            &app,
+            &contract,
+            &AccountResponse {
+                addr: stakers.account_1.to_string(),
+                bonded: Uint128::from(500u128),
+                pending_revenue: Uint128::zero(),
+            },
+        );
+
+        // Revenue collection 1
+        app.send_tokens(
+            apps.clone(),
+            contract.clone(),
+            &coins(revenue_amount, "uusdc"),
+        )
+        .unwrap();
+
+        assert_balance(&app, &contract, "uusdc", Uint128::from(200u128));
+
+        // stakers.account_1 bonds 1500 more
+        bond_account(&mut app, &contract, &stakers.account_1, 1500, "uruji");
+
+        assert_pending_swap(&app, &contract, Uint128::from(185u128));
+
+        assert_state(
+            &app,
+            &contract,
+            "stakers.account_1 bonds its first 500",
+            &StatusResponse {
+                account_bond: Uint128::from(2000u128),
+                assigned_revenue: Uint128::zero(),
+                liquid_bond_shares: Uint128::from(3_000u128),
+                liquid_bond_size: Uint128::from(3_000u128),
+                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
+                //       but they must not be accounted as undistributed revenue
+                undistributed_revenue: Uint128::from(1u128),
+            },
+        );
+
+        assert_account(
+            &app,
+            &contract,
+            &AccountResponse {
+                addr: stakers.account_1.to_string(),
+                bonded: Uint128::from(2000u128),
+                pending_revenue: Uint128::zero(),
             },
         );
     }

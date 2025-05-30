@@ -8,6 +8,7 @@ use cw_multi_test::ContractWrapper;
 #[cw_serde]
 pub struct MsgSwap {
     pub min_return: Coin,
+    pub return_funds: bool,
 }
 
 fn instantiate(_deps: DepsMut, _env: Env, _info: MessageInfo, _msg: ()) -> StdResult<Response> {
@@ -15,10 +16,14 @@ fn instantiate(_deps: DepsMut, _env: Env, _info: MessageInfo, _msg: ()) -> StdRe
 }
 
 fn execute(_deps: DepsMut, _env: Env, info: MessageInfo, msg: MsgSwap) -> StdResult<Response> {
+    let mut funds_to_send = vec![msg.min_return];
+    if msg.return_funds {
+        funds_to_send.extend(info.funds);
+    }
     Ok(
         Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
             to_address: info.sender.to_string(),
-            amount: vec![msg.min_return],
+            amount: funds_to_send,
         })),
     )
 }
