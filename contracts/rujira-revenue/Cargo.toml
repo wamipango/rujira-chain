@@ -9,10 +9,12 @@ edition = "2021"
 [package.metadata.thorchain]
 # See more about format in https://doc.rust-lang.org/cargo/reference/manifest.html#the-metadata-table
 audits = [
-    "https://github.com/Zellic/publications/blob/master/Rujira%20-%20Zellic%20Audit%20Report.pdf"
+    "https://github.com/Zellic/publications/blob/master/Rujira%20-%20Zellic%20Audit%20Report.pdf",
+    "https://www.halborn.com/audits/thorchain/rujira-staking-319044"
 ]
 auditors = [
-    "Zellic"
+    "Zellic",
+    "Halborn"
 ]
 docs = "https://docs.rujira.network/understanding-ruji-token"
 commit = "80b48eddc0f16f735855442fdbc5423ac5398ff6"
