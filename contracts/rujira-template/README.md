@@ -1,1 +1,1 @@
-# A template smart contract
+# Describe what your smart contract does
