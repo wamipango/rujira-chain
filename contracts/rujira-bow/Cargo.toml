@@ -20,7 +20,6 @@ deployers = [
     "thor1e0lmk5juawc46jwjwd0xfz587njej7ay5fh6cd"
 ]
 
-
 [lib]
 crate-type = ["cdylib", "rlib"]
 

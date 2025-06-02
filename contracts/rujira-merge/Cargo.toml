@@ -19,14 +19,6 @@ commit = "80b48eddc0f16f735855442fdbc5423ac5398ff6"
 deployers = [
     "thor1e0lmk5juawc46jwjwd0xfz587njej7ay5fh6cd"
 ]
-contracts = [
-    "thor1yyca08xqdgvjz0psg56z67ejh9xms6l436u8y58m82npdqqhmmtqrsjrgh",
-    "thor1yw4xvtc43me9scqfr2jr2gzvcxd3a9y4eq7gaukreugw2yd2f8tsz3392y",
-    "thor1suhgf5svhu4usrurvxzlgn54ksxmn8gljarjtxqnapv8kjnp4nrsw5xx2d",
-    "thor14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s3p2nzy",
-    "thor1cnuw3f076wgdyahssdkd0g3nr96ckq8cwa2mh029fn5mgf2fmcmsmam5ck",
-    "thor1ltd0maxmte3xf4zshta9j5djrq9cl692ctsp9u5q0p9wss0f5lms7us4yf",
-]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
