@@ -8,8 +8,12 @@ edition = { workspace = true }
 
 [package.metadata.thorchain]
 # See more about format in https://doc.rust-lang.org/cargo/reference/manifest.html#the-metadata-table
-audit = "https://www.halborn.com/audits/thorchain/ruji-trade-fin-4604e5"
-auditor = "Halborn"
+audits = [
+    "https://www.halborn.com/audits/thorchain/ruji-trade-fin-4604e5"
+]
+auditors = [
+    "Halborn"
+]
 docs = "https://docs.rujira.network/products/ruji-trade"
 commit = "80b48eddc0f16f735855442fdbc5423ac5398ff6"
 deployers = [
