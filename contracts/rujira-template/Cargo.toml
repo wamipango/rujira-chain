@@ -15,10 +15,6 @@ auditors = [
     ""
 ]
 docs = ""
-commit = ""
-deployers = [
-    ""
-]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
