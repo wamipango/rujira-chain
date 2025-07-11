@@ -1,24 +1,18 @@
 [package]
-name = "rujira-fin"
-version = "1.0.0"
 authors = []
 edition = { workspace = true }
+name    = "rujira-fin"
+version = "1.0.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [package.metadata.thorchain]
 # See more about format in https://doc.rust-lang.org/cargo/reference/manifest.html#the-metadata-table
-audits = [
-    "https://www.halborn.com/audits/thorchain/ruji-trade-fin-4604e5"
-]
-auditors = [
-    "Halborn"
-]
-docs = "https://docs.rujira.network/products/ruji-trade"
-commit = "80b48eddc0f16f735855442fdbc5423ac5398ff6"
-deployers = [
-    "thor1e0lmk5juawc46jwjwd0xfz587njej7ay5fh6cd"
-]
+auditors  = ["Halborn"]
+audits    = ["https://www.halborn.com/audits/thorchain/ruji-trade-fin-4604e5"]
+commit    = "80b48eddc0f16f735855442fdbc5423ac5398ff6"
+deployers = ["thor1e0lmk5juawc46jwjwd0xfz587njej7ay5fh6cd"]
+docs      = "https://docs.rujira.network/products/ruji-trade"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -28,18 +22,18 @@ crate-type = ["cdylib", "rlib"]
 library = []
 
 [dependencies]
-rujira-rs = { workspace = true }
 cosmwasm-schema = { workspace = true }
-cosmwasm-std = { workspace = true }
-cw-utils = { workspace = true }
+cosmwasm-std    = { workspace = true }
 cw-storage-plus = { workspace = true }
-cw2 = { workspace = true }
-schemars = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
-itertools = { workspace = true }
-rujira-bow = { path = "../rujira-bow" }
+cw-utils        = { workspace = true }
+cw2             = { workspace = true }
+itertools       = { workspace = true }
+rujira-bow      = { path = "../rujira-bow" }
+rujira-rs       = { workspace = true }
+schemars        = { workspace = true }
+serde           = { workspace = true }
+thiserror       = { workspace = true }
 
 [dev-dependencies]
-cw-multi-test = { workspace = true }
+cw-multi-test     = { workspace = true }
 rujira-rs-testing = { workspace = true }

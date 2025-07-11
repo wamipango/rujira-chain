@@ -1,5 +1,5 @@
 [alias]
-coverage = "tarpaulin -o Lcov"
-unit-test = "test --lib"
-schema = "run --bin schema"
+coverage         = "tarpaulin -o Lcov"
 integration-test = "test --lib integration_tests"
+schema           = "run --bin schema"
+unit-test        = "test --lib"

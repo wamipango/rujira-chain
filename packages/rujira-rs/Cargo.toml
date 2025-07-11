@@ -1,25 +1,25 @@
 [package]
-name = "rujira-rs"
-version = "0.0.1"
 edition = { workspace = true }
+name    = "rujira-rs"
+version = "0.0.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cosmwasm-schema = { workspace = true }
-cw-utils = { workspace = true }
-cosmwasm-std = { workspace = true }
-anybuf = { workspace = true }
-thiserror = { workspace = true }
-prost = { workspace = true }
-regex = { workspace = true }
-schemars = { workspace = true }
-cw-storage-plus = { workspace = true }
-itertools = { workspace = true }
-postcard = { workspace = true }
+anybuf                 = { workspace = true }
+cosmos-sdk-proto       = { workspace = true }
+cosmwasm-schema        = { workspace = true }
 cosmwasm-schema-derive = { workspace = true }
-serde = { workspace = true }
-cosmos-sdk-proto = { workspace = true }
+cosmwasm-std           = { workspace = true }
+cw-storage-plus        = { workspace = true }
+cw-utils               = { workspace = true }
+itertools              = { workspace = true }
+postcard               = { workspace = true }
+prost                  = { workspace = true }
+regex                  = { workspace = true }
+schemars               = { workspace = true }
+serde                  = { workspace = true }
+thiserror              = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

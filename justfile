@@ -18,6 +18,11 @@ cargo-fmt-check:
 cargo-test:
   cargo test --workspace --locked
 
+# format rust and toml files
+fmt:
+  @just cargo-fmt-check
+  taplo fmt
+
 # generate schema files for all contracts
 generate-schema:
   ./scripts/schema.sh
