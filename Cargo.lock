@@ -1386,38 +1386,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rujira-stream"
-version = "0.0.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-multi-test",
- "cw-storage-plus",
- "cw-utils",
- "cw2",
- "rujira-rs",
- "schemars",
- "serde",
- "thiserror 1.0.63",
-]
-
-[[package]]
-name = "rujira-stream-factory"
-version = "0.0.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-multi-test",
- "cw-storage-plus",
- "cw-utils",
- "cw2",
- "rujira-rs",
- "schemars",
- "serde",
- "thiserror 1.0.63",
-]
-
-[[package]]
 name = "rujira-template"
 version = "0.0.0"
 dependencies = [

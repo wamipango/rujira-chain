@@ -10,5 +10,4 @@ pub mod orca;
 pub mod pilot;
 pub mod revenue;
 pub mod staking;
-pub mod stream;
 pub mod template;
