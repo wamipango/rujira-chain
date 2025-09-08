@@ -1,14 +1,14 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, ensure, to_json_binary, BankMsg, Binary, Deps, DepsMut, Empty, Env, MessageInfo,
-    Response, StdResult,
+    coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response,
+    StdResult,
 };
 use cw2::set_contract_version;
-use cw_utils::{must_pay, PaymentError};
-use rujira_rs::ghost_vault::{
-    BorrowerResponse, BorrowersResponse, ExecuteMsg, InstantiateMsg, PoolResponse, QueryMsg,
-    StatusResponse, SudoMsg,
+use cw_utils::must_pay;
+use rujira_rs::ghost::vault::{
+    BorrowerResponse, BorrowersResponse, ExecuteMsg, InstantiateMsg, MarketMsg, PoolResponse,
+    QueryMsg, StatusResponse, SudoMsg,
 };
 use rujira_rs::TokenFactory;
 
@@ -29,16 +29,13 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::new(deps.as_ref(), msg.clone())?;
+    let config = Config::new(msg.clone())?;
     config.validate()?;
     config.save(deps.storage)?;
     State::init(deps.storage, &env)?;
-    let rcpt = TokenFactory::new(&env, format!("ghost-vault-{}-rcpt", config.denom).as_str());
-    let debt = TokenFactory::new(&env, format!("ghost-vault-{}-debt", config.denom).as_str());
+    let rcpt = TokenFactory::new(&env, format!("ghost-vault/{}", config.denom).as_str());
 
-    Ok(Response::default()
-        .add_message(rcpt.create_msg(msg.receipt))
-        .add_message(debt.create_msg(msg.debt)))
+    Ok(Response::default().add_message(rcpt.create_msg(msg.receipt)))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -50,34 +47,34 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     let mut state = State::load(deps.storage)?;
-    let rcpt = TokenFactory::new(&env, format!("ghost-vault-{}-rcpt", config.denom).as_str());
-    let debt = TokenFactory::new(&env, format!("ghost-vault-{}-debt", config.denom).as_str());
+    let rcpt = TokenFactory::new(&env, format!("ghost-vault/{}", config.denom).as_str());
     state.distribute_interest(&env, &config)?;
-    let response = match msg {
+    match msg {
         ExecuteMsg::Deposit { callback } => {
             let amount = must_pay(&info, config.denom.as_str())?;
             let mint = state.deposit(amount)?;
+            state.save(deps.storage)?;
 
-            match callback {
-                // Mint directly to the recipient if no callback is provided
+            Ok(match callback {
                 None => Response::default()
                     .add_message(rcpt.mint_msg(mint, info.sender.clone()))
                     .add_event(event_deposit(info.sender, amount, mint)),
-                // Otherwise, mint to the contract and send alongside the callback
                 Some(cb) => Response::default()
                     .add_message(rcpt.mint_msg(mint, env.contract.address))
                     .add_message(cb.to_message(
                         &info.sender,
                         Empty {},
-                        coins(amount.u128(), rcpt.denom()),
+                        coins(mint.u128(), rcpt.denom()),
                     )?)
                     .add_event(event_deposit(info.sender, amount, mint)),
-            }
+            })
         }
         ExecuteMsg::Withdraw { callback } => {
             let amount = must_pay(&info, rcpt.denom().as_str())?;
             let withdrawn = state.withdraw(amount)?;
-            match callback {
+            state.save(deps.storage)?;
+
+            Ok(match callback {
                 None => Response::default()
                     .add_message(rcpt.burn_msg(amount))
                     .add_message(BankMsg::Send {
@@ -85,70 +82,84 @@ pub fn execute(
                         amount: coins(withdrawn.u128(), config.denom),
                     })
                     .add_event(event_withdraw(info.sender, withdrawn, amount)),
-                // Otherwise, mint to the contract and send alongside the callback
                 Some(cb) => Response::default()
                     .add_message(rcpt.burn_msg(amount))
                     .add_message(cb.to_message(
                         &info.sender,
                         Empty {},
-                        coins(amount.u128(), &config.denom),
+                        coins(withdrawn.u128(), &config.denom),
                     )?)
                     .add_event(event_withdraw(info.sender, withdrawn, amount)),
-            }
+            })
         }
-        ExecuteMsg::Borrow { amount, callback } => {
-            let mut borrower = Borrower::load(deps.storage, info.sender.clone())?;
-            borrower.borrow(amount)?;
+        ExecuteMsg::Market(market_msg) => {
+            Borrower::load(deps.storage, info.sender.clone())
+                .map_err(|_| ContractError::Unauthorized {})?;
+            execute_market(deps, env, info, &mut state, market_msg)
+        }
+    }
+}
+
+pub fn execute_market(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    state: &mut State,
+    msg: MarketMsg,
+) -> Result<Response, ContractError> {
+    let config = Config::load(deps.storage)?;
+    let response = match msg {
+        MarketMsg::Borrow {
+            amount,
+            callback,
+            delegate,
+        } => {
+            let owner = delegate
+                .map(|x| deps.api.addr_validate(&x))
+                .transpose()?
+                .unwrap_or_else(|| info.sender.clone());
+            let mut borrower = Borrower::load(deps.storage, owner.clone())?;
+            let shares = state.borrow(amount)?;
+            borrower.borrow(shares)?;
             borrower.save(deps.storage)?;
-            let mint = state.borrow(amount)?;
 
             match callback {
                 None => Response::default()
-                    .add_message(debt.mint_msg(mint, info.sender.clone()))
                     .add_message(BankMsg::Send {
-                        to_address: info.sender.to_string(),
+                        to_address: owner.to_string(),
                         amount: coins(amount.u128(), config.denom),
                     })
-                    .add_event(event_borrow(info.sender, amount, mint)),
-                // Otherwise, mint to the contract and send alongside the callback
+                    .add_event(event_borrow(owner, amount, shares)),
                 Some(cb) => Response::default()
-                    .add_message(debt.mint_msg(mint, info.sender.clone()))
                     .add_message(cb.to_message(
-                        &info.sender,
+                        &owner,
                         Empty {},
                         coins(amount.u128(), &config.denom),
                     )?)
-                    .add_event(event_borrow(info.sender, amount, mint)),
+                    .add_event(event_borrow(owner, amount, shares)),
             }
         }
-        ExecuteMsg::Repay {} => {
-            let mut borrower = Borrower::load(deps.storage, info.sender.clone())?;
+        MarketMsg::Repay { delegate } => {
+            let owner = delegate
+                .map(|x| deps.api.addr_validate(&x))
+                .transpose()?
+                .unwrap_or_else(|| info.sender.clone());
 
-            let amount = info
-                .funds
-                .iter()
-                .find(|x| x.denom == config.denom)
-                .ok_or(PaymentError::MissingDenom(config.denom))?;
-            let debt_amount = info
-                .funds
-                .iter()
-                .find(|x| x.denom == debt.denom())
-                .ok_or(PaymentError::MissingDenom(debt.denom()))?;
+            let mut borrower = Borrower::load(deps.storage, owner.clone())?;
 
-            borrower.repay(amount.amount);
+            let amount = must_pay(&info, config.denom.as_str())?;
+            let shares = state.repay(amount)?;
+            let overpayment = borrower.repay(shares);
             borrower.save(deps.storage)?;
 
-            state.repay(amount.amount, debt_amount.amount)?;
-            Response::default()
-                .add_message(debt.burn_msg(debt_amount.amount))
-                .add_event(event_repay(info.sender, amount.amount, debt_amount.amount))
-        }
-        ExecuteMsg::Sudo(msg) => {
-            ensure!(
-                info.sender == config.registry,
-                ContractError::Unauthorized {}
-            );
-            return sudo(deps, env, msg);
+            let mut response = Response::default().add_event(event_repay(owner, amount, shares));
+            if !overpayment.is_zero() {
+                response = response.add_message(BankMsg::Send {
+                    to_address: borrower.addr.to_string(),
+                    amount: coins(overpayment.u128(), config.denom),
+                });
+            }
+            response
         }
     };
     state.save(deps.storage)?;
@@ -160,22 +171,11 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
     let mut config = Config::load(deps.storage)?;
 
     match msg {
-        SudoMsg::AddBorrower { addr, debt_limit } => {
-            Borrower::set(
-                deps.storage,
-                deps.api.addr_validate(addr.as_str())?,
-                debt_limit,
-            )?;
+        SudoMsg::SetBorrower { contract, limit } => {
+            Borrower::set(deps.storage, deps.api.addr_validate(&contract)?, limit)?;
             Ok(Response::default())
         }
-        SudoMsg::UpdateBorrower { addr, debt_limit } => {
-            let addr = deps.api.addr_validate(addr.as_str())?;
-            // Check borrower already exists
-            Borrower::load(deps.storage, addr.clone())?;
-            Borrower::set(deps.storage, addr, debt_limit)?;
-            Ok(Response::default())
-        }
-        SudoMsg::UpdateInterest { interest } => {
+        SudoMsg::SetInterest(interest) => {
             config.interest = interest;
             config.save(deps.storage)?;
             Ok(Response::default())
@@ -205,11 +205,17 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                 shares: state.deposit_pool.shares(),
                 ratio: state.deposit_pool.ratio(),
             },
+            interest: config.interest,
         })?),
-        QueryMsg::Interest {} => Ok(to_json_binary(&config.interest)?),
-        QueryMsg::Borrower { addr } => Ok(to_json_binary(&BorrowerResponse::from(
-            Borrower::load(deps.storage, deps.api.addr_validate(addr.as_str())?)?,
-        ))?),
+        QueryMsg::Borrower { addr } => {
+            let borrower = Borrower::load(deps.storage, deps.api.addr_validate(addr.as_str())?)?;
+            Ok(to_json_binary(&BorrowerResponse {
+                addr: borrower.addr.to_string(),
+                limit: borrower.limit,
+                current: state.debt_pool.ownership(borrower.shares),
+                shares: borrower.shares,
+            })?)
+        }
         QueryMsg::Borrowers { limit, start_after } => {
             let borrowers = Borrower::list(
                 deps.storage,
@@ -218,7 +224,14 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                     .map(|x| deps.api.addr_validate(x.as_str()))
                     .transpose()?,
             )
-            .map(|x| x.map(BorrowerResponse::from))
+            .map(|x| {
+                x.map(|borrower| BorrowerResponse {
+                    addr: borrower.addr.to_string(),
+                    limit: borrower.limit,
+                    current: state.debt_pool.ownership(borrower.shares),
+                    shares: borrower.shares,
+                })
+            })
             .collect::<StdResult<Vec<BorrowerResponse>>>()?;
             Ok(to_json_binary(&BorrowersResponse { borrowers })?)
         }
@@ -233,7 +246,7 @@ mod tests {
     use super::*;
     use cosmwasm_std::{coin, Decimal, Event, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
-    use rujira_rs::{ghost_vault::Interest, TokenMetadata};
+    use rujira_rs::{ghost::vault::Interest, TokenMetadata};
     use rujira_rs_testing::mock_rujira_app;
 
     #[test]
@@ -260,17 +273,8 @@ mod tests {
                 code_id,
                 owner.clone(),
                 &InstantiateMsg {
-                    registry: app.api().addr_make("registry").to_string(),
                     denom: "btc".to_string(),
                     receipt: TokenMetadata {
-                        description: "".to_string(),
-                        display: "".to_string(),
-                        name: "".to_string(),
-                        symbol: "".to_string(),
-                        uri: None,
-                        uri_hash: None,
-                    },
-                    debt: TokenMetadata {
                         description: "".to_string(),
                         display: "".to_string(),
                         name: "".to_string(),
@@ -305,13 +309,13 @@ mod tests {
             &Event::new("wasm-rujira-ghost-vault/deposit").add_attributes(vec![
                 ("amount", "1000"),
                 ("owner", owner.as_str()),
-                ("minted", "1000"),
+                ("shares", "1000"),
             ]),
         );
 
         res.assert_event(&Event::new("mint").add_attributes(vec![
             ("amount", "1000"),
-            ("denom", "x/ghost-vault-btc-rcpt"),
+            ("denom", "x/ghost-vault/btc"),
             ("recipient", owner.as_str()),
         ]));
 
@@ -322,7 +326,7 @@ mod tests {
                 owner.clone(),
                 contract.clone(),
                 &ExecuteMsg::Withdraw { callback: None },
-                &coins(200u128, "x/ghost-vault-btc-rcpt"),
+                &coins(200u128, "x/ghost-vault/btc"),
             )
             .unwrap();
 
@@ -336,15 +340,15 @@ mod tests {
 
         res.assert_event(
             &Event::new("burn")
-                .add_attributes(vec![("amount", "200"), ("denom", "x/ghost-vault-btc-rcpt")]),
+                .add_attributes(vec![("amount", "200"), ("denom", "x/ghost-vault/btc")]),
         );
 
         // Whitelist a borrower address
         app.wasm_sudo(
             contract.clone(),
-            &SudoMsg::AddBorrower {
-                addr: borrower.to_string(),
-                debt_limit: Uint128::from(500u128),
+            &SudoMsg::SetBorrower {
+                contract: borrower.to_string(),
+                limit: Uint128::from(500u128),
             },
         )
         .unwrap();
@@ -366,23 +370,25 @@ mod tests {
         app.execute_contract(
             borrower.clone(),
             contract.clone(),
-            &ExecuteMsg::Borrow {
+            &ExecuteMsg::Market(MarketMsg::Borrow {
                 callback: None,
                 amount: Uint128::from(501u128),
-            },
+                delegate: None,
+            }),
             &[],
         )
         .unwrap_err();
 
-        // Borrow the whole lot, check debt tokens minted
+        // Borrow the whole lot,
         let res = app
             .execute_contract(
                 borrower.clone(),
                 contract.clone(),
-                &ExecuteMsg::Borrow {
+                &ExecuteMsg::Market(MarketMsg::Borrow {
                     callback: None,
                     amount: Uint128::from(500u128),
-                },
+                    delegate: None,
+                }),
                 &[],
             )
             .unwrap();
@@ -391,37 +397,22 @@ mod tests {
             &Event::new("wasm-rujira-ghost-vault/borrow").add_attributes(vec![
                 ("borrower", borrower.as_str()),
                 ("amount", "500"),
-                ("minted", "500"),
+                ("shares", "500"),
             ]),
         );
-
-        res.assert_event(&Event::new("mint").add_attributes(vec![
-            ("amount", "500"),
-            ("denom", "x/ghost-vault-btc-debt"),
-            ("recipient", borrower.as_str()),
-        ]));
 
         res.assert_event(
             &Event::new("transfer")
                 .add_attributes(vec![("amount", "500btc"), ("recipient", borrower.as_str())]),
         );
 
-        // Test repay debt without token
-        app.execute_contract(
-            borrower.clone(),
-            contract.clone(),
-            &ExecuteMsg::Repay {},
-            &coins(100, "x/ghost-vault-btc-debt"),
-        )
-        .unwrap_err();
-
         // Now repay with the required asset
         let res = app
             .execute_contract(
                 borrower.clone(),
                 contract.clone(),
-                &ExecuteMsg::Repay {},
-                &[coin(100, "btc"), coin(100, "x/ghost-vault-btc-debt")],
+                &ExecuteMsg::Market(MarketMsg::Repay { delegate: None }),
+                &[coin(100, "btc")],
             )
             .unwrap();
 
@@ -431,11 +422,6 @@ mod tests {
                 ("borrower", borrower.as_str()),
                 ("shares", "100"),
             ]),
-        );
-
-        res.assert_event(
-            &Event::new("burn")
-                .add_attributes(vec![("amount", "100"), ("denom", "x/ghost-vault-btc-debt")]),
         );
 
         app.update_block(|x| x.time = x.time.plus_days(90));
@@ -474,34 +460,26 @@ mod tests {
             &Event::new("wasm-rujira-ghost-vault/deposit").add_attributes(vec![
                 ("amount", "1000"),
                 ("owner", owner.as_str()),
-                ("minted", "980"),
+                ("shares", "980"),
             ]),
         );
 
         res.assert_event(&Event::new("mint").add_attributes(vec![
             ("amount", "980"),
-            ("denom", "x/ghost-vault-btc-rcpt"),
+            ("denom", "x/ghost-vault/btc"),
             ("recipient", owner.as_str()),
         ]));
 
         // finally check that a 1:1 repay doesn't work, and that more btc is required
 
-        // Now repay with the required asset
-        app.execute_contract(
-            borrower.clone(),
-            contract.clone(),
-            &ExecuteMsg::Repay {},
-            &[coin(100, "btc"), coin(100, "x/ghost-vault-btc-debt")],
-        )
-        .unwrap_err();
         // debt rate is 1.0325
 
         let res = app
             .execute_contract(
                 borrower.clone(),
                 contract.clone(),
-                &ExecuteMsg::Repay {},
-                &[coin(104, "btc"), coin(100, "x/ghost-vault-btc-debt")],
+                &ExecuteMsg::Market(MarketMsg::Repay { delegate: None }),
+                &[coin(104, "btc")],
             )
             .unwrap();
         res.assert_event(
@@ -512,18 +490,13 @@ mod tests {
             ]),
         );
 
-        res.assert_event(
-            &Event::new("burn")
-                .add_attributes(vec![("amount", "100"), ("denom", "x/ghost-vault-btc-debt")]),
-        );
-
         // Lastly check that the value of my deposit has increased
         let res = app
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
                 &ExecuteMsg::Withdraw { callback: None },
-                &coins(200u128, "x/ghost-vault-btc-rcpt"),
+                &coins(200u128, "x/ghost-vault/btc"),
             )
             .unwrap();
 
@@ -537,15 +510,15 @@ mod tests {
 
         res.assert_event(
             &Event::new("burn")
-                .add_attributes(vec![("amount", "200"), ("denom", "x/ghost-vault-btc-rcpt")]),
+                .add_attributes(vec![("amount", "200"), ("denom", "x/ghost-vault/btc")]),
         );
 
         // Check complete repayument
         app.execute_contract(
             borrower.clone(),
             contract.clone(),
-            &ExecuteMsg::Repay {},
-            &[coin(312, "btc"), coin(300, "x/ghost-vault-btc-debt")],
+            &ExecuteMsg::Market(MarketMsg::Repay { delegate: None }),
+            &[coin(312, "btc")],
         )
         .unwrap();
 

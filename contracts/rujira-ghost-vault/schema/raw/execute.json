@@ -55,60 +55,14 @@
       "additionalProperties": false
     },
     {
-      "description": "Borrow the borrowable asset from the money market. Only callable by whitelisted market contracts.",
+      "description": "Privileged Msgs for whitelisted contracts",
       "type": "object",
       "required": [
-        "borrow"
+        "market"
       ],
       "properties": {
-        "borrow": {
-          "type": "object",
-          "required": [
-            "amount"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "callback": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/CallbackData"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "description": "Repay a borrow. Only callable by whitelisted market contracts.",
-      "type": "object",
-      "required": [
-        "repay"
-      ],
-      "properties": {
-        "repay": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "description": "Priviledged to allow registry to call",
-      "type": "object",
-      "required": [
-        "sudo"
-      ],
-      "properties": {
-        "sudo": {
-          "$ref": "#/definitions/SudoMsg"
+        "market": {
+          "$ref": "#/definitions/MarketMsg"
         }
       },
       "additionalProperties": false
@@ -122,55 +76,40 @@
     "CallbackData": {
       "$ref": "#/definitions/Binary"
     },
-    "Decimal": {
-      "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0\n\nThe greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)",
-      "type": "string"
-    },
-    "Interest": {
-      "type": "object",
-      "required": [
-        "base_rate",
-        "step1",
-        "step2",
-        "target_utilization"
-      ],
-      "properties": {
-        "base_rate": {
-          "$ref": "#/definitions/Decimal"
-        },
-        "step1": {
-          "$ref": "#/definitions/Decimal"
-        },
-        "step2": {
-          "$ref": "#/definitions/Decimal"
-        },
-        "target_utilization": {
-          "$ref": "#/definitions/Decimal"
-        }
-      },
-      "additionalProperties": false
-    },
-    "SudoMsg": {
+    "MarketMsg": {
       "oneOf": [
         {
-          "description": "Whitelist a new borrower",
+          "description": "Borrow the borrowable asset from the money market. Only callable by whitelisted market contracts.",
           "type": "object",
           "required": [
-            "add_borrower"
+            "borrow"
           ],
           "properties": {
-            "add_borrower": {
+            "borrow": {
               "type": "object",
               "required": [
-                "addr",
-                "debt_limit"
+                "amount"
               ],
               "properties": {
-                "addr": {
-                  "type": "string"
-                },
-                "debt_limit": {
+                "amount": {
                   "$ref": "#/definitions/Uint128"
+                },
+                "callback": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/CallbackData"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "delegate": {
+                  "description": "optional delegate address for the debt obligation to be allocated to",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "additionalProperties": false
@@ -179,46 +118,21 @@
           "additionalProperties": false
         },
         {
-          "description": "Update a whitelisted Borrower's parameters",
+          "description": "Repay a borrow. Only callable by whitelisted market contracts.",
           "type": "object",
           "required": [
-            "update_borrower"
+            "repay"
           ],
           "properties": {
-            "update_borrower": {
+            "repay": {
               "type": "object",
-              "required": [
-                "addr",
-                "debt_limit"
-              ],
               "properties": {
-                "addr": {
-                  "type": "string"
-                },
-                "debt_limit": {
-                  "$ref": "#/definitions/Uint128"
-                }
-              },
-              "additionalProperties": false
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "description": "Update contract interest parameters",
-          "type": "object",
-          "required": [
-            "update_interest"
-          ],
-          "properties": {
-            "update_interest": {
-              "type": "object",
-              "required": [
-                "interest"
-              ],
-              "properties": {
-                "interest": {
-                  "$ref": "#/definitions/Interest"
+                "delegate": {
+                  "description": "Optionally repay a delegate's debt obligation instead of the caller's",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "additionalProperties": false

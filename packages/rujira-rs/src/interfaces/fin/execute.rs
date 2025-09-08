@@ -31,7 +31,7 @@ pub struct InstantiateMsg {
     pub fee_address: String,
 }
 
-type OrderTarget = (Side, Price, Option<Uint128>);
+pub type OrderTarget = (Side, Price, Option<Uint128>);
 
 /// Callable interfaces
 #[cw_serde]

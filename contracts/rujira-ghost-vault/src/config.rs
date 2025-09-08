@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Deps, StdResult, Storage};
+use cosmwasm_std::{StdResult, Storage};
 use cw_storage_plus::Item;
-use rujira_rs::ghost_vault::{InstantiateMsg, Interest};
+use rujira_rs::ghost::vault::{InstantiateMsg, Interest};
 
 use crate::ContractError;
 
@@ -11,15 +11,13 @@ static CONFIG: Item<Config> = Item::new("config");
 pub struct Config {
     pub denom: String,
     pub interest: Interest,
-    pub registry: Addr,
 }
 
 impl Config {
-    pub fn new(deps: Deps, value: InstantiateMsg) -> StdResult<Self> {
+    pub fn new(value: InstantiateMsg) -> StdResult<Self> {
         Ok(Self {
             denom: value.denom,
             interest: value.interest,
-            registry: deps.api.addr_validate(&value.registry)?,
         })
     }
 }
@@ -47,7 +45,6 @@ mod tests {
     #[test]
     fn validation() {
         Config {
-            registry: Addr::unchecked("registry"),
             denom: "btc".to_string(),
             interest: Interest {
                 target_utilization: Decimal::from_ratio(8u128, 10u128),

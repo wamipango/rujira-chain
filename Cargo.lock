@@ -1199,40 +1199,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "rujira-ghost-borrow"
-version = "0.0.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-multi-test",
- "cw-storage-plus",
- "cw-utils",
- "cw2",
- "rujira-rs",
- "schemars",
- "serde",
- "thiserror 1.0.63",
-]
-
-[[package]]
-name = "rujira-ghost-registry"
-version = "0.0.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-multi-test",
- "cw-storage-plus",
- "cw-utils",
- "cw2",
- "rujira-rs",
- "schemars",
- "serde",
- "thiserror 1.0.63",
-]
-
-[[package]]
 name = "rujira-ghost-vault"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",

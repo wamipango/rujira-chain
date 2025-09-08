@@ -20,7 +20,8 @@
       "required": [
         "addr",
         "current",
-        "limit"
+        "limit",
+        "shares"
       ],
       "properties": {
         "addr": {
@@ -30,6 +31,9 @@
           "$ref": "#/definitions/Uint128"
         },
         "limit": {
+          "$ref": "#/definitions/Uint128"
+        },
+        "shares": {
           "$ref": "#/definitions/Uint128"
         }
       },

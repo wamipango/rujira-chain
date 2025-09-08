@@ -7,7 +7,7 @@ mod sudo;
 mod tick;
 
 pub use denoms::Denoms;
-pub use execute::{ExecuteMsg, InstantiateMsg, SwapRequest};
+pub use execute::{ExecuteMsg, InstantiateMsg, OrderTarget, SwapRequest};
 pub use price::Price;
 pub use query::*;
 pub use side::Side;

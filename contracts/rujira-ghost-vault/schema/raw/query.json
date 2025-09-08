@@ -5,19 +5,6 @@
     {
       "type": "object",
       "required": [
-        "interest"
-      ],
-      "properties": {
-        "interest": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
         "status"
       ],
       "properties": {

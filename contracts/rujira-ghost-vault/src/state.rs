@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{ensure, Decimal, Env, StdResult, Storage, Timestamp, Uint128};
+use cosmwasm_std::{Decimal, Env, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Item;
-use rujira_rs::{ghost_vault::Interest, SharePool};
+use rujira_rs::{ghost::vault::Interest, SharePool};
 use std::ops::{Mul, Sub};
 
 use crate::{config::Config, ContractError};
@@ -53,23 +53,14 @@ impl State {
     }
 
     pub fn borrow(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
-        let mint = self.debt_pool.join(amount)?;
-
-        Ok(mint)
+        Ok(self.debt_pool.join(amount)?)
     }
 
-    pub fn repay(&mut self, amount: Uint128, debt_tokens: Uint128) -> Result<(), ContractError> {
-        let withdrawn = self.debt_pool.leave(debt_tokens)?;
-        // Ensure that the amount being repaid is at least the value of the debt being burned
-        ensure!(
-            amount.ge(&withdrawn),
-            ContractError::InsufficientRepay {
-                debt: debt_tokens,
-                value: withdrawn,
-                repaid: amount
-            }
-        );
-        Ok(())
+    pub fn repay(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
+        // Calculate the amount of shares that this repay will burn
+        let shares = amount.multiply_ratio(self.debt_pool.shares(), self.debt_pool.size());
+        self.debt_pool.leave(shares)?;
+        Ok(shares)
     }
 
     pub fn utilization(&self) -> Decimal {

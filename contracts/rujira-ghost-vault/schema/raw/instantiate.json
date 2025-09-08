@@ -3,16 +3,11 @@
   "title": "InstantiateMsg",
   "type": "object",
   "required": [
-    "debt",
     "denom",
     "interest",
-    "receipt",
-    "registry"
+    "receipt"
   ],
   "properties": {
-    "debt": {
-      "$ref": "#/definitions/TokenMetadata"
-    },
     "denom": {
       "description": "The denom string that can be deposited and lent",
       "type": "string"
@@ -22,10 +17,6 @@
     },
     "receipt": {
       "$ref": "#/definitions/TokenMetadata"
-    },
-    "registry": {
-      "description": "Lending market registry",
-      "type": "string"
     }
   },
   "additionalProperties": false,

@@ -11,9 +11,6 @@ pub struct InstantiateMsg {
     pub denom: String,
     pub interest: Interest,
     pub receipt: TokenMetadata,
-    pub debt: TokenMetadata,
-    /// Lending market registry
-    pub registry: String,
 }
 
 #[cw_serde]
@@ -22,34 +19,35 @@ pub enum ExecuteMsg {
     Deposit { callback: Option<CallbackData> },
     /// Withdraw the borrowable asset from the money market.
     Withdraw { callback: Option<CallbackData> },
+    /// Privileged Msgs for whitelisted contracts
+    Market(MarketMsg),
+}
+
+#[cw_serde]
+pub enum MarketMsg {
     /// Borrow the borrowable asset from the money market. Only callable by whitelisted market contracts.
     Borrow {
         amount: Uint128,
         callback: Option<CallbackData>,
+        /// optional delegate address for the debt obligation to be allocated to
+        delegate: Option<String>,
     },
     /// Repay a borrow. Only callable by whitelisted market contracts.
-    Repay {},
-
-    /// Priviledged to allow registry to call
-    Sudo(SudoMsg),
+    Repay {
+        /// Optionally repay a delegate's debt obligation instead of the caller's
+        delegate: Option<String>,
+    },
 }
 
 #[cw_serde]
 pub enum SudoMsg {
-    /// Whitelist a new borrower
-    AddBorrower { addr: String, debt_limit: Uint128 },
-    /// Update a whitelisted Borrower's parameters
-    UpdateBorrower { addr: String, debt_limit: Uint128 },
-    /// Update contract interest parameters
-    UpdateInterest { interest: Interest },
+    SetBorrower { contract: String, limit: Uint128 },
+    SetInterest(Interest),
 }
 
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
-    #[returns(Interest)]
-    Interest {},
-
     #[returns(StatusResponse)]
     Status {},
 
@@ -76,6 +74,8 @@ pub struct StatusResponse {
     pub debt_pool: PoolResponse,
     // Share pool that allocated collected debt interest to lenders
     pub deposit_pool: PoolResponse,
+
+    pub interest: Interest,
 }
 
 #[cw_serde]
@@ -93,6 +93,7 @@ pub struct BorrowerResponse {
     pub addr: String,
     pub limit: Uint128,
     pub current: Uint128,
+    pub shares: Uint128,
 }
 
 #[cw_serde]

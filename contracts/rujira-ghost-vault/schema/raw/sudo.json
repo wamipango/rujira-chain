@@ -3,23 +3,22 @@
   "title": "SudoMsg",
   "oneOf": [
     {
-      "description": "Whitelist a new borrower",
       "type": "object",
       "required": [
-        "add_borrower"
+        "set_borrower"
       ],
       "properties": {
-        "add_borrower": {
+        "set_borrower": {
           "type": "object",
           "required": [
-            "addr",
-            "debt_limit"
+            "contract",
+            "limit"
           ],
           "properties": {
-            "addr": {
+            "contract": {
               "type": "string"
             },
-            "debt_limit": {
+            "limit": {
               "$ref": "#/definitions/Uint128"
             }
           },
@@ -29,49 +28,13 @@
       "additionalProperties": false
     },
     {
-      "description": "Update a whitelisted Borrower's parameters",
       "type": "object",
       "required": [
-        "update_borrower"
+        "set_interest"
       ],
       "properties": {
-        "update_borrower": {
-          "type": "object",
-          "required": [
-            "addr",
-            "debt_limit"
-          ],
-          "properties": {
-            "addr": {
-              "type": "string"
-            },
-            "debt_limit": {
-              "$ref": "#/definitions/Uint128"
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "description": "Update contract interest parameters",
-      "type": "object",
-      "required": [
-        "update_interest"
-      ],
-      "properties": {
-        "update_interest": {
-          "type": "object",
-          "required": [
-            "interest"
-          ],
-          "properties": {
-            "interest": {
-              "$ref": "#/definitions/Interest"
-            }
-          },
-          "additionalProperties": false
+        "set_interest": {
+          "$ref": "#/definitions/Interest"
         }
       },
       "additionalProperties": false
