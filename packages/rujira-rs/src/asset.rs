@@ -121,6 +121,13 @@ impl Layer1Asset {
     pub fn is_rune(&self) -> bool {
         self.chain == "THOR" && self.symbol == "RUNE"
     }
+
+    pub fn migrate(&self) -> Self {
+        Self {
+            chain: self.chain.to_uppercase(),
+            symbol: self.symbol.clone(),
+        }
+    }
 }
 
 #[derive(Error, Debug)]

@@ -324,6 +324,28 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     .map_err(ContractError::Std)
 }
 
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    let mut config = CONFIG.load(deps.storage)?;
+    match config.oracles.clone() {
+        None => Ok(Response::default()),
+        Some([a, b]) => {
+            config.update(
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some([a.migrate(), b.migrate()]),
+            );
+            config.validate(deps.as_ref())?;
+            config.save(deps.storage)?;
+            Ok(Response::default())
+        }
+    }
+}
+
 fn swap_iter<'a>(
     deps: Deps<'a>,
     config: &'a Config,
