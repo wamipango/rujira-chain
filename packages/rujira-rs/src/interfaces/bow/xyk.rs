@@ -159,7 +159,7 @@ impl Strategy<XykState> for Xyk {
         state: &mut XykState,
         offer: Coin,
         ask: Coin,
-    ) -> Result<(), StrategyError> {
+    ) -> Result<(Coin, Coin), StrategyError> {
         // The state passed here will be the result of load_state.
         // Orientate it for the quote
         if offer.denom == self.y {
@@ -183,7 +183,15 @@ impl Strategy<XykState> for Xyk {
             state.invert()
         }
 
-        Ok(())
+        Ok((
+            // Fee amount
+            coin(fee_amount.u128(), ask.denom.clone()),
+            // Surplus retained
+            coin(
+                return_amount_total.sub(ask.amount).sub(fee_amount).u128(),
+                ask.denom,
+            ),
+        ))
     }
 
     fn quote(
@@ -344,7 +352,7 @@ mod test {
             y: "y".to_string(),
             min_quote: Uint128::zero(),
             step: Decimal::zero(),
-            fee: Decimal::zero(),
+            fee: Decimal::from_str("0.2").unwrap(),
         };
         let mut state = XykState::new();
         xyk.deposit(
@@ -352,8 +360,10 @@ mod test {
             NativeBalance(vec![coin(1000, "x"), coin(2000, "y")]),
         )
         .unwrap();
-        xyk.validate_swap(&mut state, coin(50, "x"), coin(95, "y"))
+        let fee = xyk
+            .validate_swap(&mut state, coin(50, "x"), coin(76, "y"))
             .unwrap();
+        assert_eq!(fee, (coin(19, "y"), coin(0, "y")));
 
         let mut state = XykState::new();
         xyk.deposit(
@@ -370,8 +380,10 @@ mod test {
             NativeBalance(vec![coin(1000, "x"), coin(2000, "y")]),
         )
         .unwrap();
-        xyk.validate_swap(&mut state, coin(100, "y"), coin(47, "x"))
+        let fee = xyk
+            .validate_swap(&mut state, coin(100, "y"), coin(35, "x"))
             .unwrap();
+        assert_eq!(fee, (coin(9, "x"), coin(3, "x")));
 
         let mut state = XykState::new();
         xyk.deposit(

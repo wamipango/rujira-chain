@@ -20,7 +20,13 @@ pub trait Strategy<T> {
     /// Validates a swap size against the strategy
     /// Offer is the amount offered _to_ the strategy (ie increase in local balance)
     /// and Ask is amount requested _from_ the strategy (decrease)
-    fn validate_swap(&self, state: &mut T, offer: Coin, ask: Coin) -> Result<(), StrategyError>;
+    /// Returns the fee charged for the swap, and any surplus retained
+    fn validate_swap(
+        &self,
+        state: &mut T,
+        offer: Coin,
+        ask: Coin,
+    ) -> Result<(Coin, Coin), StrategyError>;
 
     /// Quotes for a FIN market maker request
     fn quote(&self, state: &T, req: QuoteRequest) -> Result<Option<QuoteResponse>, StrategyError>;
@@ -74,7 +80,7 @@ impl Strategy<StrategyState> for Strategies {
         state: &mut StrategyState,
         offer: Coin,
         ask: Coin,
-    ) -> Result<(), StrategyError> {
+    ) -> Result<(Coin, Coin), StrategyError> {
         match (self, state) {
             (Strategies::Xyk(x), StrategyState::Xyk(ref mut s)) => x.validate_swap(s, offer, ask),
             // _ => Err(StrategyError::InvalidStrategyState {}),

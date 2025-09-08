@@ -14,7 +14,7 @@ use rujira_rs::TokenFactory;
 
 use crate::config::Config;
 use crate::error::ContractError;
-use crate::events::{event_deposit, event_withdraw};
+use crate::events::{event_deposit, event_swap, event_withdraw};
 
 // version info for migration info
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -53,28 +53,28 @@ pub fn execute(
             callback,
         } => {
             let offer = one_coin(&info)?;
-            config
-                .strategy
-                .validate_swap(&mut state, offer, min_return.clone())?;
+            let (fee, surplus) =
+                config
+                    .strategy
+                    .validate_swap(&mut state, offer.clone(), min_return.clone())?;
             let to_address = to
                 .map(|x| deps.api.addr_validate(x.as_str()))
                 .transpose()?
                 .unwrap_or(info.sender);
 
             config.strategy.commit_state(deps, &state)?;
+            let event = event_swap(offer, min_return.clone(), fee, surplus);
 
             match callback {
-                None => Ok(
-                    Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
+                None => Ok(Response::default()
+                    .add_message(CosmosMsg::Bank(BankMsg::Send {
                         to_address: to_address.to_string(),
                         amount: vec![min_return],
-                    })),
-                ),
-                Some(cb) => Ok(Response::default().add_message(cb.to_message(
-                    &to_address,
-                    Empty {},
-                    vec![min_return],
-                )?)),
+                    }))
+                    .add_event(event)),
+                Some(cb) => Ok(Response::default()
+                    .add_message(cb.to_message(&to_address, Empty {}, vec![min_return])?)
+                    .add_event(event)),
             }
         }
         ExecuteMsg::Deposit {
@@ -164,6 +164,12 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
             }
         },
     }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    Ok(Response::default())
 }
 
 #[cfg(test)]
