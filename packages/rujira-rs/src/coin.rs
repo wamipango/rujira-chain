@@ -20,7 +20,7 @@ impl Coin {
 impl From<Coin> for Anybuf {
     fn from(value: Coin) -> Self {
         Anybuf::new()
-            .append_string(1, value.asset.to_string())
+            .append_message(1, &Anybuf::from(value.asset))
             .append_string(2, value.amount.to_string())
     }
 }
@@ -42,7 +42,10 @@ mod tests {
         let buf: Anybuf = Coin::new(NativeAsset::new("uruji"), Uint256::from(100u128)).into();
         assert_eq!(
             buf.into_vec(),
-            vec![10, 10, 82, 85, 78, 69, 46, 117, 114, 117, 106, 105, 18, 3, 49, 48, 48,]
+            vec![
+                10, 20, 10, 4, 84, 72, 79, 82, 18, 5, 117, 114, 117, 106, 105, 26, 5, 117, 114,
+                117, 106, 105, 18, 3, 49, 48, 48
+            ]
         );
     }
 }

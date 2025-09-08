@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, CosmosMsg, Uint256};
+use cosmwasm_std::{Addr, CanonicalAddr, CosmosMsg, Uint256};
 
 use crate::asset::Asset;
 use crate::coin::Coin;
@@ -14,6 +14,7 @@ pub struct MsgSwap {
     slip: Option<Slip>,
     affiliate: Option<Affiliate>,
     dex: Option<Dex>,
+    signer: CanonicalAddr,
 }
 
 impl MsgSwap {
@@ -24,6 +25,7 @@ impl MsgSwap {
         slip: Option<Slip>,
         affiliate: Option<Affiliate>,
         dex: Option<Dex>,
+        signer: CanonicalAddr,
     ) -> Self {
         Self {
             from,
@@ -32,6 +34,7 @@ impl MsgSwap {
             slip,
             affiliate,
             dex,
+            signer,
         }
     }
 }
@@ -51,7 +54,7 @@ impl Memoed for MsgSwap {
 
 impl From<MsgSwap> for CosmosMsg {
     fn from(value: MsgSwap) -> Self {
-        MsgDeposit::new(vec![value.from.clone()], value.to_memo()).into()
+        MsgDeposit::new(vec![value.from.clone()], value.to_memo(), value.signer).into()
     }
 }
 
@@ -167,7 +170,7 @@ impl Memoed for Option<Dex> {
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::Uint256;
+    use cosmwasm_std::{testing::mock_dependencies, Api, Uint256};
 
     use crate::asset::SecuredAsset;
 
@@ -175,6 +178,11 @@ mod tests {
 
     #[test]
     fn encoding() {
+        let signer = mock_dependencies()
+            .api
+            .addr_canonicalize("cosmwasm1uae0t6xzae6nrnj6f3vvh40zgy9sah3cfazs4s")
+            .unwrap();
+
         let msg = MsgSwap::new(
             Coin::new(SecuredAsset::new("BTC", "BTC"), Uint256::from(100u128)),
             SecuredAsset::new("ETH", "ETH"),
@@ -193,6 +201,7 @@ mod tests {
                 target_address: Addr::unchecked("target"),
                 limit: Some(Uint256::from(500u128)),
             }),
+            signer.clone(),
         );
         assert_eq!(
             msg.to_memo(),
@@ -210,6 +219,7 @@ mod tests {
                 target_address: Addr::unchecked("target"),
                 limit: None,
             }),
+            signer.clone(),
         );
         assert_eq!(
             msg.to_memo(),
@@ -227,6 +237,7 @@ mod tests {
                 target_address: Addr::unchecked("target"),
                 limit: None,
             }),
+            signer.clone(),
         );
         assert_eq!(msg.to_memo(), "=:eth-eth:recipient::::dexagg:target");
 
@@ -237,6 +248,7 @@ mod tests {
             None,
             None,
             None,
+            signer.clone(),
         );
         assert_eq!(msg.to_memo(), "=:eth-eth:recipient");
     }

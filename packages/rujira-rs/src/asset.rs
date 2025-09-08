@@ -4,6 +4,7 @@ use std::{
     str::FromStr,
 };
 
+use anybuf::Anybuf;
 use cosmwasm_schema::cw_serde;
 use thiserror::Error;
 
@@ -14,6 +15,34 @@ pub enum Asset {
     Native(NativeAsset),
     Secured(SecuredAsset),
     Layer1(Layer1Asset),
+}
+
+impl From<Asset> for Anybuf {
+    fn from(asset: Asset) -> Self {
+        match asset {
+            Asset::Native(native) => Anybuf::from(native),
+            Asset::Secured(secured) => Anybuf::from(secured),
+            Asset::Layer1(l1) => Anybuf::from(l1),
+        }
+    }
+}
+
+impl Asset {
+    pub fn denom_string(&self) -> String {
+        match self {
+            Asset::Native(native) => native.denom_string(),
+            Asset::Secured(secured) => secured.denom_string(),
+            Asset::Layer1(l1) => l1.denom_string(),
+        }
+    }
+
+    pub fn pool_id(&self) -> String {
+        match self {
+            Asset::Native(native) => format!("THOR.{}", native.symbol.to_ascii_uppercase()),
+            Asset::Secured(secured) => secured.to_layer_1().to_string(),
+            Asset::Layer1(l1) => l1.to_string(),
+        }
+    }
 }
 
 impl Display for Asset {
@@ -39,7 +68,19 @@ impl NativeAsset {
     }
 
     pub fn denom_string(&self) -> String {
-        self.symbol.to_ascii_lowercase()
+        match self.symbol.as_str() {
+            "RUJI" => "x/ruji".to_string(),
+            x => x.to_string().to_ascii_lowercase(),
+        }
+    }
+}
+
+impl From<NativeAsset> for Anybuf {
+    fn from(asset: NativeAsset) -> Self {
+        Anybuf::new()
+            .append_string(1, "THOR") // chain
+            .append_string(2, &asset.symbol) // symbol
+            .append_string(3, asset.symbol.split("-").next().unwrap_or("")) // ticker
     }
 }
 
@@ -73,6 +114,22 @@ impl SecuredAsset {
             .next()
             .unwrap_or_default()
             .to_string()
+    }
+
+    pub fn to_layer_1(&self) -> Layer1Asset {
+        Layer1Asset::new(&self.chain, &self.symbol)
+    }
+}
+
+impl From<SecuredAsset> for Anybuf {
+    fn from(asset: SecuredAsset) -> Self {
+        Anybuf::new()
+            .append_string(1, &asset.chain) // chain
+            .append_string(2, &asset.symbol) // symbol
+            .append_string(3, asset.symbol.split("-").next().unwrap_or("")) // ticker
+            .append_bool(4, false) // synth
+            .append_bool(5, false) // trade
+            .append_bool(6, true) // secured
     }
 }
 
@@ -127,6 +184,18 @@ impl Layer1Asset {
             chain: self.chain.to_uppercase(),
             symbol: self.symbol.clone(),
         }
+    }
+}
+
+impl From<Layer1Asset> for Anybuf {
+    fn from(asset: Layer1Asset) -> Self {
+        Anybuf::new()
+            .append_string(1, &asset.chain) // chain
+            .append_string(2, &asset.symbol) // symbol
+            .append_string(3, asset.symbol.split("-").next().unwrap_or("")) // ticker
+            .append_bool(4, false) // synth
+            .append_bool(5, false) // trade
+            .append_bool(6, false) // secured
     }
 }
 
