@@ -1,6 +1,6 @@
 {
   "contract_name": "rujira-merge",
-  "contract_version": "1.0.2",
+  "contract_version": "1.0.3",
   "idl_version": "1.0.0",
   "instantiate": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -15,13 +15,6 @@
       "ruji_denom"
     ],
     "properties": {
-      "bypass_min_merge_denom": {
-        "description": "Explcit flag to bypass the check for receipt of merge_denom at instantiation",
-        "type": [
-          "boolean",
-          "null"
-        ]
-      },
       "decay_ends_at": {
         "description": "The end of the merge period, when deposit ratio = `0`",
         "allOf": [

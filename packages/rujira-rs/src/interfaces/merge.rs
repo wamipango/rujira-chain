@@ -20,9 +20,6 @@ pub struct InstantiateMsg {
 
     /// The end of the merge period, when deposit ratio = `0`
     pub decay_ends_at: Timestamp,
-
-    /// Explcit flag to bypass the check for receipt of merge_denom at instantiation
-    pub bypass_min_merge_denom: Option<bool>,
 }
 
 #[cw_serde]

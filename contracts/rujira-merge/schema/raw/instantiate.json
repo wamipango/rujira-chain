@@ -11,13 +11,6 @@
     "ruji_denom"
   ],
   "properties": {
-    "bypass_min_merge_denom": {
-      "description": "Explcit flag to bypass the check for receipt of merge_denom at instantiation",
-      "type": [
-        "boolean",
-        "null"
-      ]
-    },
     "decay_ends_at": {
       "description": "The end of the merge period, when deposit ratio = `0`",
       "allOf": [
