@@ -16,6 +16,17 @@ pub struct Interest {
     pub step2: Decimal,
 }
 
+impl Default for Interest {
+    fn default() -> Self {
+        Self {
+            target_utilization: Decimal::from_ratio(4u128, 5u128),
+            base_rate: Decimal::zero(),
+            step1: Decimal::one(),
+            step2: Decimal::from_ratio(2u128, 1u128),
+        }
+    }
+}
+
 impl Interest {
     pub fn validate(&self) -> StdResult<()> {
         ensure!(

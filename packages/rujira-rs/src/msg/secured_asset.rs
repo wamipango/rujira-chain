@@ -37,7 +37,7 @@ mod tests {
         Api, Uint256,
     };
 
-    use crate::asset::NativeAsset;
+    use crate::SecuredAsset;
 
     use super::*;
 
@@ -49,7 +49,7 @@ mod tests {
             .unwrap();
 
         let msg = MsgSecuredAssetWithdraw::new(
-            Coin::new(NativeAsset::new("uruji"), Uint256::from(100u128)),
+            Coin::new(SecuredAsset::new("THOR", "RUJI"), Uint256::from(100u128)),
             MockApi::default().addr_make("recipient"),
             signer,
         );

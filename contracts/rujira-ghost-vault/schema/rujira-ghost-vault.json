@@ -1,6 +1,6 @@
 {
   "contract_name": "rujira-ghost-vault",
-  "contract_version": "0.0.1",
+  "contract_version": "0.1.0",
   "idl_version": "1.0.0",
   "instantiate": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -401,6 +401,7 @@
       "type": "object",
       "required": [
         "addr",
+        "available",
         "current",
         "limit",
         "shares"
@@ -409,14 +410,37 @@
         "addr": {
           "type": "string"
         },
+        "available": {
+          "description": "The remaining amount of borrowable funds for this borrower",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint128"
+            }
+          ]
+        },
         "current": {
-          "$ref": "#/definitions/Uint128"
+          "description": "The borrower's current utilization",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint128"
+            }
+          ]
         },
         "limit": {
-          "$ref": "#/definitions/Uint128"
+          "description": "The borrower's borrow limit",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint128"
+            }
+          ]
         },
         "shares": {
-          "$ref": "#/definitions/Uint128"
+          "description": "The shares allocated to the current debt",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint128"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -448,6 +472,7 @@
           "type": "object",
           "required": [
             "addr",
+            "available",
             "current",
             "limit",
             "shares"
@@ -456,14 +481,37 @@
             "addr": {
               "type": "string"
             },
+            "available": {
+              "description": "The remaining amount of borrowable funds for this borrower",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
             "current": {
-              "$ref": "#/definitions/Uint128"
+              "description": "The borrower's current utilization",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
             },
             "limit": {
-              "$ref": "#/definitions/Uint128"
+              "description": "The borrower's borrow limit",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
             },
             "shares": {
-              "$ref": "#/definitions/Uint128"
+              "description": "The shares allocated to the current debt",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
             }
           },
           "additionalProperties": false

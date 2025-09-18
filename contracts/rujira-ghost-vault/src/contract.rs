@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
@@ -122,7 +124,6 @@ pub fn execute_market(
             let shares = state.borrow(amount)?;
             borrower.borrow(shares)?;
             borrower.save(deps.storage)?;
-
             match callback {
                 None => Response::default()
                     .add_message(BankMsg::Send {
@@ -209,11 +210,17 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         })?),
         QueryMsg::Borrower { addr } => {
             let borrower = Borrower::load(deps.storage, deps.api.addr_validate(addr.as_str())?)?;
+            let current = state.debt_pool.ownership(borrower.shares);
             Ok(to_json_binary(&BorrowerResponse {
                 addr: borrower.addr.to_string(),
                 limit: borrower.limit,
-                current: state.debt_pool.ownership(borrower.shares),
+                current,
                 shares: borrower.shares,
+                available: min(
+                    // Current borrows can exceed limit due to interest
+                    borrower.limit.checked_sub(current).unwrap_or_default(),
+                    state.deposit_pool.size() - state.debt_pool.size(),
+                ),
             })?)
         }
         QueryMsg::Borrowers { limit, start_after } => {
@@ -225,17 +232,32 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                     .transpose()?,
             )
             .map(|x| {
-                x.map(|borrower| BorrowerResponse {
-                    addr: borrower.addr.to_string(),
-                    limit: borrower.limit,
-                    current: state.debt_pool.ownership(borrower.shares),
-                    shares: borrower.shares,
+                x.map(|borrower| {
+                    let current = state.debt_pool.ownership(borrower.shares);
+
+                    BorrowerResponse {
+                        addr: borrower.addr.to_string(),
+                        limit: borrower.limit,
+                        current,
+                        shares: borrower.shares,
+                        available: min(
+                            // Current borrows can exceed limit due to interest
+                            borrower.limit.checked_sub(current).unwrap_or_default(),
+                            state.deposit_pool.size() - state.debt_pool.size(),
+                        ),
+                    }
                 })
             })
             .collect::<StdResult<Vec<BorrowerResponse>>>()?;
             Ok(to_json_binary(&BorrowersResponse { borrowers })?)
         }
     }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    Ok(Response::default())
 }
 
 #[cfg(test)]

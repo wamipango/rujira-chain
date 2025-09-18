@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InstantiateMsg",
+  "type": "object",
+  "required": [
+    "max_borrow_ratio",
+    "max_stream_length",
+    "min_slip_bps",
+    "reserve_fee",
+    "stream_step_ratio"
+  ],
+  "properties": {
+    "max_borrow_ratio": {
+      "description": "The maximum percentage of a pool's depth that can be borrowed",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Decimal"
+        }
+      ]
+    },
+    "max_stream_length": {
+      "description": "The maximum number of blocks that a settlement can be chunked into over a streaming swap",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "min_slip_bps": {
+      "description": "The base layer mimir value. Will be read from chain after 3.12",
+      "type": "integer",
+      "format": "uint8",
+      "minimum": 0.0
+    },
+    "reserve_fee": {
+      "description": "The premium charged on quotes to generate a local surplus",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Decimal"
+        }
+      ]
+    },
+    "stream_step_ratio": {
+      "description": "The amount by which the `size` of the quote changes for each N of max_stream_length Allows the time-based price risk to be managed for quotes that settle over streaming swaps",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Decimal"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "Decimal": {
+      "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0\n\nThe greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)",
+      "type": "string"
+    }
+  }
+}

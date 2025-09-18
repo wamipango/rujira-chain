@@ -3,7 +3,7 @@ use cosmwasm_std::{AnyMsg, CanonicalAddr, CosmosMsg};
 
 use crate::coin::Coin;
 
-pub(crate) struct MsgDeposit {
+pub struct MsgDeposit {
     memo: String,
     coins: Vec<Coin>,
     signer: CanonicalAddr,
@@ -38,7 +38,7 @@ impl From<MsgDeposit> for CosmosMsg {
 mod tests {
     use cosmwasm_std::{testing::mock_dependencies, Api, Binary, Uint256};
 
-    use crate::asset::NativeAsset;
+    use crate::asset::Layer1Asset;
 
     use super::*;
 
@@ -51,7 +51,7 @@ mod tests {
             .unwrap();
         let msg: CosmosMsg = MsgDeposit::new(
             vec![Coin::new(
-                NativeAsset::new("RUJI"),
+                Layer1Asset::new("THOR", "RUJI"),
                 Uint256::from(1_200_000_000u128),
             )],
             "foobarbaz".to_string(),

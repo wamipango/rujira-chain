@@ -91,9 +91,14 @@ pub struct PoolResponse {
 #[cw_serde]
 pub struct BorrowerResponse {
     pub addr: String,
+    /// The borrower's borrow limit
     pub limit: Uint128,
+    /// The borrower's current utilization
     pub current: Uint128,
+    /// The shares allocated to the current debt
     pub shares: Uint128,
+    /// The remaining amount of borrowable funds for this borrower
+    pub available: Uint128,
 }
 
 #[cw_serde]

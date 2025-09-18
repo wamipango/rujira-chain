@@ -1,8 +1,9 @@
 use crate::asset::Asset;
 use anybuf::Anybuf;
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Uint256;
 
-#[derive(Clone)]
+#[cw_serde]
 pub struct Coin {
     asset: Asset,
     amount: Uint256,
@@ -33,18 +34,19 @@ impl From<&Coin> for Anybuf {
 
 #[cfg(test)]
 mod tests {
-    use crate::asset::NativeAsset;
+    use crate::asset::Layer1Asset;
 
     use super::*;
 
     #[test]
     fn encoding() {
-        let buf: Anybuf = Coin::new(NativeAsset::new("uruji"), Uint256::from(100u128)).into();
+        let buf: Anybuf =
+            Coin::new(Layer1Asset::new("THOR", "uruji"), Uint256::from(100u128)).into();
         assert_eq!(
             buf.into_vec(),
             vec![
-                10, 20, 10, 4, 84, 72, 79, 82, 18, 5, 117, 114, 117, 106, 105, 26, 5, 117, 114,
-                117, 106, 105, 18, 3, 49, 48, 48
+                10, 20, 10, 4, 84, 72, 79, 82, 18, 5, 85, 82, 85, 74, 73, 26, 5, 85, 82, 85, 74,
+                73, 18, 3, 49, 48, 48
             ]
         );
     }

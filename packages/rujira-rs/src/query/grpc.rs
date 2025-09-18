@@ -1,5 +1,6 @@
 use crate::proto::types::{
-    QueryNetworkRequest, QueryNetworkResponse, QueryPoolRequest, QueryPoolResponse,
+    QueryNetworkRequest, QueryNetworkResponse, QueryOutboundFeeRequest, QueryOutboundFeeResponse,
+    QueryPoolRequest, QueryPoolResponse, QueryQuoteSwapRequest, QueryQuoteSwapResponse,
 };
 use cosmwasm_std::{Binary, QuerierWrapper, StdError};
 use prost::{DecodeError, EncodeError, Message};
@@ -33,8 +34,11 @@ where
     ) -> Result<Self, QueryError> {
         let mut buf = Vec::new();
         req.encode(&mut buf)?;
+        let path = Self::grpc_path().to_string();
+        let data = Binary::from(buf);
         let res = querier
-            .query_grpc(Self::grpc_path().to_string(), Binary::from(buf))?
+            .query_grpc(path.clone(), data.clone())
+            .map_err(|_| QueryError::Grpc { path, data })?
             .to_vec();
         Ok(Self::decode(&*res)?)
     }
@@ -50,6 +54,9 @@ pub enum QueryError {
 
     #[error("{0}")]
     Decode(#[from] DecodeError),
+
+    #[error("GRPC query error: {path} {data}")]
+    Grpc { path: String, data: Binary },
 }
 
 impl QueryablePair for QueryPoolResponse {
@@ -67,5 +74,23 @@ impl QueryablePair for QueryNetworkResponse {
 
     fn grpc_path() -> &'static str {
         "/types.Query/Network"
+    }
+}
+
+impl QueryablePair for QueryQuoteSwapResponse {
+    type Request = QueryQuoteSwapRequest;
+    type Response = QueryQuoteSwapResponse;
+
+    fn grpc_path() -> &'static str {
+        "/types.Query/QuoteSwap"
+    }
+}
+
+impl QueryablePair for QueryOutboundFeeResponse {
+    type Request = QueryOutboundFeeRequest;
+    type Response = QueryOutboundFeeResponse;
+
+    fn grpc_path() -> &'static str {
+        "/types.Query/OutboundFee"
     }
 }

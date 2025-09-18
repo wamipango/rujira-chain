@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QueryMsg",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "config"
+      ],
+      "properties": {
+        "config": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "quote"
+      ],
+      "properties": {
+        "quote": {
+          "$ref": "#/definitions/QuoteRequest"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "markets"
+      ],
+      "properties": {
+        "markets": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "vaults"
+      ],
+      "properties": {
+        "vaults": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "Binary": {
+      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.",
+      "type": "string"
+    },
+    "Decimal": {
+      "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0\n\nThe greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)",
+      "type": "string"
+    },
+    "QuoteRequest": {
+      "type": "object",
+      "required": [
+        "ask_denom",
+        "offer_denom"
+      ],
+      "properties": {
+        "ask_denom": {
+          "description": "The denom that the Caller is asking for",
+          "type": "string"
+        },
+        "data": {
+          "description": "Optional binary data that should be pass-through from QuoteResponse::data",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Binary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_price": {
+          "description": "The minimum price that BOW must respond with This is used eg in FIN to reay the previous price quoted for and in ORCA to set the min price of the next premium",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offer_denom": {
+          "description": "Denom that the Caller is offering ie the token that will be sent by FIN to BOW Eg. if a market order USDC buy of RUJI on FIN is being executed, FIN will require RUJI to execute the swap and so the offer_denom here will be USDC and the ask_denom RUJI",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

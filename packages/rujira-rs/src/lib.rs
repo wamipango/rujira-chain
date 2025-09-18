@@ -19,7 +19,9 @@ mod share_pool;
 mod token_factory;
 
 pub use account_pool::{AccountPool, AccountPoolAccount};
-pub use asset::{Asset, Layer1Asset, NativeAsset, SecuredAsset};
+pub use asset::{
+    Asset, AssetError, Layer1Asset, Layer1AssetError, SecuredAsset, SecuredAssetError,
+};
 
 pub use callback::{CallbackData, CallbackMsg};
 pub use decimal_scaled::DecimalScaled;

@@ -9,3 +9,4 @@ pub mod pilot;
 pub mod revenue;
 pub mod staking;
 pub mod template;
+pub mod thorchain_swap;

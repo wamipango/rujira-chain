@@ -205,7 +205,7 @@ mod tests {
         );
         assert_eq!(
             msg.to_memo(),
-            "=:eth-eth:recipient/refund:200/5/50:affiliate:5:dexagg:target:500"
+            "=:ETH-ETH:recipient/refund:200/5/50:affiliate:5:dexagg:target:500"
         );
 
         let msg = MsgSwap::new(
@@ -223,7 +223,7 @@ mod tests {
         );
         assert_eq!(
             msg.to_memo(),
-            "=:eth-eth:recipient:200:affiliate:5:dexagg:target"
+            "=:ETH-ETH:recipient:200:affiliate:5:dexagg:target"
         );
 
         let msg = MsgSwap::new(
@@ -239,7 +239,7 @@ mod tests {
             }),
             signer.clone(),
         );
-        assert_eq!(msg.to_memo(), "=:eth-eth:recipient::::dexagg:target");
+        assert_eq!(msg.to_memo(), "=:ETH-ETH:recipient::::dexagg:target");
 
         let msg = MsgSwap::new(
             Coin::new(SecuredAsset::new("BTC", "BTC"), Uint256::from(100u128)),
@@ -250,6 +250,6 @@ mod tests {
             None,
             signer.clone(),
         );
-        assert_eq!(msg.to_memo(), "=:eth-eth:recipient");
+        assert_eq!(msg.to_memo(), "=:ETH-ETH:recipient");
     }
 }

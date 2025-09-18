@@ -219,18 +219,6 @@
             {
               "type": "object",
               "required": [
-                "native"
-              ],
-              "properties": {
-                "native": {
-                  "$ref": "#/definitions/NativeAsset"
-                }
-              },
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "required": [
                 "secured"
               ],
               "properties": {
@@ -268,18 +256,6 @@
             "chain": {
               "type": "string"
             },
-            "symbol": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
-        },
-        "NativeAsset": {
-          "type": "object",
-          "required": [
-            "symbol"
-          ],
-          "properties": {
             "symbol": {
               "type": "string"
             }

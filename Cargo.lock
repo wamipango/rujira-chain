@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-ghost-vault"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -1364,6 +1364,24 @@ dependencies = [
  "cw-utils",
  "cw2",
  "rujira-rs",
+ "schemars",
+ "serde",
+ "thiserror 1.0.63",
+]
+
+[[package]]
+name = "rujira-thorchain-swap"
+version = "0.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "rujira-ghost-vault",
+ "rujira-rs",
+ "rujira-rs-testing",
  "schemars",
  "serde",
  "thiserror 1.0.63",

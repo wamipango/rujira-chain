@@ -99,3 +99,40 @@ pub fn mock_network() -> Result<Binary, Error> {
     network.encode(&mut buf).unwrap();
     Ok(buf.into())
 }
+
+pub fn mock_quote(_req: Binary) -> Result<Binary, Error> {
+    let quote = proto::types::QueryQuoteSwapResponse {
+        outbound_delay_blocks: 0,
+        outbound_delay_seconds: 0,
+        fees: Some(proto::types::QuoteFees {
+            asset: "THOR.RUNE".to_string(),
+            affiliate: "4527004".to_string(),
+            outbound: "2000000".to_string(),
+            liquidity: "1134587".to_string(),
+            total: "7661591".to_string(),
+            slippage_bps: 24,
+            total_bps: 166
+        }),
+        expiry: 1757937922,
+        warning: "Do not cache this response. Do not send funds after the expiry.".to_string(),
+        notes: "Broadcast a MsgDeposit to the THORChain network with the appropriate memo. Do not use multi-in, multi-out transactions.".to_string(),
+        dust_threshold: "1000".to_string(),
+        recommended_min_amount_in: "44".to_string(),
+        recommended_gas_rate: "3".to_string(),
+        gas_rate_units: "satsperbyte".to_string(),
+        memo: "dummy".to_string(),
+        expected_amount_out: "446173434".to_string(),
+        max_streaming_quantity: 0,
+        streaming_swap_blocks: 0,
+        inbound_address: "".to_string(),
+        inbound_confirmation_blocks: 0,
+        inbound_confirmation_seconds: 0,
+        router: "".to_string(),
+        streaming_swap_seconds: 0,
+        total_swap_seconds: 0,
+    };
+
+    let mut buf = Vec::new();
+    quote.encode(&mut buf).unwrap();
+    Ok(buf.into())
+}

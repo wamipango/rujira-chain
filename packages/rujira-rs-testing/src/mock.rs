@@ -14,7 +14,7 @@ use cw_storage_plus::Map;
 use serde::de::DeserializeOwned;
 use std::str::FromStr;
 
-use crate::fixtures::{mock_network, mock_pool};
+use crate::fixtures::{mock_network, mock_pool, mock_quote};
 
 pub type RujiraApp = App<
     BankKeeper,
@@ -96,6 +96,11 @@ impl Stargate for RujiraStargate {
         let serialized = msg.value.to_vec();
         let buf = Bufany::deserialize(&serialized)?;
         match type_url.as_str() {
+            "/types.MsgDeposit" => Ok(AppResponse {
+                events: vec![],
+                data: None,
+            }),
+
             "/thorchain.denom.v1.MsgCreateDenom" => {
                 let sender = buf.string(1).unwrap();
                 let id = buf.string(2).unwrap();
@@ -213,6 +218,7 @@ impl Stargate for RujiraStargate {
         match request.path.as_str() {
             "/types.Query/Pool" => mock_pool(request.data),
             "/types.Query/Network" => mock_network(),
+            "/types.Query/QuoteSwap" => mock_quote(request.data),
             _ => {
                 anyhow::bail!("Unexpected grpc query: request={:?}", request)
             }
