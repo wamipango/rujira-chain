@@ -65,6 +65,13 @@ impl Asset {
             Asset::Layer1(l1) => l1.to_string(),
         }
     }
+
+    pub fn to_layer_1(&self) -> Layer1Asset {
+        match self {
+            Asset::Secured(secured_asset) => secured_asset.to_layer_1(),
+            Asset::Layer1(layer1_asset) => layer1_asset.clone(),
+        }
+    }
 }
 
 impl Display for Asset {
@@ -171,9 +178,9 @@ impl Layer1Asset {
             "rune" => Ok(Self::new("THOR", "RUNE")),
             "tcy" => Ok(Self::new("THOR", "TCY")),
             "x/ruji" => Ok(Self::new("THOR", "RUJI")),
-            _ => match denom.split_once(".") {
+            other => match other.split_once(".") {
                 Some(("thor", symbol)) => Ok(Self::new("THOR", symbol)),
-                _ => Err(Layer1AssetError::InvalidDenom(denom)),
+                _ => Err(Layer1AssetError::InvalidDenom(other.to_string())),
             },
         }
     }

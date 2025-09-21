@@ -2,7 +2,7 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     from_json, to_json_binary, Binary, Decimal, Fraction, QuerierWrapper, StdResult, Uint128,
 };
-use rujira_rs::{bow::QuoteResponse, query::Pool, SecuredAsset};
+use rujira_rs::{bow::QuoteResponse, query::Pool, Asset};
 
 use crate::{config::Config, route::Route, ContractError};
 
@@ -32,7 +32,7 @@ impl Step {
         match denom.as_str() {
             "rune" => Ok(Self::Rune {}),
             _ => {
-                let pool = Pool::load(q, &SecuredAsset::from_denom(denom)?.to_layer_1())?;
+                let pool = Pool::load(q, &Asset::from_denom(denom)?.to_layer_1())?;
                 Ok(Self::Pool {
                     asset: pool.balance_asset,
                     rune: pool.balance_rune,
