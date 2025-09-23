@@ -82,22 +82,26 @@ pub fn execute(
             let liquidity = quote.fees.clone().map(|x| x.liquidity).unwrap_or_default();
             // Include the outbound fee in the return calculations. Until this is set to 0 in thornode, the `reserve_fee` must cover it
             let returned = quote.expected_amount_out + outbound;
-            let fee = returned.mul_ceil(config.reserve_fee);
-            let net_return = returned.checked_sub(fee).unwrap_or_default();
 
+            // N.B. we can't check including the reserve_fee. The base layer swap simulation executes the msg as though it were
+            // in the end block, and as such is subject to ordering amongst other swaps in the swap queue, eg streaming swaps,
+            // which will cause deviation from the "pure" CLP quote that is computed by this contract
+            // Therefore we must assume that the contract's quoting is correct for pool state, and the reserve_fee must also
+            // cover this simulation variance as well as actual execution variance
             ensure!(
-                net_return >= min_return.amount,
+                returned >= min_return.amount,
                 ContractError::InsufficientReturn {
                     quoted: quote.expected_amount_out,
                     asked: min_return.amount,
                     liquidity,
                     outbound,
-                    fee,
                 }
             );
             let swap_msg = quote.to_msg(deps.api.addr_canonicalize(env.contract.address.as_str())?);
             let vault = VAULTS.load(deps.storage, min_return.denom.clone())?;
             let to = to.unwrap_or(info.sender.to_string());
+            let fee = returned.mul_ceil(config.reserve_fee);
+            let net_return = returned.checked_sub(fee).unwrap_or_default();
             Ok(Response::default()
                 .add_event(event_swap(
                     &to,
