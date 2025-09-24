@@ -2,7 +2,7 @@
 authors = []
 edition = { workspace = true }
 name    = "rujira-thorchain-swap"
-version = "0.0.3"
+version = "0.0.4"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

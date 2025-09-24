@@ -4,7 +4,7 @@ use std::cmp::min;
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     coin, ensure, ensure_eq, to_json_binary, Addr, BankMsg, Binary, Coin, Deps, DepsMut, Empty,
-    Env, MessageInfo, Order, Response, StdResult, WasmMsg,
+    Env, MessageInfo, Order, Response, StdResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Map;
@@ -159,7 +159,9 @@ fn execute_repayments(deps: Deps, env: Env, funds: Option<Coin>) -> StdResult<Ve
             Ok(vault) => {
                 let debt = vault.debt(deps.querier, &env.contract.address)?;
                 let repay = min(debt, amount);
-                if !repay.is_zero() {
+                // Ghost Vault has truncation issues when calculating repaid shares
+                // TODO: Add a min_repay to ghost vault to protect against small values
+                if repay.gt(&Uint128::from(1000u128)) {
                     repay_msgs.push(vault.repay_msg(coin(repay.u128(), balance.denom))?)
                 }
             }
