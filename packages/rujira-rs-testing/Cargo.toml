@@ -17,3 +17,9 @@ prost           = { workspace = true }
 rujira-rs       = { workspace = true }
 schemars        = { workspace = true }
 serde           = { workspace = true }
+
+# Contract dependencies (for testing setup functions)
+rujira-bow = { workspace = true }
+rujira-fin = { workspace = true }
+rujira-ghost-vault = { workspace = true }
+rujira-thorchain-swap = { workspace = true }

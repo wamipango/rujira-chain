@@ -1331,7 +1331,11 @@ dependencies = [
  "cw-multi-test",
  "cw-storage-plus",
  "prost",
+ "rujira-bow",
+ "rujira-fin",
+ "rujira-ghost-vault",
  "rujira-rs",
+ "rujira-thorchain-swap",
  "schemars",
  "serde",
 ]
