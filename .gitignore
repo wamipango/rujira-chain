@@ -22,3 +22,5 @@ contracts.txt
 
 # code coverage
 tarpaulin-report.*
+
+**/schema/raw
