@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-ghost-vault"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -1217,7 +1217,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-merge"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",

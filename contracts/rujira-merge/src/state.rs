@@ -356,7 +356,7 @@ mod tests {
         );
         assert_eq!(
             POOL.load(storage).unwrap().shares(),
-            Uint128::from(2_959_183u128)
+            Uint128::from(2_959_182u128)
         );
         assert_eq!(
             ACCOUNTS.load(storage, Addr::unchecked("account2")).unwrap(),
@@ -384,7 +384,7 @@ mod tests {
         );
         assert_eq!(
             POOL.load(storage).unwrap().shares(),
-            Uint128::from(2_959_183u128)
+            Uint128::from(2_959_182u128)
         );
         ACCOUNTS
             .load(storage, Addr::unchecked("account3"))

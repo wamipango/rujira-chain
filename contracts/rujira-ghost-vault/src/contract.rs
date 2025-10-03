@@ -558,7 +558,7 @@ mod tests {
         assert_eq!(status.deposit_pool.shares, Uint128::from(1580u128));
         assert_eq!(
             status.deposit_pool.ratio,
-            Decimal::from_str("1.02").unwrap()
+            Decimal::from_str("1.020253164556962025").unwrap()
         );
     }
 }

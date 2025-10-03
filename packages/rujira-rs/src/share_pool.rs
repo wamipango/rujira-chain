@@ -8,7 +8,7 @@ use thiserror::Error;
 #[derive(Default)]
 pub struct SharePool {
     size: Uint128,
-    shares: Decimal,
+    shares: Uint128,
 }
 
 impl SharePool {
@@ -19,14 +19,14 @@ impl SharePool {
         }
         if self.shares.is_zero() {
             self.size.add_assign(amount);
-            self.shares.add_assign(Decimal::from_ratio(amount, 1u128));
+            self.shares.add_assign(amount);
             return Ok(amount);
         }
 
-        let issuance = self.shares * Decimal::from_ratio(amount, self.size);
+        let issuance = self.shares.multiply_ratio(amount, self.size);
         self.shares.add_assign(issuance);
         self.size.add_assign(amount);
-        Ok(issuance.to_uint_floor())
+        Ok(issuance)
     }
 
     /// Removes a share from the pool, returning the amount removed from the pool and deducted
@@ -42,13 +42,13 @@ impl SharePool {
         if amount.eq(&self.shares()) {
             let claim = self.size;
             self.size = Uint128::zero();
-            self.shares = Decimal::zero();
+            self.shares = Uint128::zero();
             return Ok(claim);
         }
 
         let claim: Uint128 = self.ownership(amount);
         self.size.sub_assign(claim);
-        self.shares.sub_assign(Decimal::from_ratio(amount, 1u128));
+        self.shares.sub_assign(amount);
         Ok(claim)
     }
 
@@ -64,7 +64,7 @@ impl SharePool {
     }
 
     pub fn shares(&self) -> Uint128 {
-        self.shares.to_uint_floor()
+        self.shares
     }
 
     pub fn ownership(&self, shares: Uint128) -> Uint128 {
@@ -114,7 +114,7 @@ mod tests {
         pool.join(Uint128::zero()).unwrap_err();
         let shares = pool.join(Uint128::from(1000u128)).unwrap();
         assert_eq!(shares, Uint128::from(1000u128));
-        assert_eq!(pool.shares, Decimal::from_ratio(1000u128, 1u128));
+        assert_eq!(pool.shares, Uint128::from(1000u128));
         assert_eq!(pool.size, Uint128::from(1000u128));
 
         assert_eq!(
@@ -124,12 +124,12 @@ mod tests {
 
         let shares = pool.join(Uint128::from(5000u128)).unwrap();
         assert_eq!(shares, Uint128::from(5000u128));
-        assert_eq!(pool.shares, Decimal::from_ratio(6000u128, 1u128));
+        assert_eq!(pool.shares, Uint128::from(6000u128));
         assert_eq!(pool.size, Uint128::from(6000u128));
 
         pool.deposit(Uint128::from(2000u128)).unwrap();
 
-        assert_eq!(pool.shares, Decimal::from_ratio(6000u128, 1u128));
+        assert_eq!(pool.shares, Uint128::from(6000u128));
         assert_eq!(pool.size, Uint128::from(8000u128));
 
         assert_eq!(
@@ -139,20 +139,20 @@ mod tests {
 
         let shares = pool.join(Uint128::from(1000u128)).unwrap();
         assert_eq!(shares, Uint128::from(750u128));
-        assert_eq!(pool.shares, Decimal::from_ratio(6750u128, 1u128));
+        assert_eq!(pool.shares, Uint128::from(6750u128));
         assert_eq!(pool.size, Uint128::from(9000u128));
         assert_eq!(pool.ownership(shares), Uint128::from(1000u128));
 
         let redeem = pool.leave(Uint128::from(500u128)).unwrap();
         assert_eq!(redeem, Uint128::from(666u128));
-        assert_eq!(pool.shares, Decimal::from_ratio(6250u128, 1u128));
+        assert_eq!(pool.shares, Uint128::from(6250u128));
         assert_eq!(pool.size, Uint128::from(8334u128));
         assert_eq!(pool.ownership(shares), Uint128::from(1000u128));
 
         pool.leave(Uint128::from(6251u128)).unwrap_err();
         let redeem = pool.leave(Uint128::from(6250u128)).unwrap();
         assert_eq!(redeem, Uint128::from(8334u128));
-        assert_eq!(pool.shares, Decimal::zero());
+        assert_eq!(pool.shares, Uint128::zero());
         assert_eq!(pool.size, Uint128::zero());
     }
 
@@ -179,5 +179,19 @@ mod tests {
         assert_eq!(shares, Uint128::from(900u128));
         let value = pool.ownership(shares);
         assert_eq!(value, Uint128::from(999u128));
+    }
+
+    #[test]
+    fn mint_zero_share_error() {
+        // Ensure that the SharePool can't be manipulated creating zero issuance but increases the shares by fractions
+        let mut pool = SharePool::default();
+        pool.join(Uint128::from(100u128)).unwrap();
+        assert_eq!(pool.shares, Uint128::from(100u128));
+        pool.deposit(Uint128::from(111u128)).unwrap();
+        for _ in 0..1000000 {
+            let shares = pool.join(Uint128::one()).unwrap();
+            assert_eq!(shares, Uint128::from(0u128));
+        }
+        assert_eq!(pool.shares, Uint128::from(100u128));
     }
 }
