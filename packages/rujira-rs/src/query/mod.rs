@@ -1,5 +1,6 @@
 mod grpc;
 pub(crate) mod network;
+pub(crate) mod oracle_price;
 pub(crate) mod outbound_fee;
 pub(crate) mod pool;
 pub(crate) mod swap_quote;

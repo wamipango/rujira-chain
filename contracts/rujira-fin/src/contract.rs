@@ -49,7 +49,7 @@ pub fn execute(
     let oracle = config
         .oracles
         .clone()
-        .map(|x| x.price(deps.querier))
+        .map(|x| x.tor_price(deps.querier))
         .transpose()?;
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut fees = NativeBalance::default();
@@ -258,7 +258,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     let oracle = config
         .oracles
         .clone()
-        .map(|x| x.price(deps.querier))
+        .map(|x| x.tor_price(deps.querier))
         .transpose()?;
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),

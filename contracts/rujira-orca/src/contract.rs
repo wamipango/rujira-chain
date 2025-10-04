@@ -46,7 +46,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let oracle = config.oracles.price(deps.querier)?;
+    let oracle = config.oracles.tor_price(deps.querier)?;
     let mut fees = NativeBalance::default();
     let mut messages: Vec<CosmosMsg> = vec![];
 
@@ -165,7 +165,7 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let oracle = config.oracles.price(deps.querier)?;
+    let oracle = config.oracles.tor_price(deps.querier)?;
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
         QueryMsg::Order((owner, premium)) => {

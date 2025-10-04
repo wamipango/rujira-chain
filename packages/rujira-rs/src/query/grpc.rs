@@ -1,6 +1,7 @@
 use crate::proto::types::{
-    QueryNetworkRequest, QueryNetworkResponse, QueryOutboundFeeRequest, QueryOutboundFeeResponse,
-    QueryPoolRequest, QueryPoolResponse, QueryQuoteSwapRequest, QueryQuoteSwapResponse,
+    QueryNetworkRequest, QueryNetworkResponse, QueryOraclePriceRequest, QueryOraclePriceResponse,
+    QueryOutboundFeeRequest, QueryOutboundFeeResponse, QueryPoolRequest, QueryPoolResponse,
+    QueryQuoteSwapRequest, QueryQuoteSwapResponse,
 };
 use cosmwasm_std::{Binary, QuerierWrapper, StdError};
 use prost::{DecodeError, EncodeError, Message};
@@ -92,5 +93,14 @@ impl QueryablePair for QueryOutboundFeeResponse {
 
     fn grpc_path() -> &'static str {
         "/types.Query/OutboundFee"
+    }
+}
+
+impl QueryablePair for QueryOraclePriceResponse {
+    type Request = QueryOraclePriceRequest;
+    type Response = QueryOraclePriceResponse;
+
+    fn grpc_path() -> &'static str {
+        "/types.Query/OraclePrice"
     }
 }

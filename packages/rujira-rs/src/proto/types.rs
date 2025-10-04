@@ -840,6 +840,29 @@ pub struct QueryPoolResponse {
     #[prost(string, tag = "23")]
     pub derived_depth_bps: ::prost::alloc::string::String,
 }
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QueryOraclePriceRequest {
+    #[prost(string, tag = "1")]
+    pub height: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub symbol: ::prost::alloc::string::String,
+}
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OraclePrice {
+    #[prost(string, tag = "1")]
+    pub symbol: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub price: ::prost::alloc::string::String,
+}
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QueryOraclePriceResponse {
+    #[prost(message, optional, tag = "1")]
+    pub price: ::core::option::Option<OraclePrice>,
+}
+
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryPoolsRequest {
     #[prost(string, tag = "1")]

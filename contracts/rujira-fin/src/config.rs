@@ -40,8 +40,8 @@ impl Config {
     pub fn validate(&self, deps: Deps) -> Result<(), ContractError> {
         self.denoms.validate()?;
         if let Some(oracles) = self.oracles.clone() {
-            oracles[0].price(deps.querier)?;
-            oracles[1].price(deps.querier)?;
+            oracles[0].tor_price(deps.querier)?;
+            oracles[1].tor_price(deps.querier)?;
         }
         if self.fee_maker >= Decimal::one() {
             return Err(ContractError::Invalid("fee_maker >= 1".into()));
