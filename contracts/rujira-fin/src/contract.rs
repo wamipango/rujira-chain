@@ -49,8 +49,7 @@ pub fn execute(
     let oracle = config
         .oracles
         .clone()
-        .map(|x| x.tor_price(deps.querier))
-        .transpose()?;
+        .and_then(|x| x.tor_price(deps.querier).ok());
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut fees = NativeBalance::default();
 
@@ -258,8 +257,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     let oracle = config
         .oracles
         .clone()
-        .map(|x| x.tor_price(deps.querier))
-        .transpose()?;
+        .and_then(|x| x.tor_price(deps.querier).ok());
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
         QueryMsg::Order((owner, side, price)) => {
@@ -327,23 +325,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let mut config = CONFIG.load(deps.storage)?;
-    match config.oracles.clone() {
-        None => Ok(Response::default()),
-        Some([a, b]) => {
-            config.update(
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some([a.migrate(), b.migrate()]),
-            );
-            config.validate(deps.as_ref())?;
-            config.save(deps.storage)?;
-            Ok(Response::default())
-        }
-    }
+    Ok(Response::default())
 }
 
 fn swap_iter<'a>(
