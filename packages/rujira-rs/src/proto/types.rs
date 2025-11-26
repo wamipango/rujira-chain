@@ -236,52 +236,6 @@ pub struct MsgLeave {
     pub signer: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct MsgLoanOpen {
-    #[prost(string, tag = "1")]
-    pub owner: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub collateral_asset: ::core::option::Option<super::common::Asset>,
-    #[prost(string, tag = "3")]
-    pub collateral_amount: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub target_address: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub target_asset: ::core::option::Option<super::common::Asset>,
-    #[prost(string, tag = "6")]
-    pub min_out: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
-    pub affiliate_address: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
-    pub affiliate_basis_points: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
-    pub aggregator: ::prost::alloc::string::String,
-    #[prost(string, tag = "10")]
-    pub aggregator_target_address: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
-    pub aggregator_target_limit: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "12")]
-    pub signer: ::prost::alloc::vec::Vec<u8>,
-    #[prost(string, tag = "13")]
-    pub tx_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct MsgLoanRepayment {
-    #[prost(string, tag = "1")]
-    pub owner: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub collateral_asset: ::core::option::Option<super::common::Asset>,
-    #[prost(message, optional, tag = "3")]
-    pub coin: ::core::option::Option<super::common::Coin>,
-    #[prost(string, tag = "4")]
-    pub min_out: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "5")]
-    pub signer: ::prost::alloc::vec::Vec<u8>,
-    #[prost(string, tag = "6")]
-    pub from: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
-    pub tx_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MsgManageThorName {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
@@ -827,15 +781,6 @@ pub struct QueryPoolResponse {
     /// the amount of synth supply remaining before the current max supply is reached
     #[prost(string, tag = "19")]
     pub synth_supply_remaining: ::prost::alloc::string::String,
-    /// the amount of collateral collects for loans
-    #[prost(string, tag = "20")]
-    pub loan_collateral: ::prost::alloc::string::String,
-    /// the amount of remaining collateral collects for loans
-    #[prost(string, tag = "21")]
-    pub loan_collateral_remaining: ::prost::alloc::string::String,
-    /// the current loan collateralization ratio
-    #[prost(string, tag = "22")]
-    pub loan_cr: ::prost::alloc::string::String,
     /// the depth of the derived virtual pool relative to L1 pool (in basis points)
     #[prost(string, tag = "23")]
     pub derived_depth_bps: ::prost::alloc::string::String,
@@ -1002,50 +947,6 @@ pub struct QuerySaversRequest {
 pub struct QuerySaversResponse {
     #[prost(message, repeated, tag = "1")]
     pub savers: ::prost::alloc::vec::Vec<QuerySaverResponse>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryBorrowerRequest {
-    #[prost(string, tag = "1")]
-    pub asset: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub address: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub height: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryBorrowerResponse {
-    #[prost(string, tag = "1")]
-    pub owner: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub asset: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub debt_issued: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub debt_repaid: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub debt_current: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub collateral_deposited: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
-    pub collateral_withdrawn: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
-    pub collateral_current: ::prost::alloc::string::String,
-    #[prost(int64, tag = "9")]
-    pub last_open_height: i64,
-    #[prost(int64, tag = "10")]
-    pub last_replay_height: i64,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryBorrowersRequest {
-    #[prost(string, tag = "1")]
-    pub asset: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub height: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryBorrowersResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub borrowers: ::prost::alloc::vec::Vec<QueryBorrowerResponse>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryTradeUnitRequest {
@@ -1986,176 +1887,7 @@ pub struct QueryQuoteSaverWithdrawResponse {
     #[prost(string, tag = "17")]
     pub expected_amount_out: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryQuoteLoanOpenRequest {
-    #[prost(string, tag = "1")]
-    pub from_asset: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub to_asset: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub amount: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub min_out: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub destination: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "6")]
-    pub affiliate: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, repeated, tag = "7")]
-    pub affiliate_bps: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, tag = "8")]
-    pub height: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryQuoteLoanOpenResponse {
-    /// the inbound address for the transaction on the source chain
-    #[prost(string, tag = "1")]
-    pub inbound_address: ::prost::alloc::string::String,
-    /// the approximate number of source chain blocks required before processing
-    #[prost(int64, tag = "2")]
-    pub inbound_confirmation_blocks: i64,
-    /// the approximate seconds for block confirmations required before processing
-    #[prost(int64, tag = "3")]
-    pub inbound_confirmation_seconds: i64,
-    /// the number of thorchain blocks the outbound will be delayed
-    #[prost(int64, tag = "4")]
-    pub outbound_delay_blocks: i64,
-    /// the approximate seconds for the outbound delay before it will be sent
-    #[prost(int64, tag = "5")]
-    pub outbound_delay_seconds: i64,
-    #[prost(message, optional, tag = "6")]
-    pub fees: ::core::option::Option<QuoteFees>,
-    /// the EVM chain router contract address
-    #[prost(string, tag = "7")]
-    pub router: ::prost::alloc::string::String,
-    /// expiration timestamp in unix seconds
-    #[prost(int64, tag = "8")]
-    pub expiry: i64,
-    /// static warning message
-    #[prost(string, tag = "9")]
-    pub warning: ::prost::alloc::string::String,
-    /// chain specific quote notes
-    #[prost(string, tag = "10")]
-    pub notes: ::prost::alloc::string::String,
-    /// Defines the minimum transaction size for the chain in base units (sats, wei, uatom). Transactions with asset amounts lower than the dust_threshold are ignored.
-    #[prost(string, tag = "11")]
-    pub dust_threshold: ::prost::alloc::string::String,
-    /// The recommended minimum inbound amount for this transaction type & inbound asset. Sending less than this amount could result in failed refunds.
-    #[prost(string, tag = "12")]
-    pub recommended_min_amount_in: ::prost::alloc::string::String,
-    /// the recommended gas rate to use for the inbound to ensure timely confirmation
-    #[prost(string, tag = "13")]
-    pub recommended_gas_rate: ::prost::alloc::string::String,
-    /// the units of the recommended gas rate
-    #[prost(string, tag = "14")]
-    pub gas_rate_units: ::prost::alloc::string::String,
-    /// generated memo for the loan open
-    #[prost(string, tag = "15")]
-    pub memo: ::prost::alloc::string::String,
-    /// the amount of the target asset the user can expect to receive after fees in 1e8 decimals
-    #[prost(string, tag = "16")]
-    pub expected_amount_out: ::prost::alloc::string::String,
-    /// the expected collateralization ratio in basis points
-    #[prost(string, tag = "17")]
-    pub expected_collateralization_ratio: ::prost::alloc::string::String,
-    /// the expected amount of collateral increase on the loan
-    #[prost(string, tag = "18")]
-    pub expected_collateral_deposited: ::prost::alloc::string::String,
-    /// the expected amount of TOR debt increase on the loan
-    #[prost(string, tag = "19")]
-    pub expected_debt_issued: ::prost::alloc::string::String,
-    /// The number of blocks involved in the streaming swaps during the open loan process.
-    #[prost(int64, tag = "20")]
-    pub streaming_swap_blocks: i64,
-    /// The approximate number of seconds taken by the streaming swaps involved in the open loan process.
-    #[prost(int64, tag = "21")]
-    pub streaming_swap_seconds: i64,
-    /// The total expected duration for a open loan, measured in seconds, which includes the time for inbound confirmation, the duration of streaming swaps, and any outbound delays.
-    #[prost(int64, tag = "22")]
-    pub total_open_loan_seconds: i64,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryQuoteLoanCloseRequest {
-    #[prost(string, tag = "1")]
-    pub from_asset: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub to_asset: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub min_out: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub repay_bps: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub loan_owner: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub height: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryQuoteLoanCloseResponse {
-    /// the inbound address for the transaction on the source chain
-    #[prost(string, tag = "1")]
-    pub inbound_address: ::prost::alloc::string::String,
-    /// the approximate number of source chain blocks required before processing
-    #[prost(int64, tag = "2")]
-    pub inbound_confirmation_blocks: i64,
-    /// the approximate seconds for block confirmations required before processing
-    #[prost(int64, tag = "3")]
-    pub inbound_confirmation_seconds: i64,
-    /// the number of thorchain blocks the outbound will be delayed
-    #[prost(int64, tag = "4")]
-    pub outbound_delay_blocks: i64,
-    /// the approximate seconds for the outbound delay before it will be sent
-    #[prost(int64, tag = "5")]
-    pub outbound_delay_seconds: i64,
-    #[prost(message, optional, tag = "6")]
-    pub fees: ::core::option::Option<QuoteFees>,
-    /// the EVM chain router contract address
-    #[prost(string, tag = "7")]
-    pub router: ::prost::alloc::string::String,
-    /// expiration timestamp in unix seconds
-    #[prost(int64, tag = "8")]
-    pub expiry: i64,
-    /// static warning message
-    #[prost(string, tag = "9")]
-    pub warning: ::prost::alloc::string::String,
-    /// chain specific quote notes
-    #[prost(string, tag = "10")]
-    pub notes: ::prost::alloc::string::String,
-    /// Defines the minimum transaction size for the chain in base units (sats, wei, uatom). Transactions with asset amounts lower than the dust_threshold are ignored.
-    #[prost(string, tag = "11")]
-    pub dust_threshold: ::prost::alloc::string::String,
-    /// The recommended minimum inbound amount for this transaction type & inbound asset. Sending less than this amount could result in failed refunds.
-    #[prost(string, tag = "12")]
-    pub recommended_min_amount_in: ::prost::alloc::string::String,
-    /// the recommended gas rate to use for the inbound to ensure timely confirmation
-    #[prost(string, tag = "13")]
-    pub recommended_gas_rate: ::prost::alloc::string::String,
-    /// the units of the recommended gas rate
-    #[prost(string, tag = "14")]
-    pub gas_rate_units: ::prost::alloc::string::String,
-    /// generated memo for the loan close
-    #[prost(string, tag = "15")]
-    pub memo: ::prost::alloc::string::String,
-    /// the amount of collateral asset the user can expect to receive after fees in 1e8 decimals
-    #[prost(string, tag = "16")]
-    pub expected_amount_out: ::prost::alloc::string::String,
-    /// The quantity of the repayment asset to be sent by the user, calculated as the desired percentage of the loan's value, expressed in units of 1e8
-    #[prost(string, tag = "17")]
-    pub expected_amount_in: ::prost::alloc::string::String,
-    /// the expected amount of collateral decrease on the loan
-    #[prost(string, tag = "18")]
-    pub expected_collateral_withdrawn: ::prost::alloc::string::String,
-    /// the expected amount of TOR debt decrease on the loan
-    #[prost(string, tag = "19")]
-    pub expected_debt_repaid: ::prost::alloc::string::String,
-    /// The number of blocks involved in the streaming swaps during the repayment process.
-    #[prost(int64, tag = "20")]
-    pub streaming_swap_blocks: i64,
-    /// The approximate number of seconds taken by the streaming swaps involved in the repayment process.
-    #[prost(int64, tag = "21")]
-    pub streaming_swap_seconds: i64,
-    /// The total expected duration for a repayment, measured in seconds, which includes the time for inbound confirmation, the duration of streaming swaps, and any outbound delays.
-    #[prost(int64, tag = "22")]
-    pub total_repay_seconds: i64,
-}
+
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuoteFees {
     /// the target asset used for all fees
@@ -3450,36 +3182,6 @@ pub struct EventRunePoolWithdraw {
     pub affiliate_address: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EventLoanOpen {
-    #[prost(string, tag = "1")]
-    pub collateral_deposited: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub collateral_asset: ::core::option::Option<super::common::Asset>,
-    #[prost(string, tag = "3")]
-    pub collateralization_ratio: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub debt_issued: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub owner: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
-    pub target_asset: ::core::option::Option<super::common::Asset>,
-    #[prost(string, tag = "7")]
-    pub tx_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EventLoanRepayment {
-    #[prost(string, tag = "1")]
-    pub collateral_withdrawn: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub collateral_asset: ::core::option::Option<super::common::Asset>,
-    #[prost(string, tag = "3")]
-    pub debt_repaid: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub owner: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
-    pub tx_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EventThorName {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
@@ -3634,25 +3336,6 @@ pub struct LiquidityProvider {
     pub rune_deposit_value: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
     pub asset_deposit_value: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Loan {
-    #[prost(string, tag = "1")]
-    pub owner: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub asset: ::core::option::Option<super::common::Asset>,
-    #[prost(string, tag = "3")]
-    pub debt_issued: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub debt_repaid: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub collateral_deposited: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub collateral_withdrawn: ::prost::alloc::string::String,
-    #[prost(int64, tag = "9")]
-    pub last_open_height: i64,
-    #[prost(int64, tag = "10")]
-    pub last_repay_height: i64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Network {

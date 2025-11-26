@@ -1181,7 +1181,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-fin"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -1375,7 +1375,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-thorchain-swap"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",

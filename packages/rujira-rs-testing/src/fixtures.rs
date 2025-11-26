@@ -24,9 +24,7 @@ fn mock_pool_btc() -> Binary {
         savers_capacity_remaining: "9193020653".to_string(),
         synth_mint_paused: false,
         synth_supply_remaining: "22913550433".to_string(),
-        loan_collateral: "167294477784".to_string(),
-        loan_collateral_remaining: "0".to_string(),
-        loan_cr: "0".to_string(),
+
         derived_depth_bps: "9639".to_string(),
     };
 
@@ -55,9 +53,6 @@ fn mock_pool_usdc() -> Binary {
         savers_capacity_remaining: "313066825160852".to_string(),
         synth_mint_paused: false,
         synth_supply_remaining: "526838894037357".to_string(),
-        loan_collateral: "0".to_string(),
-        loan_collateral_remaining: "0".to_string(),
-        loan_cr: "0".to_string(),
         derived_depth_bps: "0".to_string(),
         short_code: "".to_string(),
     };

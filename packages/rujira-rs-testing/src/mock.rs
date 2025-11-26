@@ -287,9 +287,6 @@ mod tests {
         assert_eq!(res.savers_capacity_remaining, Uint128::from(9193020653u128));
         assert!(!res.synth_mint_paused);
         assert_eq!(res.synth_supply_remaining, Uint128::from(22913550433u128));
-        assert_eq!(res.loan_collateral, Uint128::from(167294477784u128));
-        assert_eq!(res.loan_collateral_remaining, Uint128::from(0u128));
-        assert_eq!(res.loan_cr, Decimal::zero());
         assert_eq!(res.derived_depth_bps, 9639);
     }
 }

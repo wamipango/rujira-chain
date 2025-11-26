@@ -56,8 +56,6 @@ pub struct GenesisState {
     pub bond_providers: ::prost::alloc::vec::Vec<super::types::BondProviders>,
     #[prost(message, optional, tag = "27")]
     pub pol: ::core::option::Option<super::types::ProtocolOwnedLiquidity>,
-    #[prost(message, repeated, tag = "28")]
-    pub loans: ::prost::alloc::vec::Vec<super::types::Loan>,
     #[prost(message, repeated, tag = "29")]
     pub streaming_swaps: ::prost::alloc::vec::Vec<super::types::StreamingSwap>,
     #[prost(message, repeated, tag = "30")]
@@ -80,8 +78,6 @@ pub struct GenesisState {
     pub node_mimirs: ::prost::alloc::vec::Vec<super::types::NodeMimir>,
     #[prost(message, repeated, tag = "39")]
     pub affiliate_collectors: ::prost::alloc::vec::Vec<super::types::AffiliateFeeCollector>,
-    #[prost(message, repeated, tag = "40")]
-    pub loan_total_collateral: ::prost::alloc::vec::Vec<super::common::Coin>,
     #[prost(message, repeated, tag = "41")]
     pub secured_assets: ::prost::alloc::vec::Vec<super::types::SecuredAsset>,
 }

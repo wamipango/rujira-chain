@@ -94,12 +94,6 @@ pub struct Pool {
     pub synth_mint_paused: bool,
     /// the amount of synth supply remaining before the current max supply is reached
     pub synth_supply_remaining: Uint128,
-    /// the amount of collateral collects for loans
-    pub loan_collateral: Uint128,
-    /// the amount of remaining collateral collects for loans
-    pub loan_collateral_remaining: Uint128,
-    /// the current loan collateralization ratio
-    pub loan_cr: Decimal,
     /// the depth of the derived virtual pool relative to L1 pool (in basis points)
     pub derived_depth_bps: u32,
 }
@@ -128,9 +122,6 @@ impl TryFrom<QueryPoolResponse> for Pool {
             savers_capacity_remaining: Uint128::from_str(v.savers_capacity_remaining.as_str())?,
             synth_mint_paused: v.synth_mint_paused,
             synth_supply_remaining: Uint128::from_str(v.synth_supply_remaining.as_str())?,
-            loan_collateral: Uint128::from_str(v.loan_collateral.as_str())?,
-            loan_collateral_remaining: Uint128::from_str(v.loan_collateral_remaining.as_str())?,
-            loan_cr: Decimal::from_str(v.loan_cr.as_str())?,
             derived_depth_bps: u32::from_str(v.derived_depth_bps.as_str())?,
         })
     }
