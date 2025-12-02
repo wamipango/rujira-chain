@@ -4,3 +4,6 @@ mod error;
 mod events;
 
 pub use crate::error::ContractError;
+
+#[cfg(feature = "mock")]
+pub mod mock;

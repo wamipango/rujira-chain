@@ -16,6 +16,7 @@ pub mod exchange;
 mod interfaces;
 mod memoed;
 mod msg;
+mod native_balance_plus;
 #[cfg(feature = "oracle")]
 mod oracle;
 #[cfg(feature = "premium")]
@@ -44,8 +45,9 @@ pub use callback::{CallbackData, CallbackMsg};
 #[cfg(feature = "decimal-scaled")]
 pub use decimal_scaled::DecimalScaled;
 pub use interfaces::*;
+pub use native_balance_plus::NativeBalancePlus;
 #[cfg(feature = "oracle")]
-pub use oracle::{Oracle, OracleError};
+pub use oracle::{Oracle, OracleError, OracleValue};
 #[cfg(feature = "premium")]
 pub use premium::Premiumable;
 #[cfg(feature = "share-pool")]

@@ -6,6 +6,8 @@ use std::{
 
 use anybuf::Anybuf;
 use cosmwasm_schema::cw_serde;
+use cosmwasm_std::ensure;
+use regex::Regex;
 use thiserror::Error;
 
 use crate::memoed::Memoed;
@@ -99,7 +101,23 @@ impl SecuredAsset {
 
     pub fn from_denom(str: &String) -> result::Result<Self, SecuredAssetError> {
         match str.split_once("-") {
-            Some((chain, symbol)) => Ok(Self::new(chain, symbol)),
+            Some((chain, symbol)) => {
+                // Validate that this isn't eg a token factory pretending to be a secured asset
+                // x/btc-btc would otherwise pass
+                ensure!(
+                    Regex::new(r"^[a-z]+$").unwrap().is_match(chain),
+                    SecuredAssetError::InvalidDenom(str.to_string())
+                );
+
+                ensure!(
+                    Regex::new(r"^[a-z]+(?:-0x[0-9a-f]{40})?$")
+                        .unwrap()
+                        .is_match(symbol),
+                    SecuredAssetError::InvalidDenom(str.to_string())
+                );
+
+                Ok(Self::new(chain, symbol))
+            }
             None => Err(SecuredAssetError::InvalidDenom(str.to_string())),
         }
     }

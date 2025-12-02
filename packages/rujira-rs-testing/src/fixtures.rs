@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
+
 use anyhow::Error;
-use cosmwasm_std::{Binary, StdError};
+use cosmwasm_std::{Binary, Decimal, StdError};
 use prost::Message;
 use rujira_rs::proto;
 
@@ -125,6 +127,26 @@ pub fn mock_quote(_req: Binary) -> Result<Binary, Error> {
         router: "".to_string(),
         streaming_swap_seconds: 0,
         total_swap_seconds: 0,
+    };
+
+    let mut buf = Vec::new();
+    quote.encode(&mut buf).unwrap();
+    Ok(buf.into())
+}
+
+pub fn mock_oracle_price(
+    request: Binary,
+    prices: &BTreeMap<String, Decimal>,
+) -> Result<Binary, Error> {
+    let req = proto::types::QueryOraclePriceRequest::decode(request.as_slice()).unwrap();
+    let quote = proto::types::QueryOraclePriceResponse {
+        price: match prices.get(&req.symbol) {
+            Some(price) => Some(proto::types::OraclePrice {
+                symbol: req.symbol,
+                price: price.to_string(),
+            }),
+            _ => None,
+        },
     };
 
     let mut buf = Vec::new();

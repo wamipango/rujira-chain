@@ -10,7 +10,7 @@ use cosmwasm_std::{Decimal256, Fraction, OverflowError, Uint256};
 /// Useful for storing and multiplying very large numbers by very small fractions, where the output
 /// is in a sensible range
 #[cw_serde]
-#[derive(Copy)]
+#[derive(Copy, Default)]
 pub struct DecimalScaled((Uint256, i64));
 
 impl DecimalScaled {
@@ -119,6 +119,16 @@ impl DecimalScaled {
 
         res.normalize();
         res
+    }
+
+    /// Split into (integer_part, fractional_part) where:
+    /// - integer_part is floor(self) as Uint256
+    /// - fractional_part = self - integer_part, as DecimalScaled, with 0 <= fractional_part < 1
+    pub fn decompose(&self) -> (Uint256, DecimalScaled) {
+        let i = self.to_uint_floor();
+        // Build a DecimalScaled for the integer part (scale 0) and subtract to get the fraction.
+        let f = *self - DecimalScaled((i, 0));
+        (i, f)
     }
 }
 
@@ -537,5 +547,32 @@ mod tests {
             v.mul(Uint256::from(10u128)),
             DecimalScaled((Uint256::MAX.div(Uint256::from(10u128)), 73))
         );
+    }
+
+    #[test]
+    fn decompose() {
+        // 0.5
+        let v = DecimalScaled((Uint256::from(5u128), 1));
+        let (i, f) = v.decompose();
+        assert_eq!(i, Uint256::zero()); // floor(0.5) = 0
+        assert_eq!(f, DecimalScaled((Uint256::from(5u128), 1))); // 0.5
+
+        // 1.23456789
+        let v = DecimalScaled((Uint256::from(123456789u128), 8));
+        let (i, f) = v.decompose();
+        assert_eq!(i, Uint256::from(1u128)); // floor = 1
+        assert_eq!(f, DecimalScaled((Uint256::from(23456789u128), 8))); // 0.23456789
+
+        // 12.0 exactly
+        let v = DecimalScaled((Uint256::from(12u128), 0));
+        let (i, f) = v.decompose();
+        assert_eq!(i, Uint256::from(12u128)); // floor = 12
+        assert_eq!(f, DecimalScaled::zero()); // no fractional part
+
+        // 1234.567
+        let v = DecimalScaled((Uint256::from(1234567u128), 3));
+        let (i, f) = v.decompose();
+        assert_eq!(i, Uint256::from(1234u128)); // floor = 1234
+        assert_eq!(f, DecimalScaled((Uint256::from(567u128), 3))); // 0.567
     }
 }

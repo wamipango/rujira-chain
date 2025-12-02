@@ -1,24 +1,22 @@
-use std::cmp::min;
-
-#[cfg(not(feature = "library"))]
-use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response,
-    StdResult,
-};
-use cw2::set_contract_version;
-use cw_utils::must_pay;
-use rujira_rs::ghost::vault::{
-    BorrowerResponse, BorrowersResponse, ExecuteMsg, InstantiateMsg, MarketMsg, PoolResponse,
-    QueryMsg, StatusResponse, SudoMsg,
-};
-use rujira_rs::TokenFactory;
-
 use crate::borrowers::Borrower;
 use crate::config::Config;
 use crate::error::ContractError;
 use crate::events::{event_borrow, event_deposit, event_repay, event_withdraw};
 use crate::state::State;
+#[cfg(not(feature = "library"))]
+use cosmwasm_std::entry_point;
+use cosmwasm_std::{
+    coins, to_json_binary, Addr, BankMsg, Binary, Decimal, Deps, DepsMut, Empty, Env, MessageInfo,
+    Response, StdResult, Uint128,
+};
+use cw2::set_contract_version;
+use cw_utils::must_pay;
+use rujira_rs::ghost::vault::{
+    BorrowerResponse, BorrowersResponse, ConfigResponse, DelegateResponse, ExecuteMsg,
+    InstantiateMsg, MarketMsg, PoolResponse, QueryMsg, StatusResponse, SudoMsg,
+};
+use rujira_rs::TokenFactory;
+use std::cmp::min;
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -31,7 +29,7 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::new(msg.clone())?;
+    let config = Config::new(deps.api, msg.clone())?;
     config.validate()?;
     config.save(deps.storage)?;
     State::init(deps.storage, &env)?;
@@ -50,14 +48,14 @@ pub fn execute(
     let config = Config::load(deps.storage)?;
     let mut state = State::load(deps.storage)?;
     let rcpt = TokenFactory::new(&env, format!("ghost-vault/{}", config.denom).as_str());
-    state.distribute_interest(&env, &config)?;
-    match msg {
+    let fees = state.distribute_interest(&env, &config)?;
+    let mut response = match msg {
         ExecuteMsg::Deposit { callback } => {
             let amount = must_pay(&info, config.denom.as_str())?;
             let mint = state.deposit(amount)?;
             state.save(deps.storage)?;
 
-            Ok(match callback {
+            match callback {
                 None => Response::default()
                     .add_message(rcpt.mint_msg(mint, info.sender.clone()))
                     .add_event(event_deposit(info.sender, amount, mint)),
@@ -69,14 +67,14 @@ pub fn execute(
                         coins(mint.u128(), rcpt.denom()),
                     )?)
                     .add_event(event_deposit(info.sender, amount, mint)),
-            })
+            }
         }
         ExecuteMsg::Withdraw { callback } => {
             let amount = must_pay(&info, rcpt.denom().as_str())?;
             let withdrawn = state.withdraw(amount)?;
             state.save(deps.storage)?;
 
-            Ok(match callback {
+            match callback {
                 None => Response::default()
                     .add_message(rcpt.burn_msg(amount))
                     .add_message(BankMsg::Send {
@@ -92,22 +90,26 @@ pub fn execute(
                         coins(withdrawn.u128(), &config.denom),
                     )?)
                     .add_event(event_withdraw(info.sender, withdrawn, amount)),
-            })
+            }
         }
         ExecuteMsg::Market(market_msg) => {
-            Borrower::load(deps.storage, info.sender.clone())
-                .map_err(|_| ContractError::Unauthorized {})?;
-            execute_market(deps, env, info, &mut state, market_msg)
+            let mut borrower = Borrower::load(deps.storage, info.sender.clone())?;
+            execute_market(deps, info, &mut state, market_msg, &mut borrower)?
         }
+    };
+    if fees.gt(&Uint128::zero()) {
+        response = response.add_message(rcpt.mint_msg(fees, config.fee_address.clone()));
     }
+
+    Ok(response)
 }
 
 pub fn execute_market(
     deps: DepsMut,
-    _env: Env,
     info: MessageInfo,
     state: &mut State,
     msg: MarketMsg,
+    borrower: &mut Borrower,
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     let response = match msg {
@@ -116,48 +118,80 @@ pub fn execute_market(
             callback,
             delegate,
         } => {
-            let owner = delegate
-                .map(|x| deps.api.addr_validate(&x))
-                .transpose()?
-                .unwrap_or_else(|| info.sender.clone());
-            let mut borrower = Borrower::load(deps.storage, owner.clone())?;
             let shares = state.borrow(amount)?;
-            borrower.borrow(shares)?;
-            borrower.save(deps.storage)?;
+            match delegate.clone() {
+                Some(d) => {
+                    let mut delegate =
+                        borrower.delegate(deps.storage, deps.api.addr_validate(&d)?)?;
+                    delegate.borrow(&state.debt_pool, shares)?;
+                    delegate.save(deps.storage)?;
+                }
+                None => {
+                    borrower.borrow(&state.debt_pool, shares)?;
+                    borrower.save(deps.storage)?;
+                }
+            };
+
             match callback {
                 None => Response::default()
                     .add_message(BankMsg::Send {
-                        to_address: owner.to_string(),
+                        to_address: info.sender.to_string(),
                         amount: coins(amount.u128(), config.denom),
                     })
-                    .add_event(event_borrow(owner, amount, shares)),
+                    .add_event(event_borrow(
+                        borrower.addr.clone(),
+                        delegate,
+                        amount,
+                        shares,
+                    )),
                 Some(cb) => Response::default()
                     .add_message(cb.to_message(
-                        &owner,
+                        &info.sender,
                         Empty {},
                         coins(amount.u128(), &config.denom),
                     )?)
-                    .add_event(event_borrow(owner, amount, shares)),
+                    .add_event(event_borrow(
+                        borrower.addr.clone(),
+                        delegate,
+                        amount,
+                        shares,
+                    )),
             }
         }
         MarketMsg::Repay { delegate } => {
-            let owner = delegate
-                .map(|x| deps.api.addr_validate(&x))
-                .transpose()?
-                .unwrap_or_else(|| info.sender.clone());
-
-            let mut borrower = Borrower::load(deps.storage, owner.clone())?;
-
             let amount = must_pay(&info, config.denom.as_str())?;
             let shares = state.repay(amount)?;
-            let overpayment = borrower.repay(shares);
-            borrower.save(deps.storage)?;
+            let delegate_address = delegate
+                .clone()
+                .map(|d| deps.api.addr_validate(&d))
+                .transpose()?;
 
-            let mut response = Response::default().add_event(event_repay(owner, amount, shares));
-            if !overpayment.is_zero() {
+            let overpayment_shares = match delegate_address.clone() {
+                Some(d) => {
+                    let mut delegate = borrower.delegate(deps.storage, d)?;
+                    let res = delegate.repay(shares);
+                    delegate.save(deps.storage)?;
+                    res
+                }
+                None => {
+                    let res = borrower.repay(shares);
+                    borrower.save(deps.storage)?;
+                    res
+                }
+            };
+
+            let overpayment_value = state.debt_pool.ownership(overpayment_shares);
+            let overpayment_receipient = delegate_address.unwrap_or(borrower.addr.clone());
+            let mut response = Response::default().add_event(event_repay(
+                borrower.addr.clone(),
+                delegate,
+                amount,
+                shares,
+            ));
+            if !overpayment_value.is_zero() {
                 response = response.add_message(BankMsg::Send {
-                    to_address: borrower.addr.to_string(),
-                    amount: coins(overpayment.u128(), config.denom),
+                    to_address: overpayment_receipient.to_string(),
+                    amount: coins(overpayment_value.u128(), config.denom),
                 });
             }
             response
@@ -177,6 +211,7 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             Ok(Response::default())
         }
         SudoMsg::SetInterest(interest) => {
+            interest.validate()?;
             config.interest = interest;
             config.save(deps.storage)?;
             Ok(Response::default())
@@ -191,6 +226,11 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     state.distribute_interest(&env, &config)?;
 
     match msg {
+        QueryMsg::Config {} => Ok(to_json_binary(&ConfigResponse {
+            denom: config.denom,
+            interest: config.interest,
+        })?),
+
         QueryMsg::Status {} => Ok(to_json_binary(&StatusResponse {
             debt_rate: state.debt_rate(&config.interest)?,
             lend_rate: state.lend_rate(&config.interest)?,
@@ -206,13 +246,13 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                 shares: state.deposit_pool.shares(),
                 ratio: state.deposit_pool.ratio(),
             },
-            interest: config.interest,
         })?),
         QueryMsg::Borrower { addr } => {
-            let borrower = Borrower::load(deps.storage, deps.api.addr_validate(addr.as_str())?)?;
+            let borrower = Borrower::load(deps.storage, deps.api.addr_validate(&addr)?)?;
             let current = state.debt_pool.ownership(borrower.shares);
             Ok(to_json_binary(&BorrowerResponse {
                 addr: borrower.addr.to_string(),
+                denom: config.denom,
                 limit: borrower.limit,
                 current,
                 shares: borrower.shares,
@@ -221,6 +261,28 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                     borrower.limit.checked_sub(current).unwrap_or_default(),
                     state.deposit_pool.size() - state.debt_pool.size(),
                 ),
+            })?)
+        }
+        QueryMsg::Delegate { borrower, addr } => {
+            let borrower = Borrower::load(deps.storage, deps.api.addr_validate(&borrower)?)?;
+            let delegate = borrower.delegate(deps.storage, deps.api.addr_validate(&addr)?)?;
+            let current = state.debt_pool.ownership(borrower.shares);
+
+            Ok(to_json_binary(&DelegateResponse {
+                borrower: BorrowerResponse {
+                    addr: borrower.addr.to_string(),
+                    denom: config.denom,
+                    limit: borrower.limit,
+                    current,
+                    shares: borrower.shares,
+                    available: min(
+                        borrower.limit.checked_sub(current).unwrap_or_default(),
+                        state.deposit_pool.size() - state.debt_pool.size(),
+                    ),
+                },
+                addr,
+                current: state.debt_pool.ownership(delegate.shares),
+                shares: delegate.shares,
             })?)
         }
         QueryMsg::Borrowers { limit, start_after } => {
@@ -237,6 +299,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 
                     BorrowerResponse {
                         addr: borrower.addr.to_string(),
+                        denom: config.denom.clone(),
                         limit: borrower.limit,
                         current,
                         shares: borrower.shares,
@@ -255,8 +318,13 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
+pub fn migrate(
+    deps: DepsMut,
+    _env: Env,
+    (fee, fee_address): (Decimal, Addr),
+) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    Config::migrate(deps, fee, fee_address)?;
     Ok(Response::default())
 }
 
@@ -310,6 +378,8 @@ mod tests {
                         step1: Decimal::from_ratio(1u128, 10u128),
                         step2: Decimal::from_ratio(3u128, 1u128),
                     },
+                    fee: Decimal::zero(),
+                    fee_address: owner.to_string(),
                 },
                 &[],
                 "template",

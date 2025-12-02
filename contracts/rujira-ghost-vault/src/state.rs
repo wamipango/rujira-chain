@@ -1,8 +1,8 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Decimal, Env, StdResult, Storage, Timestamp, Uint128};
+use cosmwasm_std::{Decimal, Decimal256, Env, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Item;
-use rujira_rs::{ghost::vault::Interest, SharePool};
-use std::ops::{Mul, Sub};
+use rujira_rs::{ghost::vault::Interest, DecimalScaled, SharePool, SharePoolError};
+use std::ops::{Add, Mul, Sub};
 
 use crate::{config::Config, ContractError};
 
@@ -19,6 +19,10 @@ pub struct State {
     // the effective rate earned by depositors will vary
     pub debt_pool: SharePool,
     pub deposit_pool: SharePool,
+    #[serde(default)]
+    pub pending_interest: DecimalScaled,
+    #[serde(default)]
+    pub pending_fees: DecimalScaled,
 }
 
 impl State {
@@ -29,6 +33,8 @@ impl State {
                 last_updated: env.block.time,
                 debt_pool: SharePool::default(),
                 deposit_pool: SharePool::default(),
+                pending_interest: DecimalScaled::zero(),
+                pending_fees: DecimalScaled::zero(),
             },
         )?;
 
@@ -57,6 +63,12 @@ impl State {
     }
 
     pub fn repay(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
+        if amount.gt(&self.debt_pool.size()) {
+            return Err(ContractError::ExcessiveRepay {
+                debt: self.debt_pool.size(),
+                repaid: amount,
+            });
+        }
         // Calculate the amount of shares that this repay will burn
         let shares = amount.multiply_ratio(self.debt_pool.shares(), self.debt_pool.size());
         self.debt_pool.leave(shares)?;
@@ -89,27 +101,176 @@ impl State {
         &mut self,
         interest: &Interest,
         to: Timestamp,
-    ) -> Result<Uint128, ContractError> {
-        let rate = self.debt_rate(interest)?;
+        fee_rate: Decimal,
+    ) -> Result<(Uint128, Uint128), ContractError> {
+        let rate = Decimal256::from(self.debt_rate(interest)?);
         let seconds = to.seconds().sub(self.last_updated.seconds());
-        let part = Decimal::from_ratio(seconds, 31_536_000u128);
-        Ok(Decimal::from_ratio(self.debt_pool.size(), 1u128)
+        let part = Decimal256::from_ratio(seconds, 31_536_000u128);
+
+        let interest_decimal = Decimal256::from_ratio(self.debt_pool.size(), 1u128)
             .mul(rate)
-            .mul(part)
-            .to_uint_floor())
+            .mul(part);
+
+        // add pending_interest to interest
+        let interest_scaled = DecimalScaled::from(interest_decimal);
+
+        // collect the fee for the protocol
+        let fee_rate_scaled = DecimalScaled::from(Decimal256::from(fee_rate));
+        // add the fee to the pending fees
+        let fee_accrued = interest_scaled.mul(fee_rate_scaled);
+
+        // net interest for the users
+        let net_interest = interest_scaled.sub(fee_accrued).add(self.pending_interest);
+
+        // add the fee to the pending fees
+        let fee_total = fee_accrued.add(self.pending_fees);
+
+        // decompose fee_total and net_interest
+        let (fee, fee_frac) = fee_total.decompose();
+        let (interest, interest_frac) = net_interest.decompose();
+
+        // persist pendings
+        self.pending_fees = fee_frac;
+        self.pending_interest = interest_frac;
+
+        Ok((Uint128::try_from(interest)?, Uint128::try_from(fee)?))
     }
 
-    pub fn distribute_interest(&mut self, env: &Env, config: &Config) -> Result<(), ContractError> {
+    pub fn distribute_interest(
+        &mut self,
+        env: &Env,
+        config: &Config,
+    ) -> Result<Uint128, ContractError> {
         // Calculate interest charged on total debt since last update
-        let interest = self.calculate_interest(&config.interest, env.block.time)?;
+        let (interest, mut fee) =
+            self.calculate_interest(&config.interest, env.block.time, config.fee)?;
+        let mut shares = Uint128::zero();
 
-        // Allocate it to the deposit pool
+        // deposit the protocol fee to the deposit pool to issue shares
+        if fee > Uint128::zero() {
+            match self.deposit_pool.join(fee) {
+                Ok(amount) => {
+                    shares = amount;
+                }
+                // if no shares were issued, add the fee to the pending fees for later distribution
+                // set the fee to 0 so that the debt is not charged with the fee yet
+                Err(SharePoolError::ZeroAmount {}) => {
+                    self.pending_fees =
+                        self.pending_fees.add(DecimalScaled::from_ratio(fee, 1u128));
+                    fee = Uint128::zero();
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+
+        // Allocate the interest to the deposit pool
         self.deposit_pool.deposit(interest)?;
-        // Charge it to the debt pool, so that outstanding debt tokens are required to
+        // Charge the interest to the debt pool, so that outstanding debt tokens are required to
         // pay this interest on return
-        self.debt_pool.deposit(interest)?;
+        self.debt_pool.deposit(interest.add(fee))?;
         self.last_updated = env.block.time;
 
-        Ok(())
+        Ok(shares)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::{testing::mock_env, Decimal};
+    use rujira_rs::{ghost::vault::Interest, DecimalScaled};
+
+    #[test]
+    fn test_distribute_interest_no_mint_path() {
+        let env = mock_env();
+        let mut storage = cosmwasm_std::testing::MockStorage::new();
+        State::init(&mut storage, &env).unwrap();
+        let mut state = State::load(&storage).unwrap();
+
+        let config = Config {
+            denom: "test".to_string(),
+            interest: Interest {
+                target_utilization: Decimal::from_ratio(8u128, 10u128),
+                base_rate: Decimal::from_ratio(1u128, 1000000u128), // 0.0001% per year
+                step1: Decimal::from_ratio(20u128, 100u128),
+                step2: Decimal::from_ratio(100u128, 100u128),
+            },
+            fee: Decimal::from_ratio(1u128, 10u128), // 10% fee
+            fee_address: cosmwasm_std::Addr::unchecked("fee_addr"),
+        };
+
+        // Deposit 1000, borrow 800
+        state.deposit(Uint128::new(1000)).unwrap();
+        state.borrow(Uint128::new(800)).unwrap();
+
+        // Wait 1 second
+        let mut env = mock_env();
+        env.block.time = state.last_updated.plus_seconds(1);
+
+        // Distribute interest
+        let shares = state.distribute_interest(&env, &config).unwrap();
+
+        // No shares minted (fee_int = 0)
+        assert_eq!(shares, Uint128::zero());
+
+        // Pool sizes unchanged (net_int = 0)
+        assert_eq!(state.deposit_pool.size(), Uint128::new(1000));
+        assert_eq!(state.debt_pool.size(), Uint128::new(800));
+
+        // All interest in pending amounts
+        assert_eq!(
+            state.pending_interest,
+            DecimalScaled::from_ratio(45662328766017u128, 10u128.pow(19))
+        );
+        assert_eq!(
+            state.pending_fees,
+            DecimalScaled::from_ratio(5073592085113u128, 10u128.pow(19))
+        );
+    }
+
+    #[test]
+    fn test_distribute_interest_mint_path() {
+        let env = mock_env();
+        let mut storage = cosmwasm_std::testing::MockStorage::new();
+        State::init(&mut storage, &env).unwrap();
+        let mut state = State::load(&storage).unwrap();
+
+        let config = Config {
+            denom: "test".to_string(),
+            interest: Interest {
+                target_utilization: Decimal::from_ratio(8u128, 10u128),
+                base_rate: Decimal::from_ratio(10u128, 100u128), // 10% base rate
+                step1: Decimal::from_ratio(20u128, 100u128),
+                step2: Decimal::from_ratio(100u128, 100u128),
+            },
+            fee: Decimal::from_ratio(1u128, 10u128), // 10% fee
+            fee_address: cosmwasm_std::Addr::unchecked("fee_addr"),
+        };
+
+        // Deposit 1000, borrow 800
+        state.deposit(Uint128::new(1000)).unwrap();
+        state.borrow(Uint128::new(800)).unwrap();
+
+        // Wait 1 year
+        let mut env = mock_env();
+        env.block.time = state.last_updated.plus_seconds(31_536_000);
+
+        // Distribute interest
+        let shares = state.distribute_interest(&env, &config).unwrap();
+
+        // 24 shares minted for protocol fee
+        assert_eq!(shares, Uint128::new(24));
+
+        // Pool sizes: net_interest(216) + fee(24) = 240 total
+        assert_eq!(state.deposit_pool.size(), Uint128::new(1240));
+        assert_eq!(state.debt_pool.size(), Uint128::new(1040));
+
+        // No pending amounts (exact integer calculations)
+        assert_eq!(state.pending_interest, DecimalScaled::zero());
+        assert_eq!(state.pending_fees, DecimalScaled::zero());
+
+        // Both pools grow by 240
+        assert_eq!(state.deposit_pool.size().u128() - 1000, 240);
+        assert_eq!(state.debt_pool.size().u128() - 800, 240);
     }
 }

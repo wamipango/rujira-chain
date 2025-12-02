@@ -3,18 +3,18 @@ use anyhow::{Error, Result as AnyResult};
 use cosmwasm_std::{
     attr, coins, ensure_eq,
     testing::{MockApi, MockStorage},
-    Addr, AnyMsg, Api, BankMsg, Binary, BlockInfo, CosmosMsg, CustomMsg, CustomQuery,
+    Addr, AnyMsg, Api, BankMsg, Binary, BlockInfo, CosmosMsg, CustomMsg, CustomQuery, Decimal,
     DenomMetadata, DenomUnit, Empty, Event, GrpcQuery, Querier, Storage, Uint128,
 };
 use cw_multi_test::{
     App, AppResponse, BankKeeper, BankSudo, BasicAppBuilder, CosmosRouter, FailingModule,
-    GovFailingModule, IbcFailingModule, Stargate, SudoMsg, WasmKeeper,
+    GovFailingModule, IbcFailingModule, Stargate, SudoMsg, WasmKeeper, WasmSudo,
 };
 use cw_storage_plus::Map;
 use serde::de::DeserializeOwned;
-use std::str::FromStr;
+use std::{collections::BTreeMap, str::FromStr};
 
-use crate::fixtures::{mock_network, mock_pool, mock_quote};
+use crate::fixtures::{mock_network, mock_oracle_price, mock_pool, mock_quote};
 
 pub type RujiraApp = App<
     BankKeeper,
@@ -42,7 +42,21 @@ pub fn mock_rujira_app() -> RujiraApp {
 }
 
 #[derive(Default)]
-pub struct RujiraStargate {}
+pub struct RujiraStargate {
+    prices: BTreeMap<String, Decimal>,
+}
+
+impl RujiraStargate {
+    pub fn with_price(&mut self, symbol: &str, price: Decimal) {
+        self.prices.insert(symbol.to_string(), price);
+    }
+
+    pub fn with_prices(&mut self, prices: Vec<(&str, Decimal)>) {
+        for (symbol, price) in prices {
+            self.with_price(symbol, price);
+        }
+    }
+}
 
 impl Stargate for RujiraStargate {
     fn execute_stargate<ExecC, QueryC>(
@@ -200,7 +214,20 @@ impl Stargate for RujiraStargate {
                     data: None,
                 })
             }
-
+            "/cosmwasm.wasm.v1.MsgSudoContract" => {
+                let _sender = buf.string(1).unwrap();
+                let contract = buf.string(2).unwrap();
+                let msg = buf.bytes(3).unwrap();
+                router.sudo(
+                    api,
+                    storage,
+                    block,
+                    SudoMsg::Wasm(WasmSudo {
+                        contract_addr: api.addr_validate(&contract)?,
+                        message: msg.into(),
+                    }),
+                )
+            }
             _ => {
                 anyhow::bail!("Unexpected any execute: msg={:?} from {}", msg, sender)
             }
@@ -219,6 +246,7 @@ impl Stargate for RujiraStargate {
             "/types.Query/Pool" => mock_pool(request.data),
             "/types.Query/Network" => mock_network(),
             "/types.Query/QuoteSwap" => mock_quote(request.data),
+            "/types.Query/OraclePrice" => mock_oracle_price(request.data, &self.prices),
             _ => {
                 anyhow::bail!("Unexpected grpc query: request={:?}", request)
             }

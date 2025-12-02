@@ -1,4 +1,3 @@
-pub mod contracts;
 pub(crate) mod fixtures;
 mod mock;
 mod swap;

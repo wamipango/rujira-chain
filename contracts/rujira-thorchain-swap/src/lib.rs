@@ -9,3 +9,6 @@ pub use crate::error::ContractError;
 
 #[cfg(test)]
 mod testing;
+
+#[cfg(feature = "mock")]
+pub mod mock;

@@ -2,17 +2,27 @@ use crate::ContractError;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Order, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Bound, Map};
+use rujira_rs::SharePool;
 use std::{
     cmp::min,
     ops::{Add, Sub},
 };
 
 static BORROWERS: Map<Addr, Borrower> = Map::new("borrowers");
+// Delegates are borrowers that consume their parent's limit
+static DELEGATES: Map<(Addr, Addr), Delegate> = Map::new("delegates");
 
 #[cw_serde]
 pub struct Borrower {
     pub addr: Addr,
     pub limit: Uint128,
+    pub shares: Uint128,
+}
+
+#[cw_serde]
+pub struct Delegate {
+    pub borrower: Borrower,
+    pub addr: Addr,
     pub shares: Uint128,
 }
 
@@ -25,24 +35,34 @@ impl Borrower {
         }
     }
 
+    pub fn delegate(&self, storage: &dyn Storage, addr: Addr) -> StdResult<Delegate> {
+        match DELEGATES.load(storage, (self.addr.clone(), addr.clone())) {
+            Ok(x) => Ok(x),
+            Err(StdError::NotFound { .. }) => Ok(Delegate {
+                borrower: self.clone(),
+                addr,
+                shares: Uint128::zero(),
+            }),
+            Err(err) => Err(err),
+        }
+    }
+
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
         BORROWERS.save(storage, self.addr.clone(), self)
     }
 
-    pub fn borrow(&mut self, amount: Uint128) -> Result<(), ContractError> {
-        if self.shares.add(amount).gt(&self.limit) {
+    pub fn borrow(&mut self, pool: &SharePool, shares: Uint128) -> Result<(), ContractError> {
+        if pool.ownership(self.shares.add(shares)).gt(&self.limit) {
             return Err(ContractError::BorrowLimitReached { limit: self.limit });
         }
-        self.shares += amount;
+        self.shares += shares;
 
         Ok(())
     }
 
     pub fn repay(&mut self, amount: Uint128) -> Uint128 {
         let repaid = min(amount, self.shares);
-        // Ignore excessive repay.
         self.shares -= repaid;
-        // return any overpayment
         amount.sub(repaid)
     }
 
@@ -67,5 +87,28 @@ impl Borrower {
             .range(storage, min, None, Order::Ascending)
             .take(limit)
             .map(|x| x.map(|(_, v)| v))
+    }
+}
+
+impl Delegate {
+    pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
+        DELEGATES.save(
+            storage,
+            (self.borrower.addr.clone(), self.addr.clone()),
+            self,
+        )?;
+        self.borrower.save(storage)
+    }
+
+    pub fn borrow(&mut self, pool: &SharePool, shares: Uint128) -> Result<(), ContractError> {
+        self.shares += shares;
+        self.borrower.borrow(pool, shares)
+    }
+
+    pub fn repay(&mut self, amount: Uint128) -> Uint128 {
+        let repaid = min(amount, self.shares);
+        self.shares -= repaid;
+        self.borrower.repay(repaid);
+        amount.sub(repaid)
     }
 }

@@ -246,7 +246,7 @@ mod tests {
             revenue_denom: "uusdc".to_string(),
             revenue_converter: (
                 app.api().addr_make("revenue"),
-                Binary::default(),
+                Binary::new(vec![0]),
                 Uint128::from(100u128),
             ),
             fee: None,

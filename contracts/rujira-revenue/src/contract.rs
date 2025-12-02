@@ -259,7 +259,7 @@ mod tests {
             denom: "uatom".to_string(),
             contract,
             limit: Uint128::MAX,
-            msg: Binary::default(),
+            msg: Binary::new(vec![0]),
         };
 
         let a = action.clone();
@@ -447,7 +447,7 @@ mod tests {
                 denom: denom.to_string(),
                 contract: app.api().addr_make(target).to_string(),
                 limit,
-                msg: Binary::default(),
+                msg: Binary::new(vec![0]),
             },
         )
         .unwrap();

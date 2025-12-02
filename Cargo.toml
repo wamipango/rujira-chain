@@ -32,6 +32,7 @@ rujira-rs-testing      = { path = "./packages/rujira-rs-testing" }
 rujira-thorchain-swap  = { path = "./contracts/rujira-thorchain-swap" }
 schemars               = "0.8.16"
 serde                  = { version = "1.0.197", default-features = false, features = ["derive"] }
+sha2                   = "0.10"
 thiserror              = { version = "1.0.58" }
 
 

@@ -1,4 +1,4 @@
-use cosmwasm_std::{CheckedFromRatioError, StdError, Uint128};
+use cosmwasm_std::{CheckedFromRatioError, ConversionOverflowError, StdError, Uint128};
 use cw_utils::PaymentError;
 use rujira_rs::SharePoolError;
 use thiserror::Error;
@@ -13,6 +13,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     CheckedFromRatio(#[from] CheckedFromRatioError),
+
+    #[error("{0}")]
+    ConversionOverflow(#[from] ConversionOverflowError),
 
     #[error("{0}")]
     SharePool(#[from] SharePoolError),
@@ -32,6 +35,9 @@ pub enum ContractError {
         value: Uint128,
         repaid: Uint128,
     },
+
+    #[error("ExcessiveRepay debt {debt} repaid {repaid}")]
+    ExcessiveRepay { debt: Uint128, repaid: Uint128 },
 
     #[error("Invalid: {0}")]
     Invalid(String),

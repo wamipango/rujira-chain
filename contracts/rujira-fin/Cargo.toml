@@ -20,20 +20,25 @@ crate-type = ["cdylib", "rlib"]
 [features]
 # use library feature to disable all instantiate/execute/query exports
 library = []
+mock    = ["anyhow", "cw-multi-test", "rujira-rs-testing", "rujira-bow"]
 
 [dependencies]
-cosmwasm-schema = { workspace = true }
-cosmwasm-std    = { workspace = true }
-cw-storage-plus = { workspace = true }
-cw-utils        = { workspace = true }
-cw2             = { workspace = true }
-itertools       = { workspace = true }
-rujira-bow      = { path = "../rujira-bow" }
-rujira-rs       = { workspace = true, features = ["interface-fin", "decimal-scaled", "premium", "oracle", "query", "bid-pool", "exchange"], default-features = false }
-schemars        = { workspace = true }
-serde           = { workspace = true }
-thiserror       = { workspace = true }
+anyhow            = { workspace = true, optional = true }
+cosmwasm-schema   = { workspace = true }
+cosmwasm-std      = { workspace = true }
+cw-multi-test     = { workspace = true, optional = true }
+cw-storage-plus   = { workspace = true }
+cw-utils          = { workspace = true }
+cw2               = { workspace = true }
+itertools         = { workspace = true }
+rujira-bow        = { path = "../rujira-bow", optional = true }
+rujira-rs         = { workspace = true, features = ["interface-fin", "interface-bow", "decimal-scaled", "premium", "oracle", "query", "bid-pool", "exchange"], default-features = false }
+rujira-rs-testing = { workspace = true, optional = true }
+schemars          = { workspace = true }
+serde             = { workspace = true }
+thiserror         = { workspace = true }
 
 [dev-dependencies]
 cw-multi-test     = { workspace = true }
+rujira-bow        = { path = "../rujira-bow" }
 rujira-rs-testing = { workspace = true }

@@ -1147,9 +1147,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "rujira-account"
+version = "0.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "itertools 0.14.0",
+ "rujira-rs",
+ "schemars",
+ "serde",
+ "thiserror 1.0.63",
+]
+
+[[package]]
 name = "rujira-bow"
 version = "1.0.1"
 dependencies = [
+ "anyhow",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",
@@ -1183,6 +1201,7 @@ dependencies = [
 name = "rujira-fin"
 version = "1.0.2"
 dependencies = [
+ "anyhow",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",
@@ -1199,9 +1218,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "rujira-ghost-vault"
-version = "0.1.2"
+name = "rujira-ghost-credit"
+version = "1.0.0"
 dependencies = [
+ "anyhow",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "rujira-account",
+ "rujira-bow",
+ "rujira-fin",
+ "rujira-ghost-vault",
+ "rujira-rs",
+ "rujira-rs-testing",
+ "schemars",
+ "serde",
+ "sha2",
+ "thiserror 1.0.63",
+]
+
+[[package]]
+name = "rujira-ghost-vault"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",
@@ -1241,24 +1284,6 @@ dependencies = [
  "cw-storage-plus",
  "cw-utils",
  "cw2",
- "rujira-rs",
- "rujira-rs-testing",
- "schemars",
- "serde",
- "thiserror 1.0.63",
-]
-
-[[package]]
-name = "rujira-orca"
-version = "0.0.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-multi-test",
- "cw-storage-plus",
- "cw-utils",
- "cw2",
- "itertools 0.14.0",
  "rujira-rs",
  "rujira-rs-testing",
  "schemars",
@@ -1331,11 +1356,7 @@ dependencies = [
  "cw-multi-test",
  "cw-storage-plus",
  "prost",
- "rujira-bow",
- "rujira-fin",
- "rujira-ghost-vault",
  "rujira-rs",
- "rujira-thorchain-swap",
  "schemars",
  "serde",
 ]
@@ -1377,6 +1398,7 @@ dependencies = [
 name = "rujira-thorchain-swap"
 version = "0.0.5"
 dependencies = [
+ "anyhow",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",

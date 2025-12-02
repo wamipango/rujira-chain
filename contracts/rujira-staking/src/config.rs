@@ -107,7 +107,7 @@ mod tests {
         Config {
             bond_denom: "".to_string(),
             revenue_denom: "uusdc".to_string(),
-            revenue_converter: (Addr::unchecked(""), Binary::default(), Uint128::one()),
+            revenue_converter: (Addr::unchecked(""), Binary::new(vec![0]), Uint128::one()),
             fee: None,
         }
         .validate()
@@ -116,7 +116,7 @@ mod tests {
         Config {
             bond_denom: "uruji".to_string(),
             revenue_denom: "".to_string(),
-            revenue_converter: (Addr::unchecked(""), Binary::default(), Uint128::one()),
+            revenue_converter: (Addr::unchecked(""), Binary::new(vec![0]), Uint128::one()),
             fee: None,
         }
         .validate()
@@ -125,7 +125,7 @@ mod tests {
         Config {
             bond_denom: "uruji".to_string(),
             revenue_denom: "uusdc".to_string(),
-            revenue_converter: (Addr::unchecked(""), Binary::default(), Uint128::one()),
+            revenue_converter: (Addr::unchecked(""), Binary::new(vec![0]), Uint128::one()),
             fee: None,
         }
         .validate()
@@ -135,7 +135,7 @@ mod tests {
         Config {
             bond_denom: "uruji".to_string(),
             revenue_denom: "uusdc".to_string(),
-            revenue_converter: (Addr::unchecked(""), Binary::default(), Uint128::one()),
+            revenue_converter: (Addr::unchecked(""), Binary::new(vec![0]), Uint128::one()),
             fee: Some(FeeConfig {
                 percentage: Decimal::percent(150),
                 recipient: Addr::unchecked(""),
@@ -147,7 +147,7 @@ mod tests {
         Config {
             bond_denom: "uruji".to_string(),
             revenue_denom: "uusdc".to_string(),
-            revenue_converter: (Addr::unchecked(""), Binary::default(), Uint128::one()),
+            revenue_converter: (Addr::unchecked(""), Binary::new(vec![0]), Uint128::one()),
             fee: Some(FeeConfig {
                 percentage: Decimal::percent(10),
                 recipient: Addr::unchecked(""),

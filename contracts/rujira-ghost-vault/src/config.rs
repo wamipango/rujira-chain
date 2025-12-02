@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{StdResult, Storage};
+use cosmwasm_std::{Addr, Api, Decimal, DepsMut, StdResult, Storage};
 use cw_storage_plus::Item;
 use rujira_rs::ghost::vault::{InstantiateMsg, Interest};
 
@@ -11,13 +11,17 @@ static CONFIG: Item<Config> = Item::new("config");
 pub struct Config {
     pub denom: String,
     pub interest: Interest,
+    pub fee: Decimal,
+    pub fee_address: Addr,
 }
 
 impl Config {
-    pub fn new(value: InstantiateMsg) -> StdResult<Self> {
+    pub fn new(api: &dyn Api, value: InstantiateMsg) -> StdResult<Self> {
         Ok(Self {
             denom: value.denom,
             interest: value.interest,
+            fee: value.fee,
+            fee_address: api.addr_validate(value.fee_address.as_str())?,
         })
     }
 }
@@ -28,11 +32,31 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<(), ContractError> {
+        if self.fee >= Decimal::one() {
+            return Err(ContractError::Invalid("config.fee".to_string()));
+        }
+
         Ok(self.interest.validate()?)
     }
 
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
         CONFIG.save(storage, self)
+    }
+
+    pub fn migrate(deps: DepsMut, fee: Decimal, fee_address: Addr) -> StdResult<()> {
+        #[cw_serde]
+        pub struct Legacy {
+            pub denom: String,
+            pub interest: Interest,
+        }
+        let legacy: Legacy = Item::new("config").load(deps.storage)?;
+        Self {
+            denom: legacy.denom,
+            interest: legacy.interest,
+            fee,
+            fee_address,
+        }
+        .save(deps.storage)
     }
 }
 
@@ -52,6 +76,8 @@ mod tests {
                 step1: Decimal::from_ratio(8u128, 10u128),
                 step2: Decimal::from_ratio(3u128, 1u128),
             },
+            fee: Decimal::zero(),
+            fee_address: Addr::unchecked("addr0000000000000000000000000000000000000000"),
         }
         .validate()
         .unwrap();

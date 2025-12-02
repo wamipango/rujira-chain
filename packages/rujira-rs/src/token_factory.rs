@@ -84,6 +84,7 @@ impl TokenFactory {
 ///
 /// It follows the general structure of the x/bank Metadata, however `denom` is omitted, and injected with the correct string
 #[cw_serde]
+#[derive(Default)]
 pub struct TokenMetadata {
     pub description: String,
 

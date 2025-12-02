@@ -7,6 +7,7 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal, QuerierWrapper, StdError};
 use std::{
     num::{ParseIntError, TryFromIntError},
+    ops::Sub,
     str::FromStr,
 };
 use thiserror::Error;
@@ -21,11 +22,22 @@ impl TryFrom<QueryOraclePriceResponse> for OraclePrice {
     type Error = TryFromOraclePriceError;
     fn try_from(v: QueryOraclePriceResponse) -> Result<Self, Self::Error> {
         match v.price {
-            Some(price_data) => Ok(Self {
-                symbol: price_data.symbol,
-                price: Decimal::from_str(&price_data.price)?,
-            }),
-            None => Err(StdError::not_found("Oracle price not found").into()),
+            Some(price_data) => {
+                // Trim fractional digits > 18
+                let len = price_data.price.len();
+                let fractional_len = {
+                    let mut parts_iter = price_data.price.split('.');
+                    parts_iter.next().unwrap(); // split always returns at least one element
+                    parts_iter.next().unwrap_or_default().len()
+                };
+                let price_str = &price_data.price
+                    [..len.sub(fractional_len.checked_sub(18).unwrap_or_default())];
+                Ok(Self {
+                    symbol: price_data.symbol,
+                    price: Decimal::from_str(price_str)?,
+                })
+            }
+            None => Err(TryFromOraclePriceError::NotFound {}),
         }
     }
 }
@@ -40,6 +52,8 @@ pub enum TryFromOraclePriceError {
     ParseInt(#[from] ParseIntError),
     #[error("{0}")]
     Layer1Asset(#[from] Layer1AssetError),
+    #[error("Oracle price not found")]
+    NotFound {},
 }
 
 impl OraclePrice {
@@ -59,4 +73,58 @@ pub enum OraclePriceError {
     TryFrom(#[from] TryFromOraclePriceError),
     #[error("{0}")]
     Query(#[from] QueryError),
+}
+#[cfg(test)]
+mod tests {
+    use crate::proto::types;
+
+    use super::*;
+
+    #[test]
+    fn price_parsing() {
+        // Ensure that > 18 decimals doesn't break parsing
+        assert_eq!(
+            OraclePrice::try_from(QueryOraclePriceResponse {
+                price: Some(types::OraclePrice {
+                    symbol: "USDT".to_string(),
+                    price: "0.99985000000000000004".to_string()
+                })
+            })
+            .unwrap(),
+            OraclePrice {
+                symbol: "USDT".to_string(),
+                price: Decimal::from_str("0.99985").unwrap()
+            }
+        );
+
+        // Ensure that > 18 decimals doesn't break parsing
+        assert_eq!(
+            OraclePrice::try_from(QueryOraclePriceResponse {
+                price: Some(types::OraclePrice {
+                    symbol: "USDT".to_string(),
+                    price: "100234".to_string()
+                })
+            })
+            .unwrap(),
+            OraclePrice {
+                symbol: "USDT".to_string(),
+                price: Decimal::from_str("100234").unwrap()
+            }
+        );
+
+        // Ensure that > 18 decimals doesn't break parsing
+        assert_eq!(
+            OraclePrice::try_from(QueryOraclePriceResponse {
+                price: Some(types::OraclePrice {
+                    symbol: "USDT".to_string(),
+                    price: "123.2453".to_string()
+                })
+            })
+            .unwrap(),
+            OraclePrice {
+                symbol: "USDT".to_string(),
+                price: Decimal::from_str("123.2453").unwrap()
+            }
+        );
+    }
 }

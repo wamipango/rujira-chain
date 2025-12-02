@@ -29,7 +29,7 @@ fn execute(_deps: DepsMut, _env: Env, info: MessageInfo, msg: MsgSwap) -> StdRes
 }
 
 fn query(_deps: Deps, _env: Env, _msg: ()) -> StdResult<Binary> {
-    Ok(Binary::default())
+    Ok(Binary::new(vec![0]))
 }
 
 pub fn mock_swap_contract() -> Box<ContractWrapper<MsgSwap, (), (), StdError, StdError, StdError>> {
