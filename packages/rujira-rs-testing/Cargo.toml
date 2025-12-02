@@ -14,12 +14,12 @@ cosmwasm-std    = { workspace = true }
 cw-multi-test   = { workspace = true }
 cw-storage-plus = { workspace = true }
 prost           = { workspace = true }
-rujira-rs       = { workspace = true }
+rujira-rs       = { workspace = true, features = ["testing-helpers"], default-features = false }
 schemars        = { workspace = true }
 serde           = { workspace = true }
 
 # Contract dependencies (for testing setup functions)
-rujira-bow = { workspace = true }
-rujira-fin = { workspace = true }
-rujira-ghost-vault = { workspace = true }
+rujira-bow            = { workspace = true }
+rujira-fin            = { workspace = true }
+rujira-ghost-vault    = { workspace = true }
 rujira-thorchain-swap = { workspace = true }

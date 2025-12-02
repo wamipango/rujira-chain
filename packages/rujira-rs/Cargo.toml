@@ -21,5 +21,55 @@ schemars               = { workspace = true }
 serde                  = { workspace = true }
 thiserror              = { workspace = true }
 
+[features]
+# Testing helpers bundle - for rujira-rs-testing convenience only
+# DO NOT use this in contracts. Use explicit features instead.
+testing-helpers = [
+  "asset",
+  "share-pool",
+  "token-factory",
+  "callback",
+  "decimal-scaled",
+  "premium",
+  "oracle",
+  "query",
+  "proto",
+  "reply",
+  "schema",
+  "bid-pool",
+  "exchange",
+  "coin",
+  "coins",
+]
+
+asset          = []
+bid-pool       = []
+callback       = []
+coin           = ["asset"]
+coins          = []
+decimal-scaled = []
+exchange       = ["bid-pool"]
+oracle         = ["query"]
+premium        = []
+proto          = []
+query          = ["asset", "proto"]
+reply          = []
+schema         = []
+share-pool     = []
+token-factory  = []
+
+interface-bow            = ["callback", "token-factory"]
+interface-demo           = ["asset", "query"]
+interface-fin            = ["asset", "callback"]
+interface-ghost          = ["callback"]
+interface-merge          = []
+interface-mint           = ["token-factory"]
+interface-orca           = ["callback", "interface-bow"]
+interface-pilot          = ["callback"]
+interface-revenue        = []
+interface-staking        = ["token-factory"]
+interface-template       = []
+interface-thorchain-swap = ["asset", "callback", "query", "interface-bow"]
+
 [dev-dependencies]
 proptest = { workspace = true }
