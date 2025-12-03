@@ -32,10 +32,16 @@ impl Fin {
         app.execute_contract(
             sender.clone(),
             self.0.clone(),
-            &ExecuteMsg::Swap(SwapRequest {
-                min_return,
-                to: None,
-                callback: None,
+            &ExecuteMsg::Swap(match min_return {
+                Some(min_return) => SwapRequest::Min {
+                    to: None,
+                    callback: None,
+                    min_return,
+                },
+                None => SwapRequest::Yolo {
+                    to: None,
+                    callback: None,
+                },
             }),
             &coins(offer_amount, offer_denom),
         )
@@ -126,7 +132,7 @@ impl Fin {
         app: &mut RujiraApp,
         owner: &Addr,
         fees: &Addr,
-        market_maker: &Addr,
+        market_makers: &[Addr],
         denoms: Denoms,
         oracles: Option<[Layer1Asset; 2]>,
     ) -> Self {
@@ -144,7 +150,7 @@ impl Fin {
                 &InstantiateMsg {
                     denoms,
                     oracles,
-                    market_maker: Some(market_maker.to_string()),
+                    market_makers: market_makers.iter().map(|x| x.to_string()).collect(),
                     tick: Tick::new(8),
                     fee_taker: Decimal::from_ratio(15u128, 1000u128), // 1.5%
                     fee_maker: Decimal::from_ratio(30u128, 1000u128), // 3.0%
@@ -174,9 +180,9 @@ mod tests {
 
         let fin = Fin::create(
             &mut app,
-            &owner,
+            &owner.clone(),
             &fees,
-            &owner,
+            &[owner],
             Denoms::new("btc", "usdc"),
             None,
         );

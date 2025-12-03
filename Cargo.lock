@@ -1165,7 +1165,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-bow"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -1199,7 +1199,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-fin"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -1210,8 +1210,10 @@ dependencies = [
  "cw2",
  "itertools 0.14.0",
  "rujira-bow",
+ "rujira-ghost-vault",
  "rujira-rs",
  "rujira-rs-testing",
+ "rujira-thorchain-swap",
  "schemars",
  "serde",
  "thiserror 1.0.63",

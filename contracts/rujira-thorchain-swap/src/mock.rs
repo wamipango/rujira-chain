@@ -158,7 +158,7 @@ mod tests {
         let mut app = mock_rujira_app();
         let owner = app.api().addr_make("owner");
 
-        let contract = setup_thorchain_swap(&mut app, &owner);
+        let contract = ThorchainSwap::create(&mut app, &owner);
 
         assert!(!contract.addr().as_str().is_empty());
     }

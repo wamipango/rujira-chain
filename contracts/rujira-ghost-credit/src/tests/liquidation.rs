@@ -38,7 +38,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr) -> Ctx {
         app,
         owner,
         owner,
-        bow_btc_usdc.addr(),
+        &[bow_btc_usdc.addr().clone()],
         Denoms::new(BTC, USDC),
         None,
     );
@@ -46,7 +46,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr) -> Ctx {
         app,
         owner,
         owner,
-        bow_btc_usdt.addr(),
+        &[bow_btc_usdt.addr().clone()],
         Denoms::new(BTC, USDT),
         None,
     );
@@ -54,7 +54,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr) -> Ctx {
         app,
         owner,
         owner,
-        bow_eth_usdc.addr(),
+        &[bow_eth_usdc.addr().clone()],
         Denoms::new(ETH, USDC),
         None,
     );
@@ -62,7 +62,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr) -> Ctx {
         app,
         owner,
         owner,
-        bow_eth_usdt.addr(),
+        &[bow_eth_usdt.addr().clone()],
         Denoms::new(ETH, USDT),
         None,
     );
@@ -231,8 +231,7 @@ fn liquidation_preference_order() {
             &mut app,
             &account,
             ctx.fin_btc_usdc.addr(),
-            fin::ExecuteMsg::Swap(fin::SwapRequest {
-                min_return: None,
+            fin::ExecuteMsg::Swap(fin::SwapRequest::Yolo {
                 to: None,
                 callback: None,
             }),
@@ -252,8 +251,7 @@ fn liquidation_preference_order() {
             &mut app,
             &account,
             ctx.fin_eth_usdc.addr(),
-            fin::ExecuteMsg::Swap(fin::SwapRequest {
-                min_return: None,
+            fin::ExecuteMsg::Swap(fin::SwapRequest::Yolo {
                 to: None,
                 callback: None,
             }),
@@ -308,8 +306,7 @@ fn liquidation_preference_order() {
             &mut app,
             &account,
             ctx.fin_eth_usdc.addr(),
-            fin::ExecuteMsg::Swap(fin::SwapRequest {
-                min_return: None,
+            fin::ExecuteMsg::Swap(fin::SwapRequest::Yolo {
                 to: None,
                 callback: None,
             }),
@@ -340,8 +337,7 @@ fn liquidation_preference_order() {
             &mut app,
             &account,
             ctx.fin_btc_usdc.addr(),
-            fin::ExecuteMsg::Swap(fin::SwapRequest {
-                min_return: None,
+            fin::ExecuteMsg::Swap(fin::SwapRequest::Yolo {
                 to: None,
                 callback: None,
             }),
@@ -403,8 +399,7 @@ fn incorrect_return_asset() {
             &mut app,
             &account,
             ctx.fin_btc_usdt.addr(),
-            fin::ExecuteMsg::Swap(fin::SwapRequest {
-                min_return: None,
+            fin::ExecuteMsg::Swap(fin::SwapRequest::Yolo {
                 to: None,
                 callback: None,
             }),

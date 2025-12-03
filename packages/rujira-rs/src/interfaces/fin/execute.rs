@@ -13,7 +13,7 @@ pub struct InstantiateMsg {
 
     /// The address of the market maker contract. Must implement [crate::market_maker::MarketMakerQuery],
     /// and return funds with [CallbackMsg::MarketMaker]
-    pub market_maker: Option<String>,
+    pub market_makers: Vec<String>,
 
     /// Ticked truncates Decimal to significant figures.
     /// This accommodates prices decreasing and adding zeroes,
@@ -57,11 +57,55 @@ pub enum ExecuteMsg {
 
     /// Callback action to support an arb prior to a swap execution
     DoSwap((Addr, SwapRequest)),
+    /// Callback action to support an arb prior to a order execution
+    DoOrder((Addr, (Vec<OrderTarget>, Option<CallbackData>))),
 }
 
 #[cw_serde]
-pub struct SwapRequest {
-    pub min_return: Option<Uint128>,
-    pub to: Option<String>,
-    pub callback: Option<CallbackData>,
+#[serde(untagged)]
+pub enum SwapRequest {
+    /// YOLO swap for whatever you can get
+    Yolo {
+        to: Option<String>,
+        callback: Option<CallbackData>,
+    },
+    /// Return at least `min_return` or fail
+    Min {
+        min_return: Uint128,
+        to: Option<String>,
+        callback: Option<CallbackData>,
+    },
+    /// Return exactly `exact_return` or fail
+    Exact {
+        exact_return: Uint128,
+        to: Option<String>,
+        callback: Option<CallbackData>,
+    },
+    /// Swap as much of the input as possible at or better than `price`, returning any unused offer
+    Limit {
+        /// The Limit price.
+        /// N.B. this is quoted in the `ask` token. I.e a buy will be a "normal" price, a sell will be 1/"normal" price;
+        price: Decimal,
+        to: Option<String>,
+        callback: Option<CallbackData>,
+    },
+}
+
+impl SwapRequest {
+    pub fn callback(&self) -> Option<CallbackData> {
+        match self {
+            SwapRequest::Min { callback, .. } => callback.clone(),
+            SwapRequest::Exact { callback, .. } => callback.clone(),
+            SwapRequest::Yolo { callback, .. } => callback.clone(),
+            SwapRequest::Limit { callback, .. } => callback.clone(),
+        }
+    }
+    pub fn to(&self) -> Option<String> {
+        match self {
+            SwapRequest::Min { to, .. } => to.clone(),
+            SwapRequest::Exact { to, .. } => to.clone(),
+            SwapRequest::Yolo { to, .. } => to.clone(),
+            SwapRequest::Limit { to, .. } => to.clone(),
+        }
+    }
 }

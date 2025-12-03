@@ -61,7 +61,9 @@ impl Pool {
         // This effectively carries the rounding truncation from the distribute_full,
         // until we get to distribute_partial, where it's fully consumed and we have
         // symmetry via the fair distro algo
-        if bids_value >= self.total {
+
+        // To account for rounding issues, if a bids_value is short by 1 unit, we treat it as fully consumed.
+        if bids_value + Uint256::one() >= self.total {
             // Offer is worth more than pool. Empty the pool an increase the epoch
             return self.distribute_full(rate);
         }
@@ -78,9 +80,9 @@ impl Pool {
     }
 
     fn distribute_full(&mut self, rate: &Decimal256) -> Result<DistributionResult, BidPoolError> {
-        let consumed_offer =
-            Decimal256::from_ratio(self.total.mul(rate.denominator()), rate.numerator())
-                .to_uint_ceil();
+        let consumed_offer = self
+            .total
+            .multiply_ratio(rate.denominator(), rate.numerator());
         let consumed_bids = self.total;
         let offer_per_bid = DecimalScaled::from_ratio(consumed_offer, consumed_bids);
 
@@ -318,6 +320,10 @@ mod tests {
 
     #[test]
     fn test_scaling() {
+        // With the change in `distribute_full` to use `to_unit_floor` instead of `to_unit_ceil`,
+        // and the safe `+ Uint256::one()` in the `distribute` function, this test will now always
+        // distribute the entire amount, leaving no remainder.
+
         let mut pool = Pool::default();
         let mut bids: Vec<Bid> = vec![];
 
@@ -343,7 +349,7 @@ mod tests {
         }
         pool.new_bid(Uint256::from(10000000u128));
         pool.distribute(Uint256::from(9999999u128), &Decimal256::one())
-            .unwrap_err();
+            .unwrap();
     }
 
     #[test]

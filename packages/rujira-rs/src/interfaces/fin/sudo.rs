@@ -12,7 +12,7 @@ pub enum SudoMsg {
         fee_taker: Option<Decimal>,
         fee_maker: Option<Decimal>,
         fee_address: Option<String>,
-        market_maker: Option<String>,
+        market_makers: Option<Vec<String>>,
         oracles: Option<[Layer1Asset; 2]>,
     },
 }

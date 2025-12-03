@@ -1,12 +1,12 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Api, Decimal, Deps, StdResult, Storage};
+use cosmwasm_std::{Addr, Api, Decimal, Deps, DepsMut, StdResult, Storage};
 use cw_storage_plus::Item;
 use rujira_rs::{
     fin::{ConfigResponse, Denoms, InstantiateMsg, Tick},
     Layer1Asset, Oracle,
 };
 
-use crate::ContractError;
+use crate::{market_makers::MarketMakers, ContractError};
 
 pub static CONFIG: Item<Config> = Item::new("config");
 
@@ -14,7 +14,7 @@ pub static CONFIG: Item<Config> = Item::new("config");
 pub struct Config {
     pub denoms: Denoms,
     pub oracles: Option<[Layer1Asset; 2]>,
-    pub market_maker: Option<Addr>,
+    pub market_makers: MarketMakers,
     pub tick: Tick,
     pub fee_maker: Decimal,
     pub fee_taker: Decimal,
@@ -26,10 +26,7 @@ impl Config {
         Ok(Self {
             denoms: value.denoms.clone(),
             oracles: value.oracles,
-            market_maker: value
-                .market_maker
-                .map(|x| api.addr_validate(x.as_str()))
-                .transpose()?,
+            market_makers: MarketMakers::new(api, value.market_makers)?,
             tick: value.tick,
             fee_taker: value.fee_taker,
             fee_maker: value.fee_maker,
@@ -49,6 +46,7 @@ impl Config {
         if self.fee_taker >= Decimal::one() {
             return Err(ContractError::Invalid("fee_take >= 1".into()));
         }
+        self.tick.validate()?;
         Ok(())
     }
 
@@ -59,7 +57,7 @@ impl Config {
     pub fn update(
         &mut self,
         tick: Option<Tick>,
-        market_maker: Option<Addr>,
+        market_makers: Option<MarketMakers>,
         fee_taker: Option<Decimal>,
         fee_maker: Option<Decimal>,
         fee_address: Option<Addr>,
@@ -68,8 +66,8 @@ impl Config {
         if let Some(tick) = tick {
             self.tick = tick;
         }
-        if let Some(market_maker) = market_maker {
-            self.market_maker = Some(market_maker);
+        if let Some(market_makers) = market_makers {
+            self.market_makers = market_makers;
         }
         if let Some(fee_taker) = fee_taker {
             self.fee_taker = fee_taker;
@@ -84,6 +82,32 @@ impl Config {
             self.oracles = Some(oracles);
         }
     }
+
+    pub fn migrate(deps: DepsMut) -> StdResult<()> {
+        #[cw_serde]
+        pub struct Legacy {
+            pub denoms: Denoms,
+            pub oracles: Option<[Layer1Asset; 2]>,
+            pub market_maker: Option<Addr>,
+            pub tick: Tick,
+            pub fee_maker: Decimal,
+            pub fee_taker: Decimal,
+            pub fee_address: Addr,
+        }
+        let legacy: Legacy = Item::new("config").load(deps.storage)?;
+        Self {
+            denoms: legacy.denoms,
+            oracles: legacy.oracles,
+            market_makers: MarketMakers {
+                contracts: legacy.market_maker.into_iter().collect(),
+            },
+            tick: legacy.tick,
+            fee_maker: legacy.fee_maker,
+            fee_taker: legacy.fee_taker,
+            fee_address: legacy.fee_address,
+        }
+        .save(deps.storage)
+    }
 }
 
 impl From<Config> for ConfigResponse {
@@ -91,7 +115,12 @@ impl From<Config> for ConfigResponse {
         Self {
             denoms: value.denoms,
             oracles: value.oracles,
-            market_maker: value.market_maker.map(|x| x.to_string()),
+            market_makers: value
+                .market_makers
+                .contracts
+                .iter()
+                .map(|x| x.to_string())
+                .collect(),
             tick: value.tick,
             fee_maker: value.fee_maker,
             fee_taker: value.fee_taker,

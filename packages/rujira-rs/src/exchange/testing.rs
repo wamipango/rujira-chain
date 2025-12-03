@@ -1,4 +1,4 @@
-use super::{SwapCommit, SwapError, Swappable};
+use super::{Commitment, SwapError, Swappable};
 use cosmwasm_std::{Attribute, Decimal, Fraction, Storage, Uint128};
 use std::cmp::Ordering;
 use std::ops::{Div, Mul};
@@ -26,10 +26,6 @@ impl TestItem {
 }
 
 impl Swappable for TestItem {
-    fn prefix(&self) -> &str {
-        "some-prefix"
-    }
-
     fn rate(&self) -> Decimal {
         self.price
     }
@@ -68,10 +64,8 @@ impl Swappable for TestItem {
         Ok(res)
     }
 
-    fn commit(&self, _storage: &mut dyn Storage) -> Result<SwapCommit, SwapError> {
-        Ok(SwapCommit {
-            market_maker: self.commitment,
-        })
+    fn commit(&self, _storage: &mut dyn Storage) -> Result<Commitment, SwapError> {
+        Ok(Commitment::default())
     }
 }
 

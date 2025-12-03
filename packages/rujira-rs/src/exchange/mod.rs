@@ -1,11 +1,11 @@
 mod arb;
-mod commit;
+mod commitment;
 mod error;
 mod swappable;
 mod swapper;
 
 pub use arb::{Arber, Arbitrage};
-pub use commit::SwapCommit;
+pub use commitment::Commitment;
 pub use error::SwapError;
 pub use swappable::Swappable;
 pub use swapper::{SwapResult, Swapper};

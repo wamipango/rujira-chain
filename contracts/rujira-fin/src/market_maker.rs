@@ -4,7 +4,7 @@ use cosmwasm_std::{
 };
 use rujira_rs::{
     bow,
-    exchange::{SwapCommit, SwapError, Swappable},
+    exchange::{Commitment, SwapError, Swappable},
     fin::{Denoms, Side, Tick},
 };
 use std::{
@@ -16,7 +16,7 @@ pub struct MarketMaker<'a> {
     q: QuerierWrapper<'a>,
     denoms: Denoms,
     side: Side,
-    contract: Option<Addr>,
+    contract: Addr,
     tick: Tick,
     bid: Uint128,
     ask: Uint128,
@@ -29,7 +29,7 @@ impl<'a> MarketMaker<'a> {
         q: QuerierWrapper<'a>,
         denoms: Denoms,
         side: Side,
-        contract: Option<Addr>,
+        contract: Addr,
         tick: Tick,
     ) -> Self {
         Self {
@@ -52,6 +52,7 @@ pub struct MarketMakerOffer {
     pub total: Uint128,
     side: Side,
     rate: Decimal,
+    contract: Addr,
     commitment: (Uint128, Uint128),
 }
 
@@ -66,7 +67,7 @@ impl Swappable for MarketMakerOffer {
             Side::Quote => self.price.to_string(),
         };
         vec![
-            Attribute::new("price", format!("mm:{price}")),
+            Attribute::new("price", format!("{}:{price}", self.contract)),
             Attribute::new("side", self.side.to_string()),
         ]
     }
@@ -99,14 +100,8 @@ impl Swappable for MarketMakerOffer {
         Ok(res)
     }
 
-    fn commit(&self, _storage: &mut dyn Storage) -> Result<SwapCommit, SwapError> {
-        Ok(SwapCommit {
-            market_maker: self.commitment,
-        })
-    }
-
-    fn prefix(&self) -> &str {
-        env!("CARGO_PKG_NAME")
+    fn commit(&self, _storage: &mut dyn Storage) -> Result<Commitment, SwapError> {
+        Ok(Commitment::new(&self.contract, self.commitment))
     }
 }
 
@@ -140,6 +135,7 @@ impl<'a> MarketMaker<'a> {
                 };
 
                 Some(MarketMakerOffer {
+                    contract,
                     price,
                     rate,
                     total: res.size,
@@ -156,7 +152,7 @@ impl Iterator for MarketMaker<'_> {
     type Item = MarketMakerOffer;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.contract.clone().and_then(|x| self.query_next(x))
+        self.query_next(self.contract.clone())
     }
 }
 
@@ -213,11 +209,12 @@ mod test {
             }
             _ => SystemResult::Err(SystemError::Unknown {}),
         });
+        let contract = Addr::unchecked("bow");
         let mut iter = MarketMaker::new(
             QuerierWrapper::new(&q),
             Denoms::new("btc", "usdc"),
             Side::Quote,
-            Some(Addr::unchecked("bow")),
+            contract.clone(),
             Tick::new(3),
         );
 
@@ -227,6 +224,7 @@ mod test {
             items,
             vec![
                 MarketMakerOffer {
+                    contract: contract.clone(),
                     price: Decimal::from_str("1.25").unwrap(),
                     rate: Decimal::from_str("1.25").unwrap(),
                     total: Uint128::from(100u128),
@@ -234,6 +232,7 @@ mod test {
                     commitment: Default::default()
                 },
                 MarketMakerOffer {
+                    contract: contract.clone(),
                     price: Decimal::from_str("1.5").unwrap(),
                     rate: Decimal::from_str("1.5").unwrap(),
                     total: Uint128::from(200u128),
@@ -241,6 +240,7 @@ mod test {
                     commitment: Default::default()
                 },
                 MarketMakerOffer {
+                    contract: contract.clone(),
                     price: Decimal::from_str("1.75").unwrap(),
                     rate: Decimal::from_str("1.75").unwrap(),
                     total: Uint128::from(600u128),
@@ -248,6 +248,7 @@ mod test {
                     commitment: Default::default()
                 },
                 MarketMakerOffer {
+                    contract: contract.clone(),
                     price: Decimal::from_str("2").unwrap(),
                     rate: Decimal::from_str("2").unwrap(),
                     total: Uint128::from(1800u128),
@@ -255,6 +256,7 @@ mod test {
                     commitment: Default::default()
                 },
                 MarketMakerOffer {
+                    contract: contract.clone(),
                     price: Decimal::from_str("2.25").unwrap(),
                     rate: Decimal::from_str("2.25").unwrap(),
                     total: Uint128::from(5400u128),
@@ -266,8 +268,11 @@ mod test {
     }
     #[test]
     fn test_market_market_item_swap() {
+        let contract = Addr::unchecked("bow");
+
         // Quote partial fill
         let mut o = MarketMakerOffer {
+            contract: contract.clone(),
             price: Decimal::from_str("1.25").unwrap(),
             rate: Decimal::from_str("1.25").unwrap(),
             total: Uint128::from(10000u128),
@@ -280,6 +285,7 @@ mod test {
 
         // Quote full fill
         let mut o = MarketMakerOffer {
+            contract: contract.clone(),
             price: Decimal::from_str("1.25").unwrap(),
             rate: Decimal::from_str("1.25").unwrap(),
             total: Uint128::from(10000u128),
@@ -292,6 +298,7 @@ mod test {
 
         // Base partial fill
         let mut o = MarketMakerOffer {
+            contract: contract.clone(),
             price: Decimal::from_str("1.25").unwrap(),
             rate: Decimal::from_str("0.8").unwrap(),
             total: Uint128::from(10000u128),
@@ -304,6 +311,7 @@ mod test {
 
         // Base full fill
         let mut o = MarketMakerOffer {
+            contract: contract.clone(),
             price: Decimal::from_str("1.25").unwrap(),
             rate: Decimal::from_str("0.8").unwrap(),
             total: Uint128::from(10000u128),
@@ -315,6 +323,7 @@ mod test {
         assert_eq!(offer_consumed, Uint128::from(10000u128));
 
         let mut o = MarketMakerOffer {
+            contract: contract.clone(),
             price: Decimal::from_str("0.00000999").unwrap(),
             total: Uint128::from(19980u128),
             side: Side::Base,

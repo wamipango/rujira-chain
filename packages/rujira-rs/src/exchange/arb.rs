@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use cosmwasm_std::{Storage, Uint128};
 
-use super::{SwapCommit, SwapError, Swappable};
+use super::{Commitment, SwapError, Swappable};
 
 /// Utility to capture arbitrage from overlapping orders
 #[derive(Debug)]
@@ -58,13 +58,13 @@ impl<T: Arbitrage + Clone> Arber<T> {
     pub fn commit(
         &mut self,
         storage: &mut dyn Storage,
-    ) -> Result<(SwapCommit, SwapCommit), SwapError> {
-        let mut base = SwapCommit::default();
+    ) -> Result<(Commitment, Commitment), SwapError> {
+        let mut base = Commitment::default();
         for x in self.pending_base.iter_mut() {
             base += x.commit(storage)?;
         }
 
-        let mut quote = SwapCommit::default();
+        let mut quote = Commitment::default();
         for x in self.pending_quote.iter_mut() {
             quote += x.commit(storage)?;
         }
@@ -93,7 +93,6 @@ where
         let float = self.total();
         let a = other.swap(float)?;
         let b = self.swap(a.1)?;
-
         match (b.1.checked_sub(a.0), a.1.checked_sub(b.0)) {
             (Ok(a), Ok(b)) => Ok(Some((a, b))),
             _ => Ok(None),

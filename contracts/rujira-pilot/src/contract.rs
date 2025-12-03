@@ -13,6 +13,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::{must_pay, NativeBalance};
 use rujira_rs::exchange::{SwapError, SwapResult, Swappable, Swapper};
+use rujira_rs::fin::SwapRequest;
 use rujira_rs::pilot::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, PoolResponse,
     PoolsResponse, QueryMsg, SimulationResponse, SudoMsg,
@@ -49,10 +50,25 @@ pub fn execute(
     let mut messages: Vec<CosmosMsg> = vec![];
 
     match msg {
-        ExecuteMsg::Swap { min_return, to, .. } => {
+        ExecuteMsg::Swap {
+            min_return,
+            to,
+            callback,
+        } => {
+            let req = match min_return {
+                Some(min_return) => SwapRequest::Min {
+                    min_return,
+                    to: to.clone(),
+                    callback,
+                },
+                None => SwapRequest::Yolo {
+                    to: to.clone(),
+                    callback,
+                },
+            };
             let to = to.map(|x| deps.api.addr_validate(&x)).transpose()?;
             let funds = must_pay(&info, config.denoms.ask())?;
-            let mut swapper = Swapper::new(funds, min_return, config.fee_taker);
+            let mut swapper = Swapper::new(env!("CARGO_PKG_NAME"), funds, req, config.fee_taker);
             let res = simulate_swap(&mut swapper, deps.as_ref(), &oracle)?;
             swapper.commit(deps.storage)?;
 
@@ -191,7 +207,15 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
             to_json_binary(&PoolsResponse { pools })
         }
         QueryMsg::Simulate(offer) => {
-            let mut swapper = Swapper::new(offer.amount, None, config.fee_taker);
+            let mut swapper = Swapper::new(
+                env!("CARGO_PKG_NAME"),
+                offer.amount,
+                SwapRequest::Yolo {
+                    to: None,
+                    callback: None,
+                },
+                config.fee_taker,
+            );
             let res = simulate_swap(&mut swapper, deps, &oracle)?;
             to_json_binary(&SimulationResponse {
                 returned: res.return_amount,
@@ -419,24 +443,24 @@ mod tests {
             )
             .unwrap();
         res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
-            ("offer", "12"),
+            ("offer", "11"),
             ("bid", "1000000"),
             ("rate", "90000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
-            ("offer", "148"),
+            ("offer", "147"),
             ("bid", "12500000"),
             ("rate", "85000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
-            ("offer", "140"),
-            ("bid", "11200000"),
+            ("offer", "142"),
+            ("bid", "11360000"),
             ("rate", "80000"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "24700000eth-usdc"),
+            ("amount", "24860000eth-usdc"),
         ]));
 
         let res = app
@@ -453,14 +477,14 @@ mod tests {
             .unwrap();
         // Check that any unused funds are returned
         res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
-            ("offer", "498"),
-            ("bid", "39800000"),
+            ("offer", "495"),
+            ("bid", "39640000"),
             ("rate", "80000"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "502btc-btc,39800000eth-usdc"),
+            ("amount", "505btc-btc,39640000eth-usdc"),
         ]));
     }
 }

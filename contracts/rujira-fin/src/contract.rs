@@ -1,24 +1,24 @@
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
-use crate::market_maker::{MarketMaker, MarketMakerOffer};
+use crate::market_makers::MarketMakers;
 use crate::order::Order;
 use crate::order_manager::OrderManager;
 use crate::pool::Pool;
+use crate::swap_iter::SwapIter;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Empty, Env,
-    MessageInfo, Response, StdResult, WasmMsg,
+    coin, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Empty, Env,
+    MessageInfo, Response, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{one_coin, NativeBalance};
-use itertools::{EitherOrBoth, Itertools};
-use rujira_rs::exchange::{Arber, SwapCommit, Swappable, Swapper};
+use rujira_rs::exchange::{Arber, Swappable, Swapper};
 use rujira_rs::fin::{
     BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse,
-    OrdersResponse, Price, QueryMsg, Side, SimulationResponse, SudoMsg,
+    OrdersResponse, Price, QueryMsg, Side, SimulationResponse, SudoMsg, SwapRequest,
 };
-use rujira_rs::{bow, Oracle, Premiumable};
+use rujira_rs::{Oracle, Premiumable};
 
 // version info for migration info
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -52,6 +52,7 @@ pub fn execute(
         .and_then(|x| x.tor_price(deps.querier).ok());
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut fees = NativeBalance::default();
+    let swap_iter = SwapIter::new(deps.querier, &config);
 
     match msg {
         ExecuteMsg::Swap(req) => {
@@ -65,58 +66,26 @@ pub fn execute(
 
             Ok(Response::default().add_message(msg))
         }
-        ExecuteMsg::Order((vec, callback)) => {
-            let mut e = OrderManager::new(
-                config.denoms.clone(),
-                config.fee_maker,
-                config.tick.clone(),
-                info.sender.clone(),
-                env.block.time,
-                NativeBalance(info.funds),
-            );
+        ExecuteMsg::Order(req) => {
+            let msg = WasmMsg::Execute {
+                contract_addr: env.contract.address.to_string(),
+                msg: to_json_binary(&ExecuteMsg::Arb {
+                    then: Some(to_json_binary(&ExecuteMsg::DoOrder((info.sender, req)))?),
+                })?,
+                funds: info.funds,
+            };
 
-            let res = e.execute_orders(deps.storage, vec, &oracle)?;
-            fees += res.fees;
-
-            if !res.withdraw.is_empty() {
-                match callback {
-                    None => messages.push(CosmosMsg::Bank(BankMsg::Send {
-                        to_address: info.sender.to_string(),
-                        amount: res.withdraw.into_vec(),
-                    })),
-                    Some(cb) => messages.push(
-                        cb.to_message(&info.sender, Empty {}, res.withdraw.into_vec())?
-                            .into(),
-                    ),
-                }
-            }
-
-            fees.normalize();
-
-            if !fees.is_empty() {
-                messages.push(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: config.fee_address.to_string(),
-                    amount: fees.into_vec(),
-                }))
-            }
-
-            Ok(Response::default()
-                .add_messages(messages)
-                .add_message(WasmMsg::Execute {
-                    contract_addr: env.contract.address.to_string(),
-                    msg: to_json_binary(&ExecuteMsg::Arb { then: None })?,
-                    funds: vec![],
-                })
-                .add_events(res.events))
+            Ok(Response::default().add_message(msg))
         }
         ExecuteMsg::Arb { then } => {
             let mut arb = Arber::default();
-            let base_iter = swap_iter(deps.as_ref(), &config, &Side::Base, &oracle);
-            let quote_iter = swap_iter(deps.as_ref(), &config, &Side::Quote, &oracle);
+            let base_iter = swap_iter.iter(deps.storage, &Side::Base, &oracle);
+            let quote_iter = swap_iter.iter(deps.storage, &Side::Quote, &oracle);
             let res = arb.run(base_iter, quote_iter)?;
             let commit = arb.commit(deps.storage)?;
-            handle_commit(commit.0, &config, &Side::Base, &mut messages)?;
-            handle_commit(commit.1, &config, &Side::Quote, &mut messages)?;
+            messages.append(&mut commit.0.to_msgs(&config.denoms, &Side::Base)?);
+            messages.append(&mut commit.1.to_msgs(&config.denoms, &Side::Quote)?);
+
             fees += coin(res.profit_quote.u128(), config.denoms.bid(&Side::Quote));
             fees += coin(res.profit_base.u128(), config.denoms.bid(&Side::Base));
             fees.normalize();
@@ -145,16 +114,21 @@ pub fn execute(
                 env.contract.address,
                 ContractError::Unauthorized {}
             );
-            let to = req.to.map(|x| deps.api.addr_validate(&x)).transpose()?;
+            let to = req.to().map(|x| deps.api.addr_validate(&x)).transpose()?;
             let funds = one_coin(&info)?;
             let side = config.denoms.ask_side(&funds)?;
-            let mut swapper = Swapper::new(funds.amount, req.min_return, config.fee_taker);
+            let mut swapper = Swapper::new(
+                env!("CARGO_PKG_NAME"),
+                funds.amount,
+                req.clone(),
+                config.fee_taker,
+            );
             let res = {
-                let mut iter = swap_iter(deps.as_ref(), &config, &side, &oracle);
+                let mut iter = swap_iter.iter(deps.storage, &side, &oracle);
                 swapper.swap(&mut iter)?
             };
             let commit = swapper.commit(deps.storage)?;
-            handle_commit(commit, &config, &side, &mut messages)?;
+            messages.append(&mut commit.to_msgs(&config.denoms, &side)?);
             let mut funds = NativeBalance(vec![
                 coin(res.return_amount.u128(), config.denoms.bid(&side)),
                 coin(res.remaining_offer.u128(), config.denoms.ask(&side)),
@@ -164,7 +138,7 @@ pub fn execute(
 
             funds.normalize();
             if !funds.is_empty() {
-                match req.callback {
+                match req.callback() {
                     None => messages.push(CosmosMsg::Bank(BankMsg::Send {
                         to_address: recipient.to_string(),
                         amount: funds.into_vec(),
@@ -189,31 +163,51 @@ pub fn execute(
                 .add_messages(messages)
                 .add_events(res.events))
         }
-    }
-}
+        ExecuteMsg::DoOrder((recipient, (vec, callback))) => {
+            ensure_eq!(
+                info.sender,
+                env.contract.address,
+                ContractError::Unauthorized {}
+            );
 
-fn handle_commit(
-    c: SwapCommit,
-    config: &Config,
-    side: &Side,
-    messages: &mut Vec<CosmosMsg>,
-) -> StdResult<()> {
-    if let Some(mm) = config.market_maker.clone() {
-        if !c.market_maker.1.is_zero() {
-            let min_return = coin(c.market_maker.1.u128(), config.denoms.bid(side));
+            let mut e = OrderManager::new(
+                &config,
+                recipient.clone(),
+                env.block.time,
+                NativeBalance(info.funds),
+            );
 
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: mm.to_string(),
-                msg: to_json_binary(&bow::ExecuteMsg::Swap {
-                    min_return,
-                    to: None,
-                    callback: None,
-                })?,
-                funds: coins(c.market_maker.0.u128(), config.denoms.ask(side)),
-            }))
+            let mut res = e.execute_orders(deps.storage, &swap_iter, vec, &oracle)?;
+            fees += res.fees;
+            messages.append(&mut res.messages);
+
+            if !res.withdraw.is_empty() {
+                match callback {
+                    None => messages.push(CosmosMsg::Bank(BankMsg::Send {
+                        to_address: recipient.to_string(),
+                        amount: res.withdraw.into_vec(),
+                    })),
+                    Some(cb) => messages.push(
+                        cb.to_message(&recipient, Empty {}, res.withdraw.into_vec())?
+                            .into(),
+                    ),
+                }
+            }
+
+            fees.normalize();
+
+            if !fees.is_empty() {
+                messages.push(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: config.fee_address.to_string(),
+                    amount: fees.into_vec(),
+                }))
+            }
+
+            Ok(Response::default()
+                .add_messages(messages)
+                .add_events(res.events))
         }
     }
-    Ok(())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -224,21 +218,21 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             fee_taker,
             fee_maker,
             fee_address,
-            market_maker,
+            market_makers,
             oracles,
         } => {
             let fee_address = fee_address
                 .map(|x| deps.api.addr_validate(&x))
                 .transpose()?;
 
-            let market_maker = market_maker
-                .map(|x| deps.api.addr_validate(&x))
+            let market_makers = market_makers
+                .map(|xx| MarketMakers::new(deps.api, xx))
                 .transpose()?;
             let mut config = CONFIG.load(deps.storage)?;
 
             config.update(
                 tick,
-                market_maker,
+                market_makers,
                 fee_taker,
                 fee_maker,
                 fee_address,
@@ -257,7 +251,10 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     let oracle = config
         .oracles
         .clone()
-        .and_then(|x| x.tor_price(deps.querier).ok());
+        .map(|x| x.tor_price(deps.querier))
+        .transpose()?;
+    let swap_iter = SwapIter::new(deps.querier, &config);
+
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
         QueryMsg::Order((owner, side, price)) => {
@@ -290,7 +287,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
             let offset = offset.unwrap_or(0);
 
             to_json_binary(&BookResponse {
-                base: swap_iter(deps, &config, &Side::Base, &oracle)
+                base: swap_iter
+                    .iter(deps.storage, &Side::Base, &oracle)
                     .skip(offset as usize)
                     .take(limit as usize)
                     .map(|v| BookItemResponse {
@@ -298,7 +296,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                         total: v.total(),
                     })
                     .collect(),
-                quote: swap_iter(deps, &config, &Side::Quote, &oracle)
+                quote: swap_iter
+                    .iter(deps.storage, &Side::Quote, &oracle)
                     .skip(offset as usize)
                     .take(limit as usize)
                     .map(|v| BookItemResponse {
@@ -310,8 +309,16 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
         }
         QueryMsg::Simulate(offer) => {
             let side = config.denoms.ask_side(&offer)?;
-            let mut swapper = Swapper::new(offer.amount, None, config.fee_taker);
-            let mut iter = swap_iter(deps, &config, &side, &oracle);
+            let mut swapper = Swapper::new(
+                env!("CARGO_PKG_NAME"),
+                offer.amount,
+                SwapRequest::Yolo {
+                    to: None,
+                    callback: None,
+                },
+                config.fee_taker,
+            );
+            let mut iter = swap_iter.iter(deps.storage, &side, &oracle);
             let res = swapper.swap(&mut iter)?;
             to_json_binary(&SimulationResponse {
                 returned: res.return_amount,
@@ -325,27 +332,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    Config::migrate(deps)?;
     Ok(Response::default())
-}
-
-fn swap_iter<'a>(
-    deps: Deps<'a>,
-    config: &'a Config,
-    side: &'a Side,
-    oracle: &'a impl Premiumable,
-) -> impl Iterator<Item = EitherOrBoth<EitherOrBoth<Pool>, MarketMakerOffer>> + 'a {
-    let market_maker = MarketMaker::new(
-        deps.querier,
-        config.denoms.clone(),
-        side.clone(),
-        config.market_maker.clone(),
-        config.tick.clone(),
-    );
-
-    Pool::iter(deps.storage, side, oracle).merge_join_by(market_maker, move |x, y| match side {
-        Side::Base => x.rate().cmp(&y.rate()),
-        Side::Quote => y.rate().cmp(&x.rate()),
-    })
 }
 
 fn order_response(
@@ -393,7 +381,7 @@ mod tests {
                 owner,
                 &InstantiateMsg {
                     denoms: Denoms::new("btc-btc", "eth-usdc"),
-                    market_maker: None,
+                    market_makers: vec![],
                     oracles: Some([
                         Layer1Asset::try_from("BTC.BTC").unwrap(),
                         Layer1Asset::try_from(
@@ -416,6 +404,80 @@ mod tests {
     }
 
     #[test]
+    fn test_limit_order_and_oracle_order_same_price_different_direction() {
+        let (mut app, contract) = setup();
+        let owner = app.api().addr_make("owner");
+        let user = app.api().addr_make("user");
+
+        let funds = vec![
+            coin(500_000_000_000_000, "btc-btc"),
+            coin(500_000_000_000_000, "eth-usdc"),
+        ];
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &user, funds.clone())
+                .unwrap();
+        });
+
+        app.init_modules(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &owner, funds.clone())
+                .unwrap();
+        });
+
+        // limit order 100_000
+        // i am selling 100_000 price the quantity of 1000 BTC
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Base,
+                    Price::Fixed(Decimal::from_str("100100").unwrap()),
+                    Some(Uint128::from(1_000u128)),
+                )],
+                None,
+            )),
+            &funds,
+        )
+        .unwrap();
+
+        // limit order 100_000
+        // i am buying 100_000 price the quantity of 1000 USDC
+        app.execute_contract(
+            user.clone(),
+            contract.clone(),
+            &ExecuteMsg::Order((
+                vec![(
+                    Side::Quote,
+                    Price::Fixed(Decimal::from_str("100100").unwrap()),
+                    Some(Uint128::from(100_000_000_000u128)),
+                )],
+                None,
+            )),
+            &funds,
+        )
+        .unwrap();
+
+        let book: BookResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Book {
+                    limit: None,
+                    offset: None,
+                },
+            )
+            .unwrap();
+
+        // the base order should be fully consumed
+        assert_eq!(book.base.len(), 0);
+        assert_eq!(book.quote.len(), 1);
+    }
+
+    #[test]
     fn instantiation() {
         let mut app = mock_rujira_app();
         let owner = app.api().addr_make("owner");
@@ -432,7 +494,7 @@ mod tests {
                     Layer1Asset::try_from("ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48")
                         .unwrap(),
                 ]),
-                market_maker: None,
+                market_makers: vec![],
                 tick: Tick::new(4u8),
                 fee_taker: Decimal::zero(),
                 fee_maker: Decimal::zero(),
@@ -522,7 +584,7 @@ mod tests {
         assert_eq!(book.base.len(), 4);
         let entry = book.base[0].clone();
         assert_eq!(entry.price, Decimal::from_str("91219").unwrap());
-        assert_eq!(entry.total, Uint128::from(5099976u128));
+        assert_eq!(entry.total, Uint128::from(5099977u128));
         let entry = book.base[1].clone();
         assert_eq!(entry.price, Decimal::from_str("93219").unwrap());
         assert_eq!(entry.total, Uint128::from(2100000u128));
@@ -540,12 +602,12 @@ mod tests {
 
         #[allow(deprecated)]
         let balance = app.wrap().query_all_balances(owner.to_string()).unwrap();
-        // Total 102000 btc submitted on base side
+        // Total 102000 btc submitted on base side, swapped inc fee
         // Total 73500 usdc submitted on quote side
         assert_eq!(
             balance,
             vec![
-                coin(500_000_000 - 10200000, "btc-btc"),
+                coin(500_000_000 - 10199977, "btc-btc"),
                 coin(500_000_000 - 7350000, "eth-usdc")
             ]
         );
@@ -624,8 +686,7 @@ mod tests {
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
-                &ExecuteMsg::Swap(SwapRequest {
-                    min_return: None,
+                &ExecuteMsg::Swap(SwapRequest::Yolo {
                     to: None,
                     callback: None,
                 }),
@@ -633,8 +694,8 @@ mod tests {
             )
             .unwrap();
 
-        // Best price = 912.19
-        // 100_000 / 912.19 = 109
+        // Best price = 91_219
+        // 100_000 / 91_219 = 1.09
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "base"),
             ("offer", "100000"),
@@ -653,43 +714,39 @@ mod tests {
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
-                &ExecuteMsg::Swap(SwapRequest {
-                    min_return: None,
+                &ExecuteMsg::Swap(SwapRequest::Yolo {
                     to: None,
                     callback: None,
                 }),
-                &coins(30000, "btc-btc"),
+                &coins(30_000, "btc-btc"),
             )
             .unwrap();
 
-        // Buying 10m USDC-worth of BTC
-        // Best price = 91219
-        // 10_000_000 / 91219 = 109
+        // Selling 30_000 BTC
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
-            ("offer", "25001"),
+            ("offer", "24999"),
             ("bid", "2250000000"),
             ("price", "oracle:-1000"),
             ("price", "fixed:90000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
-            ("offer", "4999"),
-            ("bid", "439412100"),
+            ("offer", "5001"),
+            ("bid", "439587900"),
             ("price", "fixed:87900"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "2689412100eth-usdc"),
+            ("amount", "2689587900eth-usdc"),
         ]));
 
         let res = app
             .execute_contract(
                 owner.clone(),
                 contract.clone(),
-                &ExecuteMsg::Swap(SwapRequest {
-                    min_return: None,
+                &ExecuteMsg::Swap(SwapRequest::Yolo {
                     to: None,
                     callback: None,
                 }),
@@ -700,14 +757,14 @@ mod tests {
         // Check that any unused funds are returned
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
-            ("offer", "53022"),
-            ("bid", "4660587900"),
+            ("offer", "53019"),
+            ("bid", "4660412100"),
             ("price", "fixed:87900"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "46978btc-btc,4660587900eth-usdc"),
+            ("amount", "46981btc-btc,4660412100eth-usdc"),
         ]));
     }
 
@@ -721,7 +778,7 @@ mod tests {
                 fee_taker: Some(Decimal::from_ratio(1u128, 100u128)),
                 fee_maker: Some(Decimal::from_ratio(2u128, 100u128)),
                 fee_address: Some(app.api().addr_make("fees2").to_string()),
-                market_maker: Some(app.api().addr_make("mm2").to_string()),
+                market_makers: Some(vec![app.api().addr_make("mm2").to_string()]),
                 oracles: Some([
                     Layer1Asset::try_from("ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48")
                         .unwrap(),
@@ -741,8 +798,8 @@ mod tests {
         assert_eq!(config.fee_maker, Decimal::from_ratio(2u128, 100u128));
         assert_eq!(config.fee_address, app.api().addr_make("fees2").to_string());
         assert_eq!(
-            config.market_maker,
-            Some(app.api().addr_make("mm2").to_string())
+            config.market_makers[0],
+            app.api().addr_make("mm2").to_string()
         );
         assert_eq!(
             config.oracles,
@@ -893,8 +950,7 @@ mod tests {
             .execute_contract(
                 user.clone(),
                 contract.clone(),
-                &ExecuteMsg::Swap(SwapRequest {
-                    min_return: None,
+                &ExecuteMsg::Swap(SwapRequest::Yolo {
                     to: None,
                     callback: None,
                 }),
@@ -1051,8 +1107,7 @@ mod tests {
             .execute_contract(
                 user.clone(),
                 contract.clone(),
-                &ExecuteMsg::Swap(SwapRequest {
-                    min_return: None,
+                &ExecuteMsg::Swap(SwapRequest::Yolo {
                     to: None,
                     callback: None,
                 }),
@@ -1124,8 +1179,7 @@ mod tests {
             .execute_contract(
                 user.clone(),
                 contract.clone(),
-                &ExecuteMsg::Swap(SwapRequest {
-                    min_return: None,
+                &ExecuteMsg::Swap(SwapRequest::Yolo {
                     to: None,
                     callback: None,
                 }),

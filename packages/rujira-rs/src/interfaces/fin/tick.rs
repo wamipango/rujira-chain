@@ -10,11 +10,35 @@ impl Tick {
         Self(size)
     }
 
-    pub fn validate(&self, v: &Decimal) -> Result<(), TickError> {
+    pub fn validate(&self) -> Result<(), TickError> {
+        if self.0 == 0 {
+            return Err(TickError::Invalid(self.0));
+        }
+        Ok(())
+    }
+
+    pub fn validate_price(&self, v: &Decimal) -> Result<(), TickError> {
+        if v.is_zero() {
+            return Err(TickError::InvalidPrice {
+                price: *v,
+                tick: self.0,
+            });
+        }
+
+        if v.inv().is_none() {
+            return Err(TickError::InvalidPrice {
+                price: *v,
+                tick: self.0,
+            });
+        }
+
         if v == self.truncate_floor(v) {
             return Ok(());
         }
-        Err(TickError::Invalid { v: *v })
+        Err(TickError::InvalidPrice {
+            price: *v,
+            tick: self.0,
+        })
     }
 
     pub fn truncate_floor(&self, v: &Decimal) -> Decimal {
@@ -40,8 +64,11 @@ impl Tick {
 
 #[derive(Error, Debug)]
 pub enum TickError {
-    #[error("Invalid Tick Size {v}")]
-    Invalid { v: Decimal },
+    #[error("Invalid Tick {0}")]
+    Invalid(u8),
+
+    #[error("Invalid Price {price} for Tick {tick}")]
+    InvalidPrice { price: Decimal, tick: u8 },
 }
 
 #[cfg(test)]
@@ -55,15 +82,17 @@ mod tests {
     fn decimal() {
         let tick = Tick::new(2u8);
 
-        tick.validate(&Decimal::from_str("123").unwrap())
+        tick.validate_price(&Decimal::from_str("123").unwrap())
             .unwrap_err();
 
-        tick.validate(&Decimal::from_str("12").unwrap()).unwrap();
-        tick.validate(&Decimal::from_str("12.3").unwrap())
+        tick.validate_price(&Decimal::from_str("12").unwrap())
+            .unwrap();
+        tick.validate_price(&Decimal::from_str("12.3").unwrap())
             .unwrap_err();
-        tick.validate(&Decimal::from_str("1.2").unwrap()).unwrap();
+        tick.validate_price(&Decimal::from_str("1.2").unwrap())
+            .unwrap();
 
-        tick.validate(&Decimal::from_str("0.00000123").unwrap())
+        tick.validate_price(&Decimal::from_str("0.00000123").unwrap())
             .unwrap_err();
 
         assert_eq!(
@@ -76,7 +105,7 @@ mod tests {
             Decimal::from_str("0.0000012").unwrap()
         );
 
-        tick.validate(&Decimal::from_str("0.00012").unwrap())
+        tick.validate_price(&Decimal::from_str("0.00012").unwrap())
             .unwrap();
     }
 }

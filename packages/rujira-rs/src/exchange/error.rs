@@ -1,4 +1,4 @@
-use cosmwasm_std::{ConversionOverflowError, StdError, Uint128};
+use cosmwasm_std::{CheckedMultiplyRatioError, ConversionOverflowError, StdError, Uint128};
 use thiserror::Error;
 
 use crate::bid_pool::BidPoolError;
@@ -10,6 +10,9 @@ pub enum SwapError {
 
     #[error("{0}")]
     ConversionOverflow(#[from] ConversionOverflowError),
+
+    #[error("{0}")]
+    CheckedMultiplyRatio(#[from] CheckedMultiplyRatioError),
 
     #[error("{0}")]
     BidPool(#[from] BidPoolError),

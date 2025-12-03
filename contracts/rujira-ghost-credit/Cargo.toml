@@ -23,7 +23,7 @@ cw-storage-plus   = { workspace = true }
 cw-utils          = { workspace = true }
 cw2               = { workspace = true }
 rujira-account    = { path = "../rujira-account", optional = true }
-rujira-rs         = { workspace = true, features = ["interface-account", "interface-ghost", "oracle"], default-features = false }
+rujira-rs         = { workspace = true, features = ["interface-account", "interface-ghost", "oracle", "native-balance-plus"], default-features = false }
 rujira-rs-testing = { workspace = true, optional = true }
 schemars          = { workspace = true }
 serde             = { workspace = true }

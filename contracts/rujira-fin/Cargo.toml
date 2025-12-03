@@ -2,7 +2,7 @@
 authors = []
 edition = { workspace = true }
 name    = "rujira-fin"
-version = "1.0.2"
+version = "1.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -32,13 +32,15 @@ cw-utils          = { workspace = true }
 cw2               = { workspace = true }
 itertools         = { workspace = true }
 rujira-bow        = { path = "../rujira-bow", optional = true }
-rujira-rs         = { workspace = true, features = ["interface-fin", "interface-bow", "decimal-scaled", "premium", "oracle", "query", "bid-pool", "exchange"], default-features = false }
+rujira-rs         = { workspace = true, features = ["interface-fin", "interface-bow", "decimal-scaled", "premium", "oracle", "query", "bid-pool", "exchange", "merge-n-by-iter"], default-features = false }
 rujira-rs-testing = { workspace = true, optional = true }
 schemars          = { workspace = true }
 serde             = { workspace = true }
 thiserror         = { workspace = true }
 
 [dev-dependencies]
-cw-multi-test     = { workspace = true }
-rujira-bow        = { path = "../rujira-bow" }
-rujira-rs-testing = { workspace = true }
+cw-multi-test         = { workspace = true }
+rujira-bow            = { path = "../rujira-bow" }
+rujira-ghost-vault    = { path = "../rujira-ghost-vault" }
+rujira-rs-testing     = { workspace = true }
+rujira-thorchain-swap = { path = "../rujira-thorchain-swap", features = ["mock"] }

@@ -6,7 +6,7 @@ use cw_storage_plus::Map;
 use itertools::{EitherOrBoth, Itertools};
 use rujira_rs::{
     bid_pool::{self, SumSnapshot},
-    exchange::{SwapCommit, SwapError, Swappable},
+    exchange::{Commitment, SwapError, Swappable},
     fin::{Price, Side},
     DecimalScaled, Premiumable,
 };
@@ -198,7 +198,7 @@ impl Swappable for Pool {
         ))
     }
 
-    fn commit(&self, storage: &mut dyn Storage) -> Result<SwapCommit, SwapError> {
+    fn commit(&self, storage: &mut dyn Storage) -> Result<Commitment, SwapError> {
         for s in self.pending_sum_snapshots.clone() {
             SNAPSHOTS.save(storage, (self.key(), s.key()), &s.sum)?;
         }
@@ -207,11 +207,11 @@ impl Swappable for Pool {
         // Clear empty pools so they're not iterated over during a swap
         if self.pool.is_zero() {
             POOLS.remove(storage, self.key());
-            return Ok(SwapCommit::default());
+            return Ok(Commitment::default());
         }
 
         POOLS.save(storage, self.key(), &())?;
-        Ok(SwapCommit::default())
+        Ok(Commitment::default())
     }
 
     fn attributes(&self) -> Vec<Attribute> {
@@ -227,10 +227,6 @@ impl Swappable for Pool {
 
     fn total(&self) -> Uint128 {
         self.pool.total().try_into().unwrap()
-    }
-
-    fn prefix(&self) -> &str {
-        env!("CARGO_PKG_NAME")
     }
 }
 

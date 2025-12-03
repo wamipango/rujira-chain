@@ -1,5 +1,5 @@
 use cosmwasm_std::{CheckedFromRatioError, Coin, ConversionOverflowError, OverflowError, StdError};
-use cw_utils::PaymentError;
+use cw_utils::{NativeBalance, PaymentError};
 use rujira_rs::{
     bid_pool::BidPoolError, exchange::SwapError, fin::TickError, query::PoolError, OracleError,
 };
@@ -37,8 +37,14 @@ pub enum ContractError {
     #[error("{0}")]
     Oracle(#[from] OracleError),
 
-    #[error("InsufficientFunds expected {expected} got {returned}")]
-    InsufficientFunds { expected: Coin, returned: Coin },
+    #[error("Insufficient Return. expected {requested} got {returned}")]
+    InsufficientReturn { requested: Coin, returned: Coin },
+
+    #[error("InsufficientFunds required {required} got {available}")]
+    InsufficientFunds {
+        required: NativeBalance,
+        available: NativeBalance,
+    },
 
     #[error("Unauthorized")]
     Unauthorized {},

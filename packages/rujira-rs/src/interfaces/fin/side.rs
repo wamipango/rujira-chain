@@ -10,6 +10,15 @@ pub enum Side {
     Quote,
 }
 
+impl Side {
+    pub fn other(&self) -> Self {
+        match self {
+            Side::Base => Side::Quote,
+            Side::Quote => Side::Base,
+        }
+    }
+}
+
 impl Display for Side {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
