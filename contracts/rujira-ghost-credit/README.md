@@ -160,16 +160,14 @@ As a reward for solving and executing a liquidation, the account that calls the 
 
 ### Constraints
 
-A Liquidation may only reduce the Account's LTV by `config.liquidation_max_delta`, otherwise the transaction will fail.
-
 Whenever a Liquidation Step `execute`s a contract, the output from that execution is validated against a set of rules to ensure proper Liquidation.
 
-- The Account's LTV must must be strictly **less** than `config.liquidation_threshold`, otherwise the transaction will fail.
-- The Collaterals at the end of the Liquidation must be strictly **less** than at the start. This requires all received tokens to be repaid, and if there is excessive repay the Liquidation fails due to `config.liquidation_max_delta`. This protects the Account from over-liquidation.
-- All tokens _received_ by the Account in the contract execution **must** be one of the Debt tokens owed by the Account. This is to prevent unnecessary exchanges of a user's collateral
-- All tokens _received_ by the Account in the contract execution **must** be equal to or less than the corresponding debt owed. This is to prevent over-liquidation of a user's collateral
-- All tokens _sent_ by the Account in the contract execution must match an Account's `Preferences`:
-- TODO: The $ value when collateral is exchanged for debt must not exceed `config.liquidation_max_slip`
+- The Account's LTV must must be strictly **less** than `config.liquidation_threshold` (e.g. 100% LTV), otherwise the transaction will fail.
+- The Account's LTV must must be **equal to or above** the `config.adjustment_threshold` (e.g. 90% LTV), otherwise the transaction will fail. This protects the Account from over-liquidation.
+- All tokens _received_ by the Account in the contract execution **must** be one of the Debt tokens owed by the Account. This is to prevent unnecessary exchanges of a user's collateral.
+- All tokens _received_ by the Account in the contract execution **must** be equal to or less than the corresponding debt owed. This is to prevent over-liquidation of a user's collateral.
+- All tokens _sent_ by the Account in the contract execution must match an Account's `Preferences`.
+- The $ value when collateral is exchanged for debt must not exceed `config.liquidation_max_slip`.
 
 ### Account Liquidation Preferences
 
