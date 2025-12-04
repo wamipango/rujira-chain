@@ -9,8 +9,6 @@ static CONFIG: Item<Config> = Item::new("config");
 
 #[cw_serde]
 pub struct Config {
-    // TODO: Read from Mimirs once thornode upgrades
-    pub min_slip_bps: u8,
     pub max_stream_length: u32,
     pub stream_step_ratio: Decimal,
     pub max_borrow_ratio: Decimal,
@@ -21,7 +19,6 @@ impl From<InstantiateMsg> for Config {
     fn from(msg: InstantiateMsg) -> Self {
         Self {
             max_stream_length: msg.max_stream_length,
-            min_slip_bps: msg.min_slip_bps,
             stream_step_ratio: msg.stream_step_ratio,
             max_borrow_ratio: msg.max_borrow_ratio,
             reserve_fee: msg.reserve_fee,
@@ -39,9 +36,6 @@ impl Config {
     }
 
     pub fn update(&mut self, update: &ConfigUpdate) {
-        if let Some(min_slip_bps) = update.min_slip_bps {
-            self.min_slip_bps = min_slip_bps;
-        }
         if let Some(max_stream_length) = update.max_stream_length {
             self.max_stream_length = max_stream_length;
         }
@@ -64,7 +58,6 @@ impl Config {
 impl From<Config> for ConfigResponse {
     fn from(value: Config) -> Self {
         Self {
-            min_slip_bps: value.min_slip_bps,
             max_stream_length: value.max_stream_length,
             stream_step_ratio: value.stream_step_ratio,
             max_borrow_ratio: value.max_borrow_ratio,
@@ -80,7 +73,6 @@ mod tests {
     #[test]
     fn validation() {
         Config {
-            min_slip_bps: 10,
             max_stream_length: 1,
             max_borrow_ratio: Decimal::one(),
             reserve_fee: Decimal::from_ratio(10u128, 500u128),

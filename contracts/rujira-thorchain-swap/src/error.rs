@@ -1,7 +1,7 @@
 use cosmwasm_std::{CheckedFromRatioError, StdError, Uint128};
 use cw_utils::PaymentError;
 use rujira_rs::{
-    query::{OutboundFeeError, PoolError, SwapQuoteError},
+    query::{grpc::QueryError, OutboundFeeError, PoolError, SwapQuoteError},
     AssetError, Layer1AssetError, SecuredAssetError, SharePoolError,
 };
 use thiserror::Error;
@@ -37,6 +37,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     OutboundFee(#[from] OutboundFeeError),
+
+    #[error("{0}")]
+    Query(#[from] QueryError),
 
     #[error("Unauthorized")]
     Unauthorized {},

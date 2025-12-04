@@ -2,7 +2,7 @@
 authors = []
 edition = { workspace = true }
 name    = "rujira-thorchain-swap"
-version = "0.0.5"
+version = "0.0.6"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -29,7 +29,7 @@ cw-storage-plus    = { workspace = true }
 cw-utils           = { workspace = true }
 cw2                = { workspace = true }
 rujira-ghost-vault = { path = "../rujira-ghost-vault", optional = true }
-rujira-rs          = { workspace = true, features = ["interface-thorchain-swap", "share-pool", "coin"], default-features = false }
+rujira-rs          = { workspace = true, features = ["interface-thorchain-swap", "share-pool", "coin", "query"], default-features = false }
 rujira-rs-testing  = { workspace = true, optional = true }
 schemars           = { workspace = true }
 serde              = { workspace = true }

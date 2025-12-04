@@ -131,7 +131,6 @@ impl ThorchainSwap {
                 code_id,
                 owner.clone(),
                 &InstantiateMsg {
-                    min_slip_bps: 10u8,
                     max_stream_length: 1u32,
                     max_borrow_ratio: Decimal::one(),
                     reserve_fee: Decimal::from_ratio(1u128, 5000u128),

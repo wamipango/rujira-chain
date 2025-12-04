@@ -5,6 +5,19 @@ use cosmwasm_std::{Binary, Decimal, StdError};
 use prost::Message;
 use rujira_rs::proto;
 
+pub fn mock_mimir(request: Binary) -> Result<Binary, Error> {
+    let req = proto::types::QueryMimirWithKeyRequest::decode(request.as_slice()).unwrap();
+    let mut buf = Vec::new();
+
+    match req.key.to_uppercase().as_str() {
+        "SECUREDASSETMINSLIPBPS" => proto::types::QueryMimirWithKeyResponse { value: 10i64 }
+            .encode(&mut buf)
+            .unwrap(),
+        _ => return Err(StdError::generic_err("Mimir Key not found").into()),
+    };
+    Ok(buf.into())
+}
+
 fn mock_pool_btc() -> Binary {
     let pool = proto::types::QueryPoolResponse {
         asset: "BTC.BTC".to_string(),
@@ -26,8 +39,8 @@ fn mock_pool_btc() -> Binary {
         savers_capacity_remaining: "9193020653".to_string(),
         synth_mint_paused: false,
         synth_supply_remaining: "22913550433".to_string(),
-
         derived_depth_bps: "9639".to_string(),
+        trading_halted: false,
     };
 
     let mut buf = Vec::new();
@@ -57,6 +70,7 @@ fn mock_pool_usdc() -> Binary {
         synth_supply_remaining: "526838894037357".to_string(),
         derived_depth_bps: "0".to_string(),
         short_code: "".to_string(),
+        trading_halted: false,
     };
 
     let mut buf = Vec::new();

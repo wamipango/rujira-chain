@@ -242,8 +242,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     }
 }
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, config: Config) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    config.save(deps.storage)?;
     Ok(Response::default())
 }
 
@@ -271,7 +272,6 @@ mod tests {
             code_id,
             owner,
             &InstantiateMsg {
-                min_slip_bps: 10u8,
                 max_stream_length: 1u32,
                 max_borrow_ratio: Decimal::one(),
                 reserve_fee: Decimal::from_ratio(10u128, 500u128),

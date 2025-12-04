@@ -784,6 +784,8 @@ pub struct QueryPoolResponse {
     /// the depth of the derived virtual pool relative to L1 pool (in basis points)
     #[prost(string, tag = "23")]
     pub derived_depth_bps: ::prost::alloc::string::String,
+    #[prost(bool, tag = "24")]
+    pub trading_halted: bool,
 }
 
 #[derive(Clone, PartialEq, ::prost::Message)]

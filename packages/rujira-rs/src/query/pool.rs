@@ -96,6 +96,7 @@ pub struct Pool {
     pub synth_supply_remaining: Uint128,
     /// the depth of the derived virtual pool relative to L1 pool (in basis points)
     pub derived_depth_bps: u32,
+    pub trading_halted: bool,
 }
 
 impl TryFrom<QueryPoolResponse> for Pool {
@@ -123,6 +124,7 @@ impl TryFrom<QueryPoolResponse> for Pool {
             synth_mint_paused: v.synth_mint_paused,
             synth_supply_remaining: Uint128::from_str(v.synth_supply_remaining.as_str())?,
             derived_depth_bps: u32::from_str(v.derived_depth_bps.as_str())?,
+            trading_halted: v.trading_halted,
         })
     }
 }

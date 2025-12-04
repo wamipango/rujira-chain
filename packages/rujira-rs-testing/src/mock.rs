@@ -14,7 +14,7 @@ use cw_storage_plus::Map;
 use serde::de::DeserializeOwned;
 use std::{collections::BTreeMap, str::FromStr};
 
-use crate::fixtures::{mock_network, mock_oracle_price, mock_pool, mock_quote};
+use crate::fixtures::{mock_mimir, mock_network, mock_oracle_price, mock_pool, mock_quote};
 
 pub type RujiraApp = App<
     BankKeeper,
@@ -243,6 +243,7 @@ impl Stargate for RujiraStargate {
         request: GrpcQuery,
     ) -> AnyResult<Binary> {
         match request.path.as_str() {
+            "/types.Query/MimirWithKey" => mock_mimir(request.data),
             "/types.Query/Pool" => mock_pool(request.data),
             "/types.Query/Network" => mock_network(),
             "/types.Query/QuoteSwap" => mock_quote(request.data),

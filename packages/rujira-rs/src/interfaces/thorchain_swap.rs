@@ -6,8 +6,6 @@ use cosmwasm_std::{
 
 #[cw_serde]
 pub struct InstantiateMsg {
-    /// The base layer mimir value. Will be read from chain after 3.12
-    pub min_slip_bps: u8,
     /// The maximum number of blocks that a settlement can be chunked into over a streaming swap
     pub max_stream_length: u32,
     /// The amount by which the `size` of the quote changes for each N of max_stream_length
@@ -52,7 +50,6 @@ pub enum SudoMsg {
 
 #[cw_serde]
 pub struct ConfigUpdate {
-    pub min_slip_bps: Option<u8>,
     pub max_stream_length: Option<u32>,
     pub stream_step_ratio: Option<Decimal>,
     pub max_borrow_ratio: Option<Decimal>,
@@ -77,7 +74,6 @@ pub enum QueryMsg {
 
 #[cw_serde]
 pub struct ConfigResponse {
-    pub min_slip_bps: u8,
     pub max_stream_length: u32,
     pub stream_step_ratio: Decimal,
     pub max_borrow_ratio: Decimal,

@@ -2,10 +2,15 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     from_json, to_json_binary, Binary, Decimal, Fraction, QuerierWrapper, StdResult, Uint128,
 };
-use rujira_rs::{bow::QuoteResponse, query::Pool, Asset};
+use rujira_rs::{
+    bow::QuoteResponse,
+    proto::types::{QueryMimirWithKeyRequest, QueryMimirWithKeyResponse},
+    query::grpc::Queryable,
+    query::Pool,
+    Asset,
+};
 
 use crate::{config::Config, route::Route, ContractError};
-
 #[cw_serde]
 pub struct QuoteState {
     route: Route,
@@ -33,6 +38,9 @@ impl Step {
             "rune" => Ok(Self::Rune {}),
             _ => {
                 let pool = Pool::load(q, &Asset::from_denom(denom)?.to_layer_1())?;
+                if pool.trading_halted {
+                    return Err(ContractError::InvalidRoute {});
+                }
                 Ok(Self::Pool {
                     asset: pool.balance_asset,
                     rune: pool.balance_rune,
@@ -110,12 +118,19 @@ impl QuoteState {
         };
 
         let available = route.return_balance().mul_floor(config.max_borrow_ratio);
+        let min_slip_bps = QueryMimirWithKeyResponse::get(
+            q,
+            QueryMimirWithKeyRequest {
+                key: "SECUREDASSETMINSLIPBPS".to_string(),
+                height: "".to_string(),
+            },
+        )?;
 
         Ok(Self {
             route: route.clone(),
             input: Uint128::zero(),
             output: Uint128::zero(),
-            size: route.size(config.min_slip_bps as u32),
+            size: route.size(min_slip_bps.value as u32),
             borrow_limit: borrow_limit.min(available),
             fee: config.reserve_fee,
             step_ratio: config.stream_step_ratio,

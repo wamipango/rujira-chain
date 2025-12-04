@@ -1,4 +1,4 @@
-mod grpc;
+pub mod grpc;
 pub(crate) mod network;
 pub(crate) mod oracle_price;
 pub(crate) mod outbound_fee;

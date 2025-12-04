@@ -1,6 +1,6 @@
 {
   "contract_name": "rujira-thorchain-swap",
-  "contract_version": "0.0.5",
+  "contract_version": "0.0.6",
   "idl_version": "1.0.0",
   "instantiate": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -9,7 +9,6 @@
     "required": [
       "max_borrow_ratio",
       "max_stream_length",
-      "min_slip_bps",
       "reserve_fee",
       "stream_step_ratio"
     ],
@@ -26,12 +25,6 @@
         "description": "The maximum number of blocks that a settlement can be chunked into over a streaming swap",
         "type": "integer",
         "format": "uint32",
-        "minimum": 0.0
-      },
-      "min_slip_bps": {
-        "description": "The base layer mimir value. Will be read from chain after 3.12",
-        "type": "integer",
-        "format": "uint8",
         "minimum": 0.0
       },
       "reserve_fee": {
@@ -382,14 +375,6 @@
             "format": "uint32",
             "minimum": 0.0
           },
-          "min_slip_bps": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "uint8",
-            "minimum": 0.0
-          },
           "reserve_fee": {
             "anyOf": [
               {
@@ -430,7 +415,6 @@
       "required": [
         "max_borrow_ratio",
         "max_stream_length",
-        "min_slip_bps",
         "reserve_fee",
         "stream_step_ratio"
       ],
@@ -441,11 +425,6 @@
         "max_stream_length": {
           "type": "integer",
           "format": "uint32",
-          "minimum": 0.0
-        },
-        "min_slip_bps": {
-          "type": "integer",
-          "format": "uint8",
           "minimum": 0.0
         },
         "reserve_fee": {

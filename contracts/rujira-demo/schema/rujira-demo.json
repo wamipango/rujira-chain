@@ -67,7 +67,8 @@
         "synth_mint_paused",
         "synth_supply",
         "synth_supply_remaining",
-        "synth_units"
+        "synth_units",
+        "trading_halted"
       ],
       "properties": {
         "asset": {
@@ -183,6 +184,9 @@
               "$ref": "#/definitions/Uint128"
             }
           ]
+        },
+        "trading_halted": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
