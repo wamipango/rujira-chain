@@ -121,16 +121,16 @@ impl QuoteState {
         let min_slip_bps = QueryMimirWithKeyResponse::get(
             q,
             QueryMimirWithKeyRequest {
-                key: "SECUREDASSETMINSLIPBPS".to_string(),
+                key: "SECUREDASSETSLIPMINBPS".to_string(),
                 height: "".to_string(),
             },
         )?;
-
+        let bps = u32::try_from(min_slip_bps.value)?.min(10_000);
         Ok(Self {
             route: route.clone(),
             input: Uint128::zero(),
             output: Uint128::zero(),
-            size: route.size(min_slip_bps.value as u32),
+            size: route.size(bps),
             borrow_limit: borrow_limit.min(available),
             fee: config.reserve_fee,
             step_ratio: config.stream_step_ratio,

@@ -15,7 +15,7 @@ impl SharePool {
     /// Adds a deposit to the pool, returning the new shares issued
     pub fn join(&mut self, amount: Uint128) -> Result<Uint128, SharePoolError> {
         if amount.is_zero() {
-            return Err(SharePoolError::ZeroAmount {});
+            return Err(SharePoolError::Zero("Amount".to_string()));
         }
         if self.shares.is_zero() {
             self.size.add_assign(amount);
@@ -25,7 +25,7 @@ impl SharePool {
 
         let issuance = self.shares * Decimal::from_ratio(amount, self.size);
         if issuance.floor().is_zero() {
-            return Err(SharePoolError::ZeroShares {});
+            return Err(SharePoolError::Zero("Shares".to_string()));
         }
 
         self.shares.add_assign(issuance.floor());
@@ -36,7 +36,7 @@ impl SharePool {
     /// Removes a share from the pool, returning the amount removed from the pool and deducted
     pub fn leave(&mut self, amount: Uint128) -> Result<Uint128, SharePoolError> {
         if amount.is_zero() {
-            return Err(SharePoolError::ZeroAmount {});
+            return Err(SharePoolError::Zero("Amount".to_string()));
         }
 
         if amount.gt(&self.shares()) {
@@ -100,12 +100,10 @@ impl SharePool {
 pub enum SharePoolError {
     #[error("ShareOverflow")]
     ShareOverflow {},
-    #[error("ZeroAmount")]
-    ZeroAmount {},
+    #[error("Zero{0}")]
+    Zero(String),
     #[error("InvalidDeposit")]
     InvalidDeposit {},
-    #[error("ZeroShares")]
-    ZeroShares {},
 }
 
 #[cfg(test)]

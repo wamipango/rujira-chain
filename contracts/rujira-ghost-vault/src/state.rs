@@ -147,20 +147,17 @@ impl State {
         let mut shares = Uint128::zero();
 
         // deposit the protocol fee to the deposit pool to issue shares
-        if fee > Uint128::zero() {
-            match self.deposit_pool.join(fee) {
-                Ok(amount) => {
-                    shares = amount;
-                }
-                // if no shares were issued, add the fee to the pending fees for later distribution
-                // set the fee to 0 so that the debt is not charged with the fee yet
-                Err(SharePoolError::ZeroAmount {}) => {
-                    self.pending_fees =
-                        self.pending_fees.add(DecimalScaled::from_ratio(fee, 1u128));
-                    fee = Uint128::zero();
-                }
-                Err(err) => return Err(err.into()),
+        match self.deposit_pool.join(fee) {
+            Ok(amount) => {
+                shares = amount;
             }
+            // if no shares were issued, add the fee to the pending fees for later distribution
+            // set the fee to 0 so that the debt is not charged with the fee yet
+            Err(SharePoolError::Zero(_)) => {
+                self.pending_fees = self.pending_fees.add(DecimalScaled::from_ratio(fee, 1u128));
+                fee = Uint128::zero();
+            }
+            Err(err) => return Err(err.into()),
         }
 
         // Allocate the interest to the deposit pool

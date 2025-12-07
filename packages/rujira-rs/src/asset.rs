@@ -7,7 +7,6 @@ use std::{
 use anybuf::Anybuf;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::ensure;
-use regex::Regex;
 use thiserror::Error;
 
 use crate::memoed::Memoed;
@@ -105,14 +104,11 @@ impl SecuredAsset {
                 // Validate that this isn't eg a token factory pretending to be a secured asset
                 // x/btc-btc would otherwise pass
                 ensure!(
-                    Regex::new(r"^[a-z]+$").unwrap().is_match(chain),
+                    is_lower_alpha(chain),
                     SecuredAssetError::InvalidDenom(str.to_string())
                 );
-
                 ensure!(
-                    Regex::new(r"^[a-z]+(?:-0x[0-9a-f]{40})?$")
-                        .unwrap()
-                        .is_match(symbol),
+                    is_valid_symbol(symbol),
                     SecuredAssetError::InvalidDenom(str.to_string())
                 );
 
@@ -304,6 +300,24 @@ pub enum SecuredAssetError {
 
     #[error("Invalid secured asset denom string {0}")]
     InvalidDenom(String),
+}
+
+fn is_lower_alpha(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b: u8| b.is_ascii_lowercase())
+}
+
+fn is_lower_hex(s: &str) -> bool {
+    !s.is_empty()
+        && s.bytes()
+            .all(|b: u8| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+fn is_valid_symbol(symbol: &str) -> bool {
+    if let Some((base, hex)) = symbol.split_once("-0x") {
+        is_lower_alpha(base) && hex.len() == 40 && is_lower_hex(hex)
+    } else {
+        is_lower_alpha(symbol)
+    }
 }
 
 impl Memoed for Asset {

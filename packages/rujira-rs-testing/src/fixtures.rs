@@ -10,7 +10,7 @@ pub fn mock_mimir(request: Binary) -> Result<Binary, Error> {
     let mut buf = Vec::new();
 
     match req.key.to_uppercase().as_str() {
-        "SECUREDASSETMINSLIPBPS" => proto::types::QueryMimirWithKeyResponse { value: 10i64 }
+        "SECUREDASSETSLIPMINBPS" => proto::types::QueryMimirWithKeyResponse { value: 10i64 }
             .encode(&mut buf)
             .unwrap(),
         _ => return Err(StdError::generic_err("Mimir Key not found").into()),

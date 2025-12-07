@@ -6,8 +6,8 @@ use crate::state::State;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, Addr, BankMsg, Binary, Decimal, Deps, DepsMut, Empty, Env, MessageInfo,
-    Response, StdResult, Uint128,
+    coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response,
+    StdResult, Uint128,
 };
 use cw2::set_contract_version;
 use cw_utils::must_pay;
@@ -318,13 +318,8 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(
-    deps: DepsMut,
-    _env: Env,
-    (fee, fee_address): (Decimal, Addr),
-) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    Config::migrate(deps, fee, fee_address)?;
     Ok(Response::default())
 }
 

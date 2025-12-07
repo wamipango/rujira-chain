@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Api, Decimal, DepsMut, StdResult, Storage};
+use cosmwasm_std::{Addr, Api, Decimal, StdResult, Storage};
 use cw_storage_plus::Item;
 use rujira_rs::ghost::vault::{InstantiateMsg, Interest};
 
@@ -41,22 +41,6 @@ impl Config {
 
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
         CONFIG.save(storage, self)
-    }
-
-    pub fn migrate(deps: DepsMut, fee: Decimal, fee_address: Addr) -> StdResult<()> {
-        #[cw_serde]
-        pub struct Legacy {
-            pub denom: String,
-            pub interest: Interest,
-        }
-        let legacy: Legacy = Item::new("config").load(deps.storage)?;
-        Self {
-            denom: legacy.denom,
-            interest: legacy.interest,
-            fee,
-            fee_address,
-        }
-        .save(deps.storage)
     }
 }
 
