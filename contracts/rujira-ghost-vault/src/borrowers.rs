@@ -5,24 +5,18 @@ use cw_storage_plus::{Bound, Map};
 use rujira_rs::SharePool;
 use std::{
     cmp::min,
+    collections::HashMap,
     ops::{Add, Sub},
 };
 
 static BORROWERS: Map<Addr, Borrower> = Map::new("borrowers");
-// Delegates are borrowers that consume their parent's limit
-static DELEGATES: Map<(Addr, Addr), Delegate> = Map::new("delegates");
+// Delegated shares for a borrower
+static DELEGATE_SHARES: Map<(Addr, Addr), Uint128> = Map::new("delegates");
 
 #[cw_serde]
 pub struct Borrower {
     pub addr: Addr,
     pub limit: Uint128,
-    pub shares: Uint128,
-}
-
-#[cw_serde]
-pub struct Delegate {
-    pub borrower: Borrower,
-    pub addr: Addr,
     pub shares: Uint128,
 }
 
@@ -35,35 +29,67 @@ impl Borrower {
         }
     }
 
-    pub fn delegate(&self, storage: &dyn Storage, addr: Addr) -> StdResult<Delegate> {
-        match DELEGATES.load(storage, (self.addr.clone(), addr.clone())) {
-            Ok(x) => Ok(x),
-            Err(StdError::NotFound { .. }) => Ok(Delegate {
-                borrower: self.clone(),
-                addr,
-                shares: Uint128::zero(),
-            }),
-            Err(err) => Err(err),
-        }
-    }
-
     pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
         BORROWERS.save(storage, self.addr.clone(), self)
     }
 
-    pub fn borrow(&mut self, pool: &SharePool, shares: Uint128) -> Result<(), ContractError> {
+    pub fn delegate_shares(&self, storage: &dyn Storage, delegate: Addr) -> Uint128 {
+        DELEGATE_SHARES
+            .load(storage, (self.addr.clone(), delegate))
+            .unwrap_or_default()
+    }
+
+    pub fn delegate_borrow(
+        &mut self,
+        storage: &mut dyn Storage,
+        delegate: Addr,
+        pool: &SharePool,
+        shares: Uint128,
+    ) -> Result<(), ContractError> {
+        DELEGATE_SHARES.update(
+            storage,
+            (self.addr.clone(), delegate),
+            |v| -> Result<Uint128, ContractError> { Ok(v.unwrap_or_default().add(shares)) },
+        )?;
+        self.borrow(storage, pool, shares)
+    }
+
+    pub fn borrow(
+        &mut self,
+        storage: &mut dyn Storage,
+        pool: &SharePool,
+        shares: Uint128,
+    ) -> Result<(), ContractError> {
         if pool.ownership(self.shares.add(shares)).gt(&self.limit) {
             return Err(ContractError::BorrowLimitReached { limit: self.limit });
         }
         self.shares += shares;
-
-        Ok(())
+        Ok(self.save(storage)?)
     }
 
-    pub fn repay(&mut self, amount: Uint128) -> Uint128 {
+    pub fn repay(
+        &mut self,
+        storage: &mut dyn Storage,
+        amount: Uint128,
+    ) -> Result<Uint128, ContractError> {
         let repaid = min(amount, self.shares);
         self.shares -= repaid;
-        amount.sub(repaid)
+        let shares = amount.sub(repaid);
+        self.save(storage)?;
+        Ok(shares)
+    }
+
+    pub fn delegate_repay(
+        &mut self,
+        storage: &mut dyn Storage,
+        delegate: Addr,
+        amount: Uint128,
+    ) -> Result<Uint128, ContractError> {
+        let k = (self.addr.clone(), delegate);
+        let delegate = DELEGATE_SHARES.load(storage, k.clone())?;
+        let repaid = min(amount, delegate);
+        DELEGATE_SHARES.save(storage, k, &delegate.checked_sub(repaid)?)?;
+        self.repay(storage, repaid)
     }
 
     pub fn set(storage: &mut dyn Storage, addr: Addr, limit: Uint128) -> StdResult<()> {
@@ -90,25 +116,42 @@ impl Borrower {
     }
 }
 
-impl Delegate {
-    pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
-        DELEGATES.save(
+// ------------ Migration ------------
+#[cw_serde]
+pub struct OldDelegate {
+    pub borrower: Borrower,
+    pub addr: Addr,
+    pub shares: Uint128,
+}
+
+pub fn migrate(storage: &mut dyn Storage) -> StdResult<()> {
+    let old: Map<(Addr, Addr), OldDelegate> = Map::new("delegates");
+
+    // Collect all old delegates first to avoid borrow conflicts
+    let old_delegates: Vec<((Addr, Addr), OldDelegate)> = old
+        .range(storage, None, None, Order::Ascending)
+        .collect::<StdResult<Vec<_>>>()?;
+
+    let mut delegate_shares_by_borrower: HashMap<Addr, Uint128> = HashMap::new();
+
+    for ((borrower_addr, delegate_addr), old_delegate) in old_delegates {
+        DELEGATE_SHARES.save(
             storage,
-            (self.borrower.addr.clone(), self.addr.clone()),
-            self,
+            (borrower_addr.clone(), delegate_addr),
+            &old_delegate.shares,
         )?;
-        self.borrower.save(storage)
+
+        delegate_shares_by_borrower
+            .entry(borrower_addr)
+            .and_modify(|total| *total += old_delegate.shares)
+            .or_insert(old_delegate.shares);
     }
 
-    pub fn borrow(&mut self, pool: &SharePool, shares: Uint128) -> Result<(), ContractError> {
-        self.shares += shares;
-        self.borrower.borrow(pool, shares)
+    for (borrower_addr, expected_shares) in delegate_shares_by_borrower {
+        let mut borrower = BORROWERS.load(storage, borrower_addr.clone())?;
+        borrower.shares = expected_shares;
+        borrower.save(storage)?;
     }
 
-    pub fn repay(&mut self, amount: Uint128) -> Uint128 {
-        let repaid = min(amount, self.shares);
-        self.shares -= repaid;
-        self.borrower.repay(repaid);
-        amount.sub(repaid)
-    }
+    Ok(())
 }

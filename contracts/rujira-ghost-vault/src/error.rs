@@ -1,4 +1,6 @@
-use cosmwasm_std::{CheckedFromRatioError, ConversionOverflowError, StdError, Uint128};
+use cosmwasm_std::{
+    CheckedFromRatioError, ConversionOverflowError, OverflowError, StdError, Uint128,
+};
 use cw_utils::PaymentError;
 use rujira_rs::SharePoolError;
 use thiserror::Error;
@@ -19,6 +21,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     SharePool(#[from] SharePoolError),
+
+    #[error("{0}")]
+    Overflow(#[from] OverflowError),
 
     #[error("Unauthorized")]
     Unauthorized {},

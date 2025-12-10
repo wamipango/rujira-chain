@@ -121,14 +121,15 @@ pub fn execute_market(
             let shares = state.borrow(amount)?;
             match delegate.clone() {
                 Some(d) => {
-                    let mut delegate =
-                        borrower.delegate(deps.storage, deps.api.addr_validate(&d)?)?;
-                    delegate.borrow(&state.debt_pool, shares)?;
-                    delegate.save(deps.storage)?;
+                    borrower.delegate_borrow(
+                        deps.storage,
+                        deps.api.addr_validate(&d)?,
+                        &state.debt_pool,
+                        shares,
+                    )?;
                 }
                 None => {
-                    borrower.borrow(&state.debt_pool, shares)?;
-                    borrower.save(deps.storage)?;
+                    borrower.borrow(deps.storage, &state.debt_pool, shares)?;
                 }
             };
 
@@ -167,18 +168,9 @@ pub fn execute_market(
                 .transpose()?;
 
             let overpayment_shares = match delegate_address.clone() {
-                Some(d) => {
-                    let mut delegate = borrower.delegate(deps.storage, d)?;
-                    let res = delegate.repay(shares);
-                    delegate.save(deps.storage)?;
-                    res
-                }
-                None => {
-                    let res = borrower.repay(shares);
-                    borrower.save(deps.storage)?;
-                    res
-                }
-            };
+                Some(d) => borrower.delegate_repay(deps.storage, d, shares),
+                None => borrower.repay(deps.storage, shares),
+            }?;
 
             let overpayment_value = state.debt_pool.ownership(overpayment_shares);
             let overpayment_receipient = delegate_address.unwrap_or(borrower.addr.clone());
@@ -265,7 +257,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         }
         QueryMsg::Delegate { borrower, addr } => {
             let borrower = Borrower::load(deps.storage, deps.api.addr_validate(&borrower)?)?;
-            let delegate = borrower.delegate(deps.storage, deps.api.addr_validate(&addr)?)?;
+            let delegate = borrower.delegate_shares(deps.storage, deps.api.addr_validate(&addr)?);
             let current = state.debt_pool.ownership(borrower.shares);
 
             Ok(to_json_binary(&DelegateResponse {
@@ -281,8 +273,8 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                     ),
                 },
                 addr,
-                current: state.debt_pool.ownership(delegate.shares),
-                shares: delegate.shares,
+                current: state.debt_pool.ownership(delegate),
+                shares: delegate,
             })?)
         }
         QueryMsg::Borrowers { limit, start_after } => {
@@ -320,10 +312,11 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    crate::borrowers::migrate(deps.storage)?;
     Ok(Response::default())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 mod tests {
 
     use std::str::FromStr;
