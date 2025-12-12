@@ -70,26 +70,26 @@ impl Borrower {
     pub fn repay(
         &mut self,
         storage: &mut dyn Storage,
-        amount: Uint128,
+        shares: Uint128,
     ) -> Result<Uint128, ContractError> {
-        let repaid = min(amount, self.shares);
+        let repaid = min(shares, self.shares);
         self.shares -= repaid;
-        let shares = amount.sub(repaid);
         self.save(storage)?;
-        Ok(shares)
+        Ok(shares.sub(repaid))
     }
 
     pub fn delegate_repay(
         &mut self,
         storage: &mut dyn Storage,
         delegate: Addr,
-        amount: Uint128,
+        shares: Uint128,
     ) -> Result<Uint128, ContractError> {
         let k = (self.addr.clone(), delegate);
         let delegate = DELEGATE_SHARES.load(storage, k.clone())?;
-        let repaid = min(amount, delegate);
+        let repaid = min(shares, delegate);
         DELEGATE_SHARES.save(storage, k, &delegate.checked_sub(repaid)?)?;
-        self.repay(storage, repaid)
+        self.repay(storage, repaid)?;
+        Ok(shares.sub(repaid))
     }
 
     pub fn set(storage: &mut dyn Storage, addr: Addr, limit: Uint128) -> StdResult<()> {
