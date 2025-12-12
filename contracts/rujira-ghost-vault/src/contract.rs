@@ -161,29 +161,37 @@ pub fn execute_market(
         }
         MarketMsg::Repay { delegate } => {
             let amount = must_pay(&info, config.denom.as_str())?;
-            let shares = state.repay(amount)?;
             let delegate_address = delegate
                 .clone()
                 .map(|d| deps.api.addr_validate(&d))
                 .transpose()?;
 
-            let overpayment_shares = match delegate_address.clone() {
+            let borrower_shares = match delegate_address.as_ref() {
+                Some(d) => borrower.delegate_shares(deps.storage, d.clone()),
+                None => borrower.shares,
+            };
+            let borrower_debt = state.debt_pool.ownership(borrower_shares);
+            let repay_amount = min(amount, borrower_debt);
+
+            let shares = state.repay(repay_amount)?;
+
+            match delegate_address.clone() {
                 Some(d) => borrower.delegate_repay(deps.storage, d, shares),
                 None => borrower.repay(deps.storage, shares),
             }?;
 
-            let overpayment_value = state.debt_pool.ownership(overpayment_shares);
-            let overpayment_receipient = delegate_address.unwrap_or(borrower.addr.clone());
             let mut response = Response::default().add_event(event_repay(
                 borrower.addr.clone(),
                 delegate,
-                amount,
+                repay_amount,
                 shares,
             ));
-            if !overpayment_value.is_zero() {
+
+            let refund = amount.checked_sub(repay_amount)?;
+            if !refund.is_zero() {
                 response = response.add_message(BankMsg::Send {
-                    to_address: overpayment_receipient.to_string(),
-                    amount: coins(overpayment_value.u128(), config.denom),
+                    to_address: info.sender.to_string(),
+                    amount: coins(refund.u128(), &config.denom),
                 });
             }
             response

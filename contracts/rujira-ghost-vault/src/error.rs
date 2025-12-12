@@ -44,6 +44,9 @@ pub enum ContractError {
     #[error("ExcessiveRepay debt {debt} repaid {repaid}")]
     ExcessiveRepay { debt: Uint128, repaid: Uint128 },
 
+    #[error("ZeroDebt")]
+    ZeroDebt {},
+
     #[error("Invalid: {0}")]
     Invalid(String),
     // Add any other custom errors you like here.

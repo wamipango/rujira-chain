@@ -63,11 +63,8 @@ impl State {
     }
 
     pub fn repay(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
-        if amount.gt(&self.debt_pool.size()) {
-            return Err(ContractError::ExcessiveRepay {
-                debt: self.debt_pool.size(),
-                repaid: amount,
-            });
+        if self.debt_pool.size().is_zero() {
+            return Err(ContractError::ZeroDebt {});
         }
         // Calculate the amount of shares that this repay will burn
         let shares = amount.multiply_ratio(self.debt_pool.shares(), self.debt_pool.size());

@@ -410,9 +410,6 @@ fn incorrect_return_asset() {
 
     let err = err.root_cause();
     let msg = format!("{err:?}");
-    // Excessive repay - we never borrowed USDT
-    assert_eq!(
-        msg,
-        "ExcessiveRepay { debt: Uint128(0), repaid: Uint128(107265590840) }"
-    );
+    // Zero Debt Pool in USDT
+    assert_eq!(msg, "ZeroDebt");
 }

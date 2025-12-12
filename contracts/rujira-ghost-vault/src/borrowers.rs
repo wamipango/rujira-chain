@@ -1,11 +1,12 @@
-use crate::ContractError;
+use crate::{state::State, ContractError};
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Order, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{
+    from_json, to_json_vec, Addr, Decimal, Order, StdError, StdResult, Storage, Uint128,
+};
 use cw_storage_plus::{Bound, Map};
 use rujira_rs::SharePool;
 use std::{
     cmp::min,
-    collections::HashMap,
     ops::{Add, Sub},
 };
 
@@ -118,40 +119,22 @@ impl Borrower {
 
 // ------------ Migration ------------
 #[cw_serde]
-pub struct OldDelegate {
-    pub borrower: Borrower,
-    pub addr: Addr,
-    pub shares: Uint128,
+struct TempSharePool {
+    size: Uint128,
+    shares: Decimal,
 }
 
 pub fn migrate(storage: &mut dyn Storage) -> StdResult<()> {
-    let old: Map<(Addr, Addr), OldDelegate> = Map::new("delegates");
-
-    // Collect all old delegates first to avoid borrow conflicts
-    let old_delegates: Vec<((Addr, Addr), OldDelegate)> = old
+    let total_borrower_shares: Uint128 = BORROWERS
         .range(storage, None, None, Order::Ascending)
-        .collect::<StdResult<Vec<_>>>()?;
+        .map(|r| r.map(|(_, b)| b.shares))
+        .sum::<StdResult<Uint128>>()?;
 
-    let mut delegate_shares_by_borrower: HashMap<Addr, Uint128> = HashMap::new();
-
-    for ((borrower_addr, delegate_addr), old_delegate) in old_delegates {
-        DELEGATE_SHARES.save(
-            storage,
-            (borrower_addr.clone(), delegate_addr),
-            &old_delegate.shares,
-        )?;
-
-        delegate_shares_by_borrower
-            .entry(borrower_addr)
-            .and_modify(|total| *total += old_delegate.shares)
-            .or_insert(old_delegate.shares);
-    }
-
-    for (borrower_addr, expected_shares) in delegate_shares_by_borrower {
-        let mut borrower = BORROWERS.load(storage, borrower_addr.clone())?;
-        borrower.shares = expected_shares;
-        borrower.save(storage)?;
-    }
-
-    Ok(())
+    let mut state = State::load(storage)?;
+    let serialized = to_json_vec(&TempSharePool {
+        size: state.debt_pool.size(),
+        shares: Decimal::from_ratio(total_borrower_shares, 1u128),
+    })?;
+    state.debt_pool = from_json(&serialized)?;
+    state.save(storage)
 }
