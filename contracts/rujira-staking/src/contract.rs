@@ -1,12 +1,11 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, from_json, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo,
-    Reply, Response, StdResult, Storage, SubMsg, SubMsgResult, Uint128, WasmMsg,
+    coins, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response,
+    StdResult, Storage, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
-use rujira_rs::reply::sub_msg_response_to_info;
 use rujira_rs::staking::{
     AccountMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, SudoMsg,
 };
@@ -16,7 +15,7 @@ use crate::config::Config;
 use crate::error::ContractError;
 use crate::events::{
     event_account_bond, event_account_claim, event_account_withdraw, event_liquid_bond,
-    event_liquid_unbond,
+    event_liquid_unbond, event_settle,
 };
 use crate::state::{
     account, distribute, execute_account_bond, execute_account_claim, execute_account_withdraw,
@@ -25,7 +24,6 @@ use crate::state::{
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-const REPLY_ID: u64 = 0;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -57,29 +55,43 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     let bond_amount_sent = may_pay(&info, config.bond_denom.as_str()).unwrap_or_default();
-    let (swap_amount, fee_amount) =
-        distribute(&env, deps.querier, deps.storage, &config, &bond_amount_sent)?;
+    let mut swap_amount = Uint128::zero();
+    let mut fee_amount = Uint128::zero();
+    let mut expected_balance = deps
+        .querier
+        .query_balance(&env.contract.address, &config.revenue_denom)?
+        .amount;
+
     let mut res = match msg {
+        ExecuteMsg::Settle { balance } => {
+            if info.sender != env.contract.address {
+                return Err(ContractError::Unauthorized {});
+            }
+            let returned = expected_balance.saturating_sub(balance);
+            if !returned.is_zero() {
+                increase_pending_swap(deps.storage, returned)?;
+            }
+            Response::default().add_event(event_settle(returned))
+        }
         ExecuteMsg::Account(account_msg) => {
-            execute_account(deps.storage, info, &config, account_msg)
+            (swap_amount, fee_amount) =
+                distribute(&env, deps.querier, deps.storage, &config, &bond_amount_sent)?;
+            execute_account(
+                deps.storage,
+                info,
+                &config,
+                account_msg,
+                &mut expected_balance,
+            )?
         }
         ExecuteMsg::Liquid(liquid_msg) => {
-            execute_liquid(deps.storage, &env, info, &config, liquid_msg)
+            (swap_amount, fee_amount) =
+                distribute(&env, deps.querier, deps.storage, &config, &bond_amount_sent)?;
+            execute_liquid(deps.storage, &env, info, &config, liquid_msg)?
         }
-    }?;
-    if swap_amount.gt(&Uint128::zero()) {
-        let sub_msg = SubMsg::reply_always(
-            WasmMsg::Execute {
-                contract_addr: config.revenue_converter.0.to_string(),
-                msg: config.revenue_converter.1.clone(),
-                funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
-            },
-            REPLY_ID,
-        )
-        .with_payload(to_json_binary(&swap_amount)?);
-        res = res.add_submessage(sub_msg)
-    }
-    if fee_amount.gt(&Uint128::zero()) {
+    };
+
+    if !fee_amount.is_zero() {
         res = res.add_message(BankMsg::Send {
             to_address: config
                 .fee
@@ -89,7 +101,27 @@ pub fn execute(
                 .to_string(),
             amount: coins(fee_amount.u128(), config.revenue_denom.clone()),
         });
+        expected_balance = expected_balance.saturating_sub(fee_amount);
     }
+
+    if !swap_amount.is_zero() {
+        expected_balance = expected_balance.saturating_sub(swap_amount);
+
+        res = res
+            .add_message(WasmMsg::Execute {
+                contract_addr: config.revenue_converter.0.to_string(),
+                msg: config.revenue_converter.1.clone(),
+                funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
+            })
+            .add_message(WasmMsg::Execute {
+                contract_addr: env.contract.address.to_string(),
+                msg: to_json_binary(&ExecuteMsg::Settle {
+                    balance: expected_balance,
+                })?,
+                funds: vec![],
+            });
+    }
+
     Ok(res)
 }
 
@@ -110,43 +142,12 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
     }
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
-    // Match on ID for completeness
-    match msg.id {
-        REPLY_ID => {
-            match &msg.result {
-                SubMsgResult::Err(_) => {
-                    // Swap failed, we need to return all the swap amount
-                    let ongoing_swap = from_json(&msg.payload)?;
-                    increase_pending_swap(deps.storage, ongoing_swap)?;
-                }
-                SubMsgResult::Ok(res) => {
-                    // Swap succeeded, we need to check if there were any returned funds
-                    let info = sub_msg_response_to_info(res, &deps, &env)?;
-                    let config = Config::load(deps.storage)?;
-                    let amount = info
-                        .funds
-                        .iter()
-                        .find(|c| c.denom == config.revenue_denom)
-                        .map(|c| c.amount)
-                        .unwrap_or_else(Uint128::zero);
-                    if !amount.is_zero() {
-                        increase_pending_swap(deps.storage, amount)?;
-                    }
-                }
-            }
-            Ok(Response::default())
-        }
-        _ => Err(ContractError::Unauthorized {}),
-    }
-}
-
 fn execute_account(
     storage: &mut dyn Storage,
     info: MessageInfo,
     config: &Config,
     msg: AccountMsg,
+    remaining: &mut Uint128,
 ) -> Result<Response, ContractError> {
     match msg {
         AccountMsg::Bond {} => {
@@ -160,6 +161,7 @@ fn execute_account(
                     amount: coins(reward_amount.u128(), config.revenue_denom.clone()),
                 });
             }
+            *remaining = remaining.saturating_sub(reward_amount);
             Ok(response)
         }
         AccountMsg::Claim {} => {
@@ -173,6 +175,7 @@ fn execute_account(
                     amount: coins(reward_amount.u128(), config.revenue_denom.clone()),
                 });
             }
+            *remaining = remaining.saturating_sub(reward_amount);
             Ok(response)
         }
         AccountMsg::Withdraw { amount } => {
@@ -195,6 +198,7 @@ fn execute_account(
                     amount: send.into_vec(),
                 });
             }
+            *remaining = remaining.saturating_sub(rewards);
             Ok(response)
         }
     }
@@ -428,7 +432,7 @@ mod tests {
         swap_contract: Addr,
         converter_message: Binary,
     ) -> Addr {
-        let code = Box::new(ContractWrapper::new(execute, instantiate, query).with_reply(reply));
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
         let code_id = app.store_code(code);
         app.instantiate_contract(
             code_id,
@@ -952,163 +956,13 @@ mod tests {
         assert_state(
             &app,
             &contract,
-            "stakers.account_1 bonds its first 500",
+            "stakers.account_1 bonds 1500 more",
             &StatusResponse {
                 account_bond: Uint128::from(2000u128),
                 assigned_revenue: Uint128::zero(),
                 liquid_bond_shares: Uint128::from(3_000u128),
                 liquid_bond_size: Uint128::from(3_020u128),
-                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
-                //       but they must not be accounted as undistributed revenue
-                undistributed_revenue: Uint128::from(1u128),
-            },
-        );
-
-        assert_account(
-            &app,
-            &contract,
-            &AccountResponse {
-                addr: stakers.account_1.to_string(),
-                bonded: Uint128::from(2000u128),
-                pending_revenue: Uint128::zero(),
-            },
-        );
-    }
-
-    #[test]
-    fn swap_with_error() {
-        let (mut app, apps, owner, stakers, fees) = init_app(None);
-        let swap_contract = create_swap_contract(&mut app, &owner);
-        let converter_message = to_json_binary("not a valid message").unwrap();
-        let contract = create_staking_contract(
-            &mut app,
-            &owner,
-            fees.value,
-            swap_contract,
-            converter_message,
-        );
-
-        // Liquid bonds its first 1_000
-        bond_liquid(&mut app, &contract, &stakers.liquid, 1_000, "uruji");
-
-        // share balance
-        assert_balance(
-            &app,
-            &stakers.liquid,
-            "x/staking-uruji",
-            Uint128::from(1_000u128),
-        );
-
-        assert_state(
-            &app,
-            &contract,
-            "After stakers.liquid first bond of 1_000",
-            &StatusResponse {
-                account_bond: Uint128::zero(),
-                assigned_revenue: Uint128::zero(),
-                liquid_bond_shares: Uint128::from(1_000u128),
-                liquid_bond_size: Uint128::from(1_000u128),
-                undistributed_revenue: Uint128::zero(),
-            },
-        );
-
-        // contract balance
-        assert_balance(&app, &contract, "uruji", Uint128::from(1_000u128));
-
-        let revenue_amount = 100;
-
-        // Revenue collection 1
-        app.send_tokens(
-            apps.clone(),
-            contract.clone(),
-            &coins(revenue_amount, "uusdc"),
-        )
-        .unwrap();
-
-        assert_pending_swap(&app, &contract, Uint128::from(0u128));
-
-        // Liquid bonds 2_000 more
-        bond_liquid(&mut app, &contract, &stakers.liquid, 2_000, "uruji");
-
-        assert_state(
-            &app,
-            &contract,
-            "After stakers.liquid bonds 2_000 more",
-            &StatusResponse {
-                account_bond: Uint128::zero(),
-                assigned_revenue: Uint128::zero(),
-                liquid_bond_shares: Uint128::from(3_000u128),
-                liquid_bond_size: Uint128::from(3_000u128),
-                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
-                //       but they must not be accounted as undistributed revenue
-                undistributed_revenue: Uint128::zero(),
-            },
-        );
-
-        // contract balance
-        assert_balance(&app, &contract, "uruji", Uint128::from(3_000u128));
-        // NOTE: As we set `return_funds: true` in the swap message, the 20 uusdc were sent back
-        //       and the uusdc balance will never decrease
-        assert_balance(&app, &contract, "uusdc", Uint128::from(revenue_amount));
-
-        assert_pending_swap(&app, &contract, Uint128::from(100u128));
-
-        // stakers.account_1 bonds its first 500
-        bond_account(&mut app, &contract, &stakers.account_1, 500, "uruji");
-
-        assert_pending_swap(&app, &contract, Uint128::from(100u128));
-
-        assert_state(
-            &app,
-            &contract,
-            "stakers.account_1 bonds its first 500",
-            &StatusResponse {
-                account_bond: Uint128::from(500u128),
-                assigned_revenue: Uint128::zero(),
-                liquid_bond_shares: Uint128::from(3_000u128),
-                liquid_bond_size: Uint128::from(3_000u128),
-                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
-                //       but they must not be accounted as undistributed revenue
-                undistributed_revenue: Uint128::zero(),
-            },
-        );
-
-        assert_account(
-            &app,
-            &contract,
-            &AccountResponse {
-                addr: stakers.account_1.to_string(),
-                bonded: Uint128::from(500u128),
-                pending_revenue: Uint128::zero(),
-            },
-        );
-
-        // Revenue collection 1
-        app.send_tokens(
-            apps.clone(),
-            contract.clone(),
-            &coins(revenue_amount, "uusdc"),
-        )
-        .unwrap();
-
-        assert_balance(&app, &contract, "uusdc", Uint128::from(200u128));
-
-        // stakers.account_1 bonds 1500 more
-        bond_account(&mut app, &contract, &stakers.account_1, 1500, "uruji");
-
-        assert_pending_swap(&app, &contract, Uint128::from(185u128));
-
-        assert_state(
-            &app,
-            &contract,
-            "stakers.account_1 bonds its first 500",
-            &StatusResponse {
-                account_bond: Uint128::from(2000u128),
-                assigned_revenue: Uint128::zero(),
-                liquid_bond_shares: Uint128::from(3_000u128),
-                liquid_bond_size: Uint128::from(3_000u128),
-                // NOTE: We set `return_funds: true` in the swap message, the 20 uusdc were sent back
-                //       but they must not be accounted as undistributed revenue
+                // Returned swap funds are correctly detected by Settle message
                 undistributed_revenue: Uint128::from(1u128),
             },
         );

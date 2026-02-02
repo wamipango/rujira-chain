@@ -32,3 +32,7 @@ pub fn event_liquid_unbond(owner: Addr, shares: Uint128, returned: Uint128) -> E
         .add_attribute("shares", shares)
         .add_attribute("returned", returned)
 }
+
+pub fn event_settle(returned: Uint128) -> Event {
+    Event::new(format!("{}/settle", env!("CARGO_PKG_NAME"))).add_attribute("returned", returned)
+}

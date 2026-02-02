@@ -21,6 +21,8 @@ pub enum ExecuteMsg {
     Account(AccountMsg),
     /// Actions relating to liquid staking
     Liquid(LiquidMsg),
+    /// Internal: settle returned swap funds
+    Settle { balance: Uint128 },
 }
 
 #[cw_serde]

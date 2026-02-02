@@ -26,8 +26,6 @@ mod premium;
 pub mod proto;
 #[cfg(feature = "query")]
 pub mod query;
-#[cfg(feature = "reply")]
-pub mod reply;
 #[cfg(feature = "schema")]
 pub mod schema;
 #[cfg(feature = "share-pool")]

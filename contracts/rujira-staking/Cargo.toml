@@ -2,7 +2,7 @@
 authors = ["codehans <94654388+codehans@users.noreply.github.com>"]
 edition = { workspace = true }
 name    = "rujira-staking"
-version = "1.2.0"
+version = "1.2.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -30,7 +30,7 @@ cosmwasm-std    = { workspace = true }
 cw-storage-plus = { workspace = true }
 cw-utils        = { workspace = true }
 cw2             = { workspace = true }
-rujira-rs       = { workspace = true, features = ["interface-staking", "share-pool", "reply"], default-features = false }
+rujira-rs       = { workspace = true, features = ["interface-staking", "share-pool"], default-features = false }
 schemars        = { workspace = true }
 serde           = { workspace = true }
 thiserror       = { workspace = true }
