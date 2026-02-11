@@ -98,8 +98,12 @@ impl State {
         Ok(interest.rate(self.utilization()?)?)
     }
 
-    pub fn lend_rate(&self, interest: &Interest) -> Result<Decimal, ContractError> {
-        Ok(interest.rate(self.utilization()?)? * self.utilization()?)
+    pub fn lend_rate(&self, config: &Config) -> Result<Decimal, ContractError> {
+        Ok(config
+            .interest
+            .rate(self.utilization()?)?
+            .mul(self.utilization()?)
+            .mul(Decimal::one() - config.fee))
     }
 
     pub fn calculate_interest(

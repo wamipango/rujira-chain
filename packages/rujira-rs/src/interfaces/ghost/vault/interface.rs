@@ -77,6 +77,8 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub denom: String,
     pub interest: Interest,
+    pub fee_address: String,
+    pub fee: Decimal,
 }
 
 #[cw_serde]

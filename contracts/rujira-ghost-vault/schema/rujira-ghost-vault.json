@@ -606,10 +606,18 @@
       "type": "object",
       "required": [
         "denom",
+        "fee",
+        "fee_address",
         "interest"
       ],
       "properties": {
         "denom": {
+          "type": "string"
+        },
+        "fee": {
+          "$ref": "#/definitions/Decimal"
+        },
+        "fee_address": {
           "type": "string"
         },
         "interest": {

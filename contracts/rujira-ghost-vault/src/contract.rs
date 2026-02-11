@@ -252,11 +252,13 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         QueryMsg::Config {} => Ok(to_json_binary(&ConfigResponse {
             denom: config.denom,
             interest: config.interest,
+            fee: config.fee,
+            fee_address: config.fee_address.to_string(),
         })?),
 
         QueryMsg::Status {} => Ok(to_json_binary(&StatusResponse {
             debt_rate: state.debt_rate(&config.interest)?,
-            lend_rate: state.lend_rate(&config.interest)?,
+            lend_rate: state.lend_rate(&config)?,
             utilization_ratio: state.utilization()?,
             last_updated: state.last_updated,
             debt_pool: PoolResponse {
