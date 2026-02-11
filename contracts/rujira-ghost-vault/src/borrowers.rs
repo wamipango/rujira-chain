@@ -1,8 +1,6 @@
-use crate::{state::State, ContractError};
+use crate::ContractError;
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{
-    from_json, to_json_vec, Addr, Decimal, Order, StdError, StdResult, Storage, Uint128,
-};
+use cosmwasm_std::{Addr, Order, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Bound, Map};
 use rujira_rs::SharePool;
 use std::{
@@ -115,26 +113,4 @@ impl Borrower {
             .take(limit)
             .map(|x| x.map(|(_, v)| v))
     }
-}
-
-// ------------ Migration ------------
-#[cw_serde]
-struct TempSharePool {
-    size: Uint128,
-    shares: Decimal,
-}
-
-pub fn migrate(storage: &mut dyn Storage) -> StdResult<()> {
-    let total_borrower_shares: Uint128 = BORROWERS
-        .range(storage, None, None, Order::Ascending)
-        .map(|r| r.map(|(_, b)| b.shares))
-        .sum::<StdResult<Uint128>>()?;
-
-    let mut state = State::load(storage)?;
-    let serialized = to_json_vec(&TempSharePool {
-        size: state.debt_pool.size(),
-        shares: Decimal::from_ratio(total_borrower_shares, 1u128),
-    })?;
-    state.debt_pool = from_json(&serialized)?;
-    state.save(storage)
 }

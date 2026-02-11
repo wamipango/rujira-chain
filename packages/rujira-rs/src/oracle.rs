@@ -39,7 +39,11 @@ impl Oracle for String {
         Err(OracleError::Unavailable {})
     }
     fn oracle_price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
-        Ok(OraclePrice::load(q, self)?.price)
+        let price = OraclePrice::load(q, self)?;
+        if price.price.is_zero() {
+            return Err(OracleError::InvalidZero(self.to_string()));
+        }
+        Ok(price.price)
     }
 }
 
@@ -82,6 +86,8 @@ pub enum OracleError {
     OraclePrice(#[from] OraclePriceError),
     #[error("{0}")]
     Overflow(#[from] OverflowError),
+    #[error("InvalidZero {0}")]
+    InvalidZero(String),
     #[error("Unavailable")]
     Unavailable {},
 }

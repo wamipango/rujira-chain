@@ -48,6 +48,7 @@ pub enum MarketMsg {
 pub enum SudoMsg {
     SetBorrower { contract: String, limit: Uint128 },
     SetInterest(Interest),
+    SetFee((Decimal, String)),
 }
 
 #[cw_serde]

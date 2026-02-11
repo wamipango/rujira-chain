@@ -4,7 +4,7 @@ use cosmwasm_std::{
     coins, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response,
     StdResult, Storage, Uint128, WasmMsg,
 };
-use cw2::set_contract_version;
+use cw2::{ensure_from_older_version, set_contract_version};
 use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
 use rujira_rs::staking::{
     AccountMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, SudoMsg,
@@ -42,7 +42,8 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
+    ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     Ok(Response::default())
 }
 

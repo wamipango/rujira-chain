@@ -31,6 +31,9 @@ pub enum ContractError {
     #[error("UnauthorizedBorrower")]
     UnauthorizedBorrower {},
 
+    #[error("InsufficentCapacity {available}")]
+    InsufficentCapacity { available: Uint128 },
+
     #[error("BorrowLimitReached {limit}")]
     BorrowLimitReached { limit: Uint128 },
 

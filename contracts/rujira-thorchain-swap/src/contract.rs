@@ -6,7 +6,7 @@ use cosmwasm_std::{
     coin, ensure, ensure_eq, to_json_binary, Addr, BankMsg, Binary, Coin, Deps, DepsMut, Empty,
     Env, MessageInfo, Order, Response, StdResult, Uint128, WasmMsg,
 };
-use cw2::set_contract_version;
+use cw2::{ensure_from_older_version, set_contract_version};
 use cw_storage_plus::Map;
 use cw_utils::one_coin;
 use rujira_rs::query::SwapQuoteQuery;
@@ -244,6 +244,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     Ok(Response::default())
 }
 

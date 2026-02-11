@@ -72,26 +72,34 @@ impl State {
         Ok(shares)
     }
 
-    pub fn utilization(&self) -> Decimal {
+    pub fn capacity(&self) -> Result<Uint128, ContractError> {
+        Ok(self
+            .deposit_pool
+            .size()
+            .checked_sub(self.debt_pool.size())?)
+    }
+
+    pub fn utilization(&self) -> Result<Decimal, ContractError> {
         // We consider accrued interest and debt in the utilization rate
         if self.deposit_pool.size().is_zero() {
-            Decimal::zero()
+            Ok(Decimal::zero())
         } else {
-            Decimal::one()
-                - Decimal::from_ratio(
+            Ok(Decimal::one()
+                .checked_sub(Decimal::from_ratio(
                     // We use the debt pool size to determine utilization
-                    self.deposit_pool.size().sub(self.debt_pool.size()),
+                    self.capacity()?,
                     self.deposit_pool.size(),
-                )
+                ))
+                .unwrap_or(Decimal::one()))
         }
     }
 
-    pub fn debt_rate(&self, interest: &Interest) -> StdResult<Decimal> {
-        interest.rate(self.utilization())
+    pub fn debt_rate(&self, interest: &Interest) -> Result<Decimal, ContractError> {
+        Ok(interest.rate(self.utilization()?)?)
     }
 
-    pub fn lend_rate(&self, interest: &Interest) -> StdResult<Decimal> {
-        Ok(interest.rate(self.utilization())? * self.utilization())
+    pub fn lend_rate(&self, interest: &Interest) -> Result<Decimal, ContractError> {
+        Ok(interest.rate(self.utilization()?)? * self.utilization()?)
     }
 
     pub fn calculate_interest(
@@ -139,32 +147,29 @@ impl State {
         config: &Config,
     ) -> Result<Uint128, ContractError> {
         // Calculate interest charged on total debt since last update
-        let (interest, mut fee) =
+        let (interest, fee) =
             self.calculate_interest(&config.interest, env.block.time, config.fee)?;
-        let mut shares = Uint128::zero();
+
+        // Charge the interest to the debt pool, so that outstanding debt tokens are required to
+        // pay this interest on return
+        self.deposit_pool.deposit(interest)?;
+        self.last_updated = env.block.time;
+        self.debt_pool.deposit(interest)?;
 
         // deposit the protocol fee to the deposit pool to issue shares
         match self.deposit_pool.join(fee) {
             Ok(amount) => {
-                shares = amount;
+                self.debt_pool.deposit(fee)?;
+                Ok(amount)
             }
-            // if no shares were issued, add the fee to the pending fees for later distribution
-            // set the fee to 0 so that the debt is not charged with the fee yet
+            // if no fee shares were issued, add the fee to the pending fees for later distribution
+            // and don't allocate the fee to the debt pool
             Err(SharePoolError::Zero(_)) => {
                 self.pending_fees = self.pending_fees.add(DecimalScaled::from_ratio(fee, 1u128));
-                fee = Uint128::zero();
+                Ok(Uint128::zero())
             }
-            Err(err) => return Err(err.into()),
+            Err(err) => Err(err.into()),
         }
-
-        // Allocate the interest to the deposit pool
-        self.deposit_pool.deposit(interest)?;
-        // Charge the interest to the debt pool, so that outstanding debt tokens are required to
-        // pay this interest on return
-        self.debt_pool.deposit(interest.add(fee))?;
-        self.last_updated = env.block.time;
-
-        Ok(shares)
     }
 }
 
@@ -172,7 +177,7 @@ impl State {
 mod tests {
     use super::*;
     use cosmwasm_std::{testing::mock_env, Decimal};
-    use rujira_rs::{ghost::vault::Interest, DecimalScaled};
+    use rujira_rs::DecimalScaled;
 
     #[test]
     fn test_distribute_interest_no_mint_path() {
@@ -252,8 +257,8 @@ mod tests {
         // Distribute interest
         let shares = state.distribute_interest(&env, &config).unwrap();
 
-        // 24 shares minted for protocol fee
-        assert_eq!(shares, Uint128::new(24));
+        // 19 shares minted for protocol fee
+        assert_eq!(shares, Uint128::new(19));
 
         // Pool sizes: net_interest(216) + fee(24) = 240 total
         assert_eq!(state.deposit_pool.size(), Uint128::new(1240));

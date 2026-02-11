@@ -1,6 +1,6 @@
 {
   "contract_name": "rujira-ghost-vault",
-  "contract_version": "1.0.3",
+  "contract_version": "1.0.5",
   "idl_version": "1.0.0",
   "instantiate": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -400,6 +400,28 @@
         "properties": {
           "set_interest": {
             "$ref": "#/definitions/Interest"
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "set_fee"
+        ],
+        "properties": {
+          "set_fee": {
+            "type": "array",
+            "items": [
+              {
+                "$ref": "#/definitions/Decimal"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
           }
         },
         "additionalProperties": false

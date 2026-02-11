@@ -411,5 +411,6 @@ fn incorrect_return_asset() {
     let err = err.root_cause();
     let msg = format!("{err:?}");
     // Zero Debt Pool in USDT
-    assert_eq!(msg, "ZeroDebt");
+    // Repay aborted, position left unsafe
+    assert_eq!(msg, "Unsafe { ltv: Decimal(1.005275807471788325) }");
 }

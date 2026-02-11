@@ -6,10 +6,10 @@ use crate::state::State;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coins, to_json_binary, BankMsg, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response,
-    StdResult, Uint128,
+    coins, ensure, to_json_binary, BankMsg, Binary, Deps, DepsMut, Empty, Env, MessageInfo,
+    Response, StdResult, Uint128,
 };
-use cw2::set_contract_version;
+use cw2::{ensure_from_older_version, set_contract_version};
 use cw_utils::must_pay;
 use rujira_rs::ghost::vault::{
     BorrowerResponse, BorrowersResponse, ConfigResponse, DelegateResponse, ExecuteMsg,
@@ -118,6 +118,12 @@ pub fn execute_market(
             callback,
             delegate,
         } => {
+            ensure!(
+                amount <= state.capacity()?,
+                ContractError::InsufficentCapacity {
+                    available: state.capacity()?
+                }
+            );
             let shares = state.borrow(amount)?;
             match delegate.clone() {
                 Some(d) => {
@@ -170,7 +176,7 @@ pub fn execute_market(
                 Some(d) => borrower.delegate_shares(deps.storage, d.clone()),
                 None => borrower.shares,
             };
-            let borrower_debt = state.debt_pool.ownership(borrower_shares);
+            let borrower_debt = state.debt_pool.liability(borrower_shares);
             let repay_amount = min(amount, borrower_debt);
 
             let shares = state.repay(repay_amount)?;
@@ -190,7 +196,7 @@ pub fn execute_market(
             let refund = amount.checked_sub(repay_amount)?;
             if !refund.is_zero() {
                 response = response.add_message(BankMsg::Send {
-                    to_address: info.sender.to_string(),
+                    to_address: delegate_address.unwrap_or(info.sender).to_string(),
                     amount: coins(refund.u128(), &config.denom),
                 });
             }
@@ -202,17 +208,34 @@ pub fn execute_market(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
     let mut config = Config::load(deps.storage)?;
-
     match msg {
         SudoMsg::SetBorrower { contract, limit } => {
             Borrower::set(deps.storage, deps.api.addr_validate(&contract)?, limit)?;
             Ok(Response::default())
         }
         SudoMsg::SetInterest(interest) => {
+            let mut state = State::load(deps.storage)?;
+            let rcpt = TokenFactory::new(&env, format!("ghost-vault/{}", config.denom).as_str());
+            let fees = state.distribute_interest(&env, &config)?;
+            state.save(deps.storage)?;
             interest.validate()?;
             config.interest = interest;
+            config.save(deps.storage)?;
+            if fees.gt(&Uint128::zero()) {
+                Ok(
+                    Response::default()
+                        .add_message(rcpt.mint_msg(fees, config.fee_address.clone())),
+                )
+            } else {
+                Ok(Response::default())
+            }
+        }
+        SudoMsg::SetFee((fee, address)) => {
+            config.fee = fee;
+            config.fee_address = deps.api.addr_validate(&address)?;
+            config.validate()?;
             config.save(deps.storage)?;
             Ok(Response::default())
         }
@@ -234,7 +257,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         QueryMsg::Status {} => Ok(to_json_binary(&StatusResponse {
             debt_rate: state.debt_rate(&config.interest)?,
             lend_rate: state.lend_rate(&config.interest)?,
-            utilization_ratio: state.utilization(),
+            utilization_ratio: state.utilization()?,
             last_updated: state.last_updated,
             debt_pool: PoolResponse {
                 size: state.debt_pool.size(),
@@ -320,7 +343,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    crate::borrowers::migrate(deps.storage)?;
+    ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     Ok(Response::default())
 }
 

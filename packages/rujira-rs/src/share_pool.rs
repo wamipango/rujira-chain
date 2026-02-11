@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Decimal, Decimal256, Uint128};
+use cosmwasm_std::{Decimal, Decimal256, Uint128, Uint256};
 use std::ops::{AddAssign, Div, SubAssign};
 use thiserror::Error;
 
@@ -71,11 +71,24 @@ impl SharePool {
         self.shares.to_uint_floor()
     }
 
+    /// Floor-truncated ownership of the pool
     pub fn ownership(&self, shares: Uint128) -> Uint128 {
         if shares.is_zero() {
             return Uint128::zero();
         }
         self.size.multiply_ratio(shares, self.shares())
+    }
+
+    /// Ceil-truncated commitment to the pool. Used for debts etc
+    pub fn liability(&self, shares: Uint128) -> Uint128 {
+        if shares.is_zero() {
+            return Uint128::zero();
+        }
+
+        Uint256::from(self.size)
+            .mul_floor(Decimal256::from_ratio(shares, self.shares()))
+            .try_into()
+            .unwrap()
     }
 
     pub fn deposit(&mut self, amount: Uint128) -> Result<(), SharePoolError> {

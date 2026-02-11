@@ -60,6 +60,9 @@ pub enum ContractError {
     #[error("Account Safe")]
     Safe {},
 
+    #[error("Excessive Msgs max {0}")]
+    ExcessiveLiquidationMsgs(u64),
+
     #[error("Account Unsafe: ltv {ltv}")]
     Unsafe { ltv: Decimal },
 

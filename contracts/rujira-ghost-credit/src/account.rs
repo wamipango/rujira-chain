@@ -12,7 +12,7 @@ use rujira_rs::{
     NativeBalancePlus, OracleValue,
 };
 use sha2::{Digest, Sha256};
-use std::ops::{Add, Div};
+use std::ops::{Add, Div, Mul, Sub};
 pub static ACCOUNTS_KEY: &str = "a";
 pub static ACCOUNTS_KEY_OWNER: &str = "a__o";
 pub static ACCOUNTS_KEY_OWNER_TAG: &str = "a__ot";
@@ -149,7 +149,7 @@ impl CreditAccount {
             .to_credit_account(deps, contract, config)
     }
 
-    pub fn adjusted_ltv(&self) -> Decimal {
+    pub fn adjusted_ltv(&self) -> Result<Decimal, ContractError> {
         let collateral = self
             .collaterals
             .iter()
@@ -169,24 +169,27 @@ impl CreditAccount {
             .unwrap_or_default();
 
         if debt.is_zero() {
-            return Decimal::zero();
+            return Ok(Decimal::zero());
+        }
+        if collateral.is_zero() {
+            return Err(ContractError::Unsafe { ltv: Decimal::MAX });
         }
 
-        debt.div(collateral)
+        Ok(debt.div(collateral))
     }
 
     pub fn check_safe(&self, limit: &Decimal) -> Result<(), ContractError> {
         ensure!(
-            self.adjusted_ltv().lt(limit),
+            self.adjusted_ltv()?.lt(limit),
             ContractError::Unsafe {
-                ltv: self.adjusted_ltv()
+                ltv: self.adjusted_ltv()?
             }
         );
         Ok(())
     }
 
     pub fn check_unsafe(&self, limit: &Decimal) -> Result<(), ContractError> {
-        ensure!(self.adjusted_ltv().ge(limit), ContractError::Safe {});
+        ensure!(self.adjusted_ltv()?.ge(limit), ContractError::Safe {});
         Ok(())
     }
 
@@ -244,6 +247,18 @@ impl CreditAccount {
         })
     }
 
+    pub fn validate_liquidation_step(&self, old: &Self) -> Result<(), ContractError> {
+        let balance = self.balance();
+        let spent = old.balance().sent(&balance);
+
+        for coin in spent.clone().into_vec() {
+            self.liquidation_preferences
+                .order
+                .validate(&coin, &balance)?;
+        }
+        Ok(())
+    }
+
     /// Validates the slippage of the liquidation against config limits, and liquidation order preference has been respected
     pub fn validate_liquidation(
         &self,
@@ -254,15 +269,17 @@ impl CreditAccount {
         let balance = self.balance();
         let spent = old.balance().sent(&balance);
 
-        for coin in spent.clone().into_vec() {
-            self.liquidation_preferences
-                .order
-                .validate(&coin, &balance)?;
-        }
-
         let spent_usd = spent.value_usd(deps.querier)?;
         let repaid = old.debt().sent(&self.debt());
-        let repaid_usd = repaid.value_usd(deps.querier)?;
+
+        let repaid_usd = repaid
+            .value_usd(deps.querier)?
+            // Calculate slippage accommodating for liquidation fees
+            .mul(
+                Decimal::one()
+                    .sub(config.fee_liquidation)
+                    .sub(config.fee_liquidator),
+            );
         let slippage = spent_usd
             .checked_sub(repaid_usd)
             .unwrap_or_default()
@@ -340,7 +357,7 @@ impl From<&CreditAccount> for Stored {
 impl From<CreditAccount> for AccountResponse {
     fn from(value: CreditAccount) -> Self {
         Self {
-            ltv: value.adjusted_ltv(),
+            ltv: value.adjusted_ltv().unwrap(),
             tag: value.tag,
             owner: value.owner,
             account: value.account.contract(),

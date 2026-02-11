@@ -59,7 +59,10 @@ pub enum ExecuteMsg {
     /// If queue is empty then final check is made:
     ///     - Collaterals have all strictly decreased; no overliquidations
     DoLiquidate {
-        addr: String,
+        /// Account address
+        account: String,
+        /// Liquidator address
+        liquidator: String,
         /// Vec of (msg, is_preference)
         /// When is_preference is set, errors will be ignored, logged and the next message in the queue will be processed
         queue: Vec<(LiquidateMsg, bool)>,

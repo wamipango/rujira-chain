@@ -11,17 +11,18 @@ use crate::{account::CreditAccount, state::BORROW};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, ensure_eq, from_json, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut,
-    Env, Event, Fraction, MessageInfo, Reply, Response, StdError, SubMsg, SubMsgResult,
+    coin, coins, ensure_eq, from_json, to_json_binary, Addr, BankMsg, Binary, CosmosMsg, Deps,
+    DepsMut, Env, Event, Fraction, MessageInfo, Reply, Response, StdError, SubMsg, SubMsgResult,
 };
-use cw2::set_contract_version;
-use cw_utils::NativeBalance;
+use cw2::{ensure_from_older_version, set_contract_version};
+use cw_utils::{nonpayable, NativeBalance};
 use rujira_rs::ghost;
 use rujira_rs::ghost::credit::{
     AccountMsg, AccountResponse, AccountsResponse, ConfigResponse, ExecuteMsg, InstantiateMsg,
     LiquidateMsg, QueryMsg, SudoMsg,
 };
 use rujira_rs::ghost::vault::Vault;
+use std::cmp::min;
 use std::ops::Sub;
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -53,6 +54,7 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     let ca = env.contract.address.clone();
+    nonpayable(&info)?;
     match msg {
         ExecuteMsg::Create { salt, label, tag } => {
             let (account, msg) = CreditAccount::create(
@@ -89,7 +91,8 @@ pub fn execute(
             Ok(Response::default()
                 .add_message(
                     ExecuteMsg::DoLiquidate {
-                        addr: account.id().to_string(),
+                        account: account.id().to_string(),
+                        liquidator: info.sender.to_string(),
                         queue,
                         payload: to_json_binary(&account)?,
                     }
@@ -98,14 +101,21 @@ pub fn execute(
                 .add_event(event_execute_liquidate(&account, &info.sender)))
         }
         ExecuteMsg::DoLiquidate {
-            addr,
+            account,
+            liquidator,
             mut queue,
             payload,
         } => {
             ensure_eq!(info.sender, ca, ContractError::Unauthorized {});
-            let account =
-                CreditAccount::load(deps.as_ref(), &config, &ca, deps.api.addr_validate(&addr)?)?;
+            let account = CreditAccount::load(
+                deps.as_ref(),
+                &config,
+                &ca,
+                deps.api.addr_validate(&account)?,
+            )?;
             let original_account: CreditAccount = from_json(&payload)?;
+
+            account.validate_liquidation_step(&original_account)?;
 
             let check = account
                 // Check safe against the liquidation threshold
@@ -126,10 +136,10 @@ pub fn execute(
                     Ok(execute_liquidate(
                         deps.as_ref(),
                         env.clone(),
-                        info,
                         &config,
                         msg,
                         &account,
+                        &deps.api.addr_validate(&liquidator)?,
                         if is_preference {
                             REPLY_ID_PREFERENCE
                         } else {
@@ -138,7 +148,8 @@ pub fn execute(
                     )?
                     .add_message(
                         ExecuteMsg::DoLiquidate {
-                            addr: account.id().to_string(),
+                            account: account.id().to_string(),
+                            liquidator,
                             queue,
                             payload,
                         }
@@ -244,6 +255,9 @@ pub fn execute_account(
             ))
         }
         AccountMsg::SetPreferenceMsgs(msgs) => {
+            if msgs.len() > 10 {
+                return Err(ContractError::ExcessiveLiquidationMsgs(10));
+            }
             account.set_preference_msgs(msgs);
             Ok((vec![], vec![event_execute_account_set_preference_msgs()]))
         }
@@ -253,10 +267,10 @@ pub fn execute_account(
 pub fn execute_liquidate(
     deps: Deps,
     env: Env,
-    info: MessageInfo,
     config: &Config,
     msg: LiquidateMsg,
     account: &CreditAccount,
+    liquidator: &Addr,
     reply_id: u64,
 ) -> Result<Response, ContractError> {
     let delegate = account.id().to_string();
@@ -275,46 +289,66 @@ pub fn execute_liquidate(
                 });
             }
 
+            let debt = vault.delegate(
+                deps.querier,
+                &env.contract.address,
+                &account.account.contract(),
+            )?;
+
+            let repay = min(debt.current, balance.amount);
+
+            if repay.is_zero() {
+                return Ok(Response::default());
+            }
+
             // Collect fees from the amount retrieved from the rujira-account.
             // A liquidation solver must ensure that the repayment is sufficient
             // after these fees are deducted
-            let liquidation_fee = balance.amount.multiply_ratio(
+            let liquidation_fee = repay.multiply_ratio(
                 config.fee_liquidation.numerator(),
                 config.fee_liquidation.denominator(),
             );
-            let liquidator_fee = balance.amount.multiply_ratio(
+            let liquidator_fee = repay.multiply_ratio(
                 config.fee_liquidator.numerator(),
                 config.fee_liquidator.denominator(),
             );
 
-            let repay_amount = balance.amount.sub(liquidation_fee).sub(liquidator_fee);
-
-            Ok(Response::default()
+            let repay_amount = repay.sub(liquidation_fee).sub(liquidator_fee);
+            let sub_msg = SubMsg::reply_always(
+                vault
+                    .market_msg_repay(Some(delegate), &coin(repay_amount.u128(), denom.clone()))?,
+                reply_id,
+            )
+            .with_payload(to_json_binary(&account)?);
+            let mut response = Response::default()
                 .add_message(
                     account
                         .account
                         .send(env.contract.address.to_string(), vec![balance.clone()])?,
                 )
-                .add_message(
-                    vault.market_msg_repay(
-                        Some(delegate),
-                        &coin(repay_amount.u128(), denom.clone()),
-                    )?,
-                )
-                .add_message(BankMsg::Send {
-                    to_address: config.fee_address.to_string(),
-                    amount: coins(liquidation_fee.u128(), denom.clone()),
-                })
-                .add_message(BankMsg::Send {
-                    to_address: info.sender.to_string(),
-                    amount: coins(liquidator_fee.u128(), denom.clone()),
-                })
+                .add_submessage(sub_msg)
                 .add_event(event_execute_liquidate_repay(
                     &balance,
                     repay_amount,
                     liquidation_fee,
                     liquidator_fee,
-                )))
+                ));
+
+            if !liquidation_fee.is_zero() {
+                response = response.add_message(BankMsg::Send {
+                    to_address: config.fee_address.to_string(),
+                    amount: coins(liquidation_fee.u128(), denom.clone()),
+                })
+            }
+
+            if !liquidator_fee.is_zero() {
+                response = response.add_message(BankMsg::Send {
+                    to_address: liquidator.to_string(),
+                    amount: coins(liquidator_fee.u128(), denom.clone()),
+                })
+            }
+
+            Ok(response)
         }
         LiquidateMsg::Execute {
             contract_addr,
@@ -363,8 +397,13 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             if !config.collateral_ratios.contains_key(&denom) {
                 return Err(ContractError::InvalidCollateral { denom });
             }
-            BORROW.save(deps.storage, denom, &vault)?;
-            Ok(Response::default())
+            match BORROW.load(deps.storage, denom.clone()) {
+                Ok(_) => Err(ContractError::Unauthorized {}),
+                Err(_) => {
+                    BORROW.save(deps.storage, denom, &vault)?;
+                    Ok(Response::default())
+                }
+            }
         }
         SudoMsg::SetCollateral {
             denom,
@@ -457,5 +496,6 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     Ok(Response::default())
 }
