@@ -12,7 +12,7 @@ use rujira_rs::{
     NativeBalancePlus, OracleValue,
 };
 use sha2::{Digest, Sha256};
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, Div};
 pub static ACCOUNTS_KEY: &str = "a";
 pub static ACCOUNTS_KEY_OWNER: &str = "a__o";
 pub static ACCOUNTS_KEY_OWNER_TAG: &str = "a__ot";
@@ -272,19 +272,14 @@ impl CreditAccount {
         let spent_usd = spent.value_usd(deps.querier)?;
         let repaid = old.debt().sent(&self.debt());
 
-        let repaid_usd = repaid
-            .value_usd(deps.querier)?
-            // Calculate slippage accommodating for liquidation fees
-            .mul(
-                Decimal::one()
-                    .sub(config.fee_liquidation)
-                    .sub(config.fee_liquidator),
-            );
+        let repaid_usd = repaid.value_usd(deps.querier)?;
         let slippage = spent_usd
-            .checked_sub(repaid_usd)
-            .unwrap_or_default()
+            .saturating_sub(repaid_usd)
             .checked_div(spent_usd)
-            .unwrap_or_default();
+            .unwrap_or_default()
+            // Liquidation fees have been taken out of the repaid amount.
+            // Allow them to be excluded from the slippage requirements
+            .saturating_sub(config.fee_liquidation.add(config.fee_liquidator));
 
         // Check against config liquidation slip
         if !slippage.is_zero() {
