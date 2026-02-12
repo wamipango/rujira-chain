@@ -53,9 +53,9 @@ impl State {
         Ok(self.deposit_pool.join(amount)?)
     }
 
-    pub fn withdraw(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
-        let withdrawn = self.deposit_pool.leave(amount)?;
-        Ok(withdrawn)
+    pub fn withdraw(&mut self, shares: Uint128) -> Result<Uint128, ContractError> {
+        let amount = self.deposit_pool.leave(shares)?;
+        Ok(amount)
     }
 
     pub fn borrow(&mut self, amount: Uint128) -> Result<Uint128, ContractError> {
@@ -68,7 +68,10 @@ impl State {
         }
         // Calculate the amount of shares that this repay will burn
         let shares = amount.multiply_ratio(self.debt_pool.shares(), self.debt_pool.size());
-        self.debt_pool.leave(shares)?;
+        // If zero, leave <1 unit of debt in the pool that's now shared across all other borrowers
+        if !shares.is_zero() {
+            self.debt_pool.leave(shares)?;
+        }
         Ok(shares)
     }
 

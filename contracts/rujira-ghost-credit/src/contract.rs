@@ -121,7 +121,16 @@ pub fn execute(
                 // Check safe against the liquidation threshold
                 .check_safe(&config.liquidation_threshold)
                 // Check we've not gone below the adjustment threshold
-                .and_then(|_| account.check_unsafe(&config.adjustment_threshold))
+                .and_then(|_| {
+                    if account
+                        .debt_value()
+                        .to_uint_ceil()
+                        .lt(&config.full_liquidation_threshold)
+                    {
+                        return Ok(());
+                    };
+                    account.check_unsafe(&config.adjustment_threshold)
+                })
                 .and_then(|_| {
                     account.validate_liquidation(deps.as_ref(), &config, &original_account)
                 });

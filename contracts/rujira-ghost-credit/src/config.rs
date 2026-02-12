@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, StdResult, Storage};
+use cosmwasm_std::{Addr, Decimal, StdResult, Storage, Uint128};
 use cw_storage_plus::Item;
 use rujira_rs::ghost::credit::{ConfigResponse, ConfigUpdate, InstantiateMsg};
 
@@ -20,6 +20,8 @@ pub struct Config {
     pub liquidation_max_slip: Decimal,
     pub liquidation_threshold: Decimal,
     pub adjustment_threshold: Decimal,
+    #[serde(default)]
+    pub full_liquidation_threshold: Uint128,
 }
 
 impl From<InstantiateMsg> for Config {
@@ -33,6 +35,7 @@ impl From<InstantiateMsg> for Config {
             liquidation_max_slip: value.liquidation_max_slip,
             liquidation_threshold: value.liquidation_threshold,
             adjustment_threshold: value.adjustment_threshold,
+            full_liquidation_threshold: value.full_liquidation_threshold,
         }
     }
 }
@@ -48,6 +51,7 @@ impl From<Config> for ConfigResponse {
             liquidation_max_slip: value.liquidation_max_slip,
             liquidation_threshold: value.liquidation_threshold,
             adjustment_threshold: value.adjustment_threshold,
+            full_liquidation_threshold: value.full_liquidation_threshold,
         }
     }
 }
@@ -78,6 +82,9 @@ impl Config {
         }
         if let Some(adjustment_threshold) = update.adjustment_threshold {
             self.adjustment_threshold = adjustment_threshold;
+        }
+        if let Some(full_liquidation_threshold) = update.full_liquidation_threshold {
+            self.full_liquidation_threshold = full_liquidation_threshold;
         }
     }
 
@@ -140,6 +147,7 @@ mod tests {
             liquidation_max_slip: Decimal::percent(30),
             liquidation_threshold: Decimal::percent(100),
             adjustment_threshold: Decimal::percent(90),
+            full_liquidation_threshold: Uint128::zero(),
         }
         .validate()
         .unwrap();

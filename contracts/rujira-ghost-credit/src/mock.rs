@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{coin, coins, to_json_binary, Addr, Binary, Coin, Decimal};
+use cosmwasm_std::{coin, coins, to_json_binary, Addr, Binary, Coin, Decimal, Uint128};
 use cw_multi_test::{AppResponse, ContractWrapper, Executor};
 use rujira_ghost_vault::mock::GhostVault;
 use rujira_rs::ghost::credit::{
@@ -295,6 +295,7 @@ impl GhostCredit {
                     liquidation_threshold: Decimal::one(),
                     adjustment_threshold: Decimal::from_str("0.95").unwrap(),
                     fee_address: fees.clone(),
+                    full_liquidation_threshold: Uint128::zero(),
                 },
                 &[],
                 "template",

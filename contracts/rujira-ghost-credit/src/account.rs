@@ -159,15 +159,7 @@ impl CreditAccount {
             .reduce(|a, b| a + b)
             .unwrap_or_default();
 
-        let debt = self
-            .debts
-            .iter()
-            .map(|x| x.value)
-            .collect::<Vec<Decimal>>()
-            .into_iter()
-            .reduce(|a, b| a + b)
-            .unwrap_or_default();
-
+        let debt = self.debt_value();
         if debt.is_zero() {
             return Ok(Decimal::zero());
         }
@@ -176,6 +168,16 @@ impl CreditAccount {
         }
 
         Ok(debt.div(collateral))
+    }
+
+    pub fn debt_value(&self) -> Decimal {
+        self.debts
+            .iter()
+            .map(|x| x.value)
+            .collect::<Vec<Decimal>>()
+            .into_iter()
+            .reduce(|a, b| a + b)
+            .unwrap_or_default()
     }
 
     pub fn check_safe(&self, limit: &Decimal) -> Result<(), ContractError> {

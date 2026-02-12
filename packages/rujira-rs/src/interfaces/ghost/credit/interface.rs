@@ -22,6 +22,9 @@ pub struct InstantiateMsg {
     pub liquidation_threshold: Decimal,
     /// The maximum collteralization ratio that an Account owner can manually adjust to
     pub adjustment_threshold: Decimal,
+    /// The $ value of debt, below which a position can be fully liquidated
+    /// (ie there is no check that we're above the adjustment_threshold
+    pub full_liquidation_threshold: Uint128,
 }
 
 #[cw_serde]
@@ -137,6 +140,7 @@ pub struct ConfigUpdate {
     pub liquidation_max_slip: Option<Decimal>,
     pub liquidation_threshold: Option<Decimal>,
     pub adjustment_threshold: Option<Decimal>,
+    pub full_liquidation_threshold: Option<Uint128>,
 }
 
 #[cw_serde]
@@ -185,6 +189,7 @@ pub struct ConfigResponse {
     pub liquidation_max_slip: Decimal,
     pub liquidation_threshold: Decimal,
     pub adjustment_threshold: Decimal,
+    pub full_liquidation_threshold: Uint128,
 }
 
 #[cw_serde]
