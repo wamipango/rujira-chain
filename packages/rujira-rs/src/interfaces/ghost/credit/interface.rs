@@ -89,6 +89,8 @@ impl ExecuteMsg {
 pub enum AccountMsg {
     Borrow(Coin),
     Repay(Coin),
+    /// Repays all debt to the maximum possible
+    RepayAll {},
     Execute {
         contract_addr: String,
         msg: Binary,
@@ -98,6 +100,8 @@ pub enum AccountMsg {
         to_address: String,
         funds: Vec<Coin>,
     },
+    /// Closes the account, withdrawing all collateral to the owner. Fails if there are outstanding debts
+    Close {},
     Transfer(String),
     SetPreferenceMsgs(Vec<LiquidateMsg>),
     SetPreferenceOrder {

@@ -1,6 +1,6 @@
 {
   "contract_name": "rujira-ghost-credit",
-  "contract_version": "1.0.2",
+  "contract_version": "1.0.3",
   "idl_version": "1.0.0",
   "instantiate": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -300,6 +300,20 @@
             "additionalProperties": false
           },
           {
+            "description": "Repays all debt to the maximum possible",
+            "type": "object",
+            "required": [
+              "repay_all"
+            ],
+            "properties": {
+              "repay_all": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          {
             "type": "object",
             "required": [
               "execute"
@@ -354,6 +368,20 @@
                     "type": "string"
                   }
                 },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "description": "Closes the account, withdrawing all collateral to the owner. Fails if there are outstanding debts",
+            "type": "object",
+            "required": [
+              "close"
+            ],
+            "properties": {
+              "close": {
+                "type": "object",
                 "additionalProperties": false
               }
             },

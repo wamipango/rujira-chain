@@ -17,7 +17,11 @@ impl From<DelegateResponse> for Debt {
 impl Debt {
     /// Determine whether a receive event matches the debt
     pub fn can_accept(&self, coin: &Coin) -> bool {
-        coin.denom == self.0.borrower.denom && coin.amount.le(&self.0.current)
+        self.is_repaid_by(coin) && coin.amount.le(&self.0.current)
+    }
+
+    pub fn is_repaid_by(&self, coin: &Coin) -> bool {
+        coin.denom == self.0.borrower.denom
     }
 }
 

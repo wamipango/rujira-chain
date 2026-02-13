@@ -1189,7 +1189,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-ghost-credit"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",

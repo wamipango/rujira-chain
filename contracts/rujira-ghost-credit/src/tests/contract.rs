@@ -88,6 +88,96 @@ fn account_lifecycle() {
     close(&mut app, &credit, &account);
 }
 
+#[test]
+fn repay_all_clears_debt() {
+    let mut app = mock_rujira_app();
+    let owner = app.api().addr_make("owner");
+    let fees = app.api().addr_make("fee");
+    app.init_modules(|router, _api, storage| {
+        router
+            .stargate
+            .with_price("USDC", Decimal::from_str("1.0").unwrap());
+        router
+            .bank
+            .init_balance(storage, &owner, coins(1_000_000, USDC))
+    })
+    .unwrap();
+
+    let credit = GhostCredit::create(&mut app, &owner, &fees);
+    let account = create(&mut app, &credit, owner.clone());
+
+    credit.set_collateral(&mut app, USDC, "0.8");
+    let vault = GhostVault::create(&mut app, &owner, USDC);
+    vault
+        .set_borrower(&mut app, credit.addr().as_str(), Uint128::MAX)
+        .unwrap();
+    credit.set_vault(&mut app, &vault);
+    vault.deposit(&mut app, &owner, 2000, USDC).unwrap();
+    app.send_tokens(owner, account.account.clone(), &coins(2000, USDC))
+        .unwrap();
+    credit
+        .account_borrow(&mut app, &account, 1000, USDC)
+        .unwrap();
+
+    credit
+        .account(&mut app, &account, vec![AccountMsg::RepayAll {}])
+        .unwrap();
+
+    let res = credit.query_account(&app, &account.account);
+    assert_eq!(res.debts.len(), 0);
+    assert_eq!(res.collaterals.len(), 1);
+    assert_eq!(
+        res.collaterals[0].value_full,
+        Decimal::from_ratio(2000u128, 1u128)
+    );
+    assert_eq!(res.ltv, Decimal::zero());
+}
+
+#[test]
+fn close_sends_collateral_back_to_owner() {
+    let mut app = mock_rujira_app();
+    let owner = app.api().addr_make("owner");
+    let fees = app.api().addr_make("fee");
+    let credit = GhostCredit::create(&mut app, &owner, &fees);
+    let account = create(&mut app, &credit, owner.clone());
+    fund(&mut app, &credit, &account);
+    configure(&mut app, &credit);
+    app.init_modules(|router, _, _| {
+        router.stargate.with_prices(vec![
+            ("USDC", Decimal::from_str("1.00034562").unwrap()),
+            ("ETH", Decimal::from_str("1.00034562").unwrap()),
+            ("BTC", Decimal::from_str("1.56").unwrap()),
+        ])
+    });
+
+    let owner_before = app.wrap().query_balance(owner.clone(), USDC).unwrap();
+    let account_before = app
+        .wrap()
+        .query_balance(account.account.clone(), USDC)
+        .unwrap();
+
+    credit
+        .account(&mut app, &account, vec![AccountMsg::Close {}])
+        .unwrap();
+
+    let owner_after = app.wrap().query_balance(owner.clone(), USDC).unwrap();
+    let account_after = app
+        .wrap()
+        .query_balance(account.account.clone(), USDC)
+        .unwrap();
+
+    assert_eq!(account_after.amount, Uint128::zero());
+    assert_eq!(
+        owner_after.amount,
+        owner_before.amount + account_before.amount
+    );
+
+    let res = credit.query_account(&app, &account.account);
+    assert_eq!(res.collaterals.len(), 0);
+    assert_eq!(res.debts.len(), 0);
+    assert_eq!(res.ltv, Decimal::zero());
+}
+
 fn create(app: &mut RujiraApp, credit: &GhostCredit, owner: Addr) -> AccountResponse {
     let res = credit.create_account(app, &owner, "", "", Binary::new(vec![0]));
     res.assert_event(

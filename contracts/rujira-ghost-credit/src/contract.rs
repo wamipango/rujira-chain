@@ -18,8 +18,8 @@ use cw2::{ensure_from_older_version, set_contract_version};
 use cw_utils::{nonpayable, NativeBalance};
 use rujira_rs::ghost;
 use rujira_rs::ghost::credit::{
-    AccountMsg, AccountResponse, AccountsResponse, ConfigResponse, ExecuteMsg, InstantiateMsg,
-    LiquidateMsg, QueryMsg, SudoMsg,
+    AccountMsg, AccountResponse, AccountsResponse, Collateral, ConfigResponse, ExecuteMsg,
+    InstantiateMsg, LiquidateMsg, QueryMsg, SudoMsg,
 };
 use rujira_rs::ghost::vault::Vault;
 use std::cmp::min;
@@ -175,7 +175,7 @@ pub fn execute(
             let mut response = Response::default().add_event(event_execute_account(&account));
             for msg in msgs {
                 let (messages, events) =
-                    execute_account(deps.as_ref(), env.clone(), &config, msg, &mut account)?;
+                    execute_account(deps.as_ref(), &env, &config, msg, &mut account)?;
                 response = response.add_messages(messages).add_events(events);
             }
             account.save(deps)?;
@@ -193,7 +193,7 @@ pub fn execute(
 
 pub fn execute_account(
     deps: Deps,
-    env: Env,
+    env: &Env,
     config: &Config,
     msg: AccountMsg,
     account: &mut CreditAccount,
@@ -218,10 +218,54 @@ pub fn execute_account(
             let msgs = vec![
                 account
                     .account
-                    .send(env.contract.address, vec![coin.clone()])?,
+                    .send(&env.contract.address, vec![coin.clone()])?,
                 vault.market_msg_repay(Some(delegate), &coin)?,
             ];
             Ok((msgs, vec![event_execute_account_repay(&coin)]))
+        }
+        AccountMsg::RepayAll {} => {
+            let mut msgs = vec![];
+            let mut events = vec![];
+
+            for d in account.debts.clone() {
+                for c in account.collaterals.clone() {
+                    match &c.item {
+                        Collateral::Coin(coin) => {
+                            if d.item.is_repaid_by(coin) {
+                                let mut res = execute_account(
+                                    deps,
+                                    env,
+                                    config,
+                                    AccountMsg::Repay(coin.clone()),
+                                    account,
+                                )?;
+                                msgs.append(&mut res.0);
+                                events.append(&mut res.1);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok((msgs, events))
+        }
+        AccountMsg::Close {} => {
+            let balance = account
+                .collaterals
+                .iter()
+                .fold(NativeBalance::default(), |agg, v| match &v.item {
+                    Collateral::Coin(coin) => agg + coin.clone(),
+                });
+            execute_account(
+                deps,
+                env,
+                config,
+                AccountMsg::Send {
+                    to_address: account.owner.to_string(),
+                    funds: balance.into_vec(),
+                },
+                account,
+            )
         }
         AccountMsg::Execute {
             contract_addr,
