@@ -21,3 +21,34 @@ $RUJI withdrawn amount is `share_amount * POOL_SIZE / POOL_SHARES`, `POOL_SIZE`,
 `Allocate` is executed prior to any user action (`Deposit` or `Withdraw`).
 
 This takes the value `TOTAL_MERGED` (the total amount of merge tokens deposited), and uses `Config.merge_supply` to calculate the un-merged supply of merge tokens. `unmerged * ratio * (1 - decay)` therefore returns the maximum liability of the contract in $RUJI terms (i.e. if every remaining merge token was merged in the next block). `Config.ruji_allocation - POOL_SIZE - liability` therefore is the accounted surplus of $RUJI tokens. Finally, `POOL_SIZE += surplus`, increasing the Pool Size distributes the surplus $RUJI tokens proportionally across all existing mergers.
+
+## Execute
+
+Deposit merge tokens (send `merge_denom` as funds):
+```json
+{ "deposit": {} }
+```
+
+Withdraw RUJI by share amount (no funds):
+```json
+{ "withdraw": { "share_amount": "1000" } }
+```
+
+## Query
+
+Account:
+```json
+{ "account": { "addr": "thor1..." } }
+```
+
+## Invariants
+
+- **Authorization:** which actors are allowed to execute privileged flows.
+- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
+- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
+- **External calls:** callback/execute side effects that must preserve contract safety.
+
+## Notes
+
+- Deposits after `decay_starts_at` receive a linearly decaying share.
+- Withdrawals return `ruji_denom` proportional to shares.

@@ -54,3 +54,11 @@ pub fn execute(
     Response::default().add_message(withdraw_msg)
 }
 ```
+
+## Invariants
+
+- **Authorization:** which actors are allowed to execute privileged flows.
+- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
+- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
+- **External calls:** callback/execute side effects that must preserve contract safety.
+
