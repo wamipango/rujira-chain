@@ -168,19 +168,55 @@ pub fn execute(
             }
         }
 
-        ExecuteMsg::Account { addr, msgs } => {
-            let mut account =
+        ExecuteMsg::Account { addr, mut msgs } => {
+            let account =
                 CreditAccount::load(deps.as_ref(), &config, &ca, deps.api.addr_validate(&addr)?)?;
+            msgs.reverse();
             ensure_eq!(account.owner, info.sender, ContractError::Unauthorized {});
-            let mut response = Response::default().add_event(event_execute_account(&account));
-            for msg in msgs {
-                let (messages, events) =
-                    execute_account(deps.as_ref(), &env, &config, msg, &mut account)?;
-                response = response.add_messages(messages).add_events(events);
-            }
-            account.save(deps)?;
+            Ok(Response::default()
+                .add_event(event_execute_account(&account))
+                .add_message(
+                    ExecuteMsg::DoAccount {
+                        account: account.account.contract().to_string(),
+                        queue: msgs,
+                    }
+                    .call(&ca)?,
+                ))
+        }
+        ExecuteMsg::DoAccount { account, mut queue } => {
+            ensure_eq!(info.sender, ca, ContractError::Unauthorized {});
+            let mut account = CreditAccount::load(
+                deps.as_ref(),
+                &config,
+                &ca,
+                deps.api.addr_validate(&account)?,
+            )?;
 
-            Ok(response.add_message(ExecuteMsg::CheckAccount { addr }.call(&ca)?))
+            match queue.pop() {
+                None => Ok(Response::default().add_message(
+                    ExecuteMsg::CheckAccount {
+                        addr: account.account.contract().to_string(),
+                    }
+                    .call(&ca)?,
+                )),
+
+                Some(msg) => {
+                    let (msgs, events) =
+                        execute_account(deps.as_ref(), &env, &config, msg, &mut account)?;
+                    account.save(deps)?;
+
+                    Ok(Response::default()
+                        .add_messages(msgs)
+                        .add_events(events)
+                        .add_message(
+                            ExecuteMsg::DoAccount {
+                                account: account.id().to_string(),
+                                queue,
+                            }
+                            .call(&ca)?,
+                        ))
+                }
+            }
         }
         ExecuteMsg::CheckAccount { addr } => {
             let account =

@@ -42,6 +42,13 @@ pub enum ExecuteMsg {
     /// The account must have collateralizaion ratio < 1 after the message has been executed, to succeed
     Account { addr: String, msgs: Vec<AccountMsg> },
 
+    /// Internal entrypoint used to process AccountMsg's in sequence. Checks:
+    DoAccount {
+        /// Account address
+        account: String,
+        queue: Vec<AccountMsg>,
+    },
+
     /// NOOP function that checks position health against adjustment_threshold
     CheckAccount { addr: String },
 
