@@ -69,20 +69,19 @@ impl State {
         if self.debt_pool.size().is_zero() {
             return Err(ContractError::ZeroDebt {});
         }
-        // Calculate the amount of shares that this repay will burn
-        let shares = min(
-            amount.multiply_ratio(self.debt_pool.shares(), self.debt_pool.size()),
-            // Clamp shares to the size of the pool, to accommodate the final repayment
+        // We ceil this here to retain parity with the `liability` query on a SharePool
+        // avoid single unit remainders
+        let amount_shares = amount.mul_ceil(Decimal::from_ratio(
             self.debt_pool.shares(),
-        );
-        // If zero, leave <1 unit of debt in the pool that's now shared across all other borrowers
-        // Return 1 so that the borrower's allocation is correctly reduced
-        if shares.is_zero() {
-            Ok(Uint128::one())
-        } else {
+            self.debt_pool.size(),
+        ));
+        // Calculate the amount of shares that this repay will burn
+        // Clamp shares to the size of the pool, to accommodate the final repayment
+        let shares = min(amount_shares, self.debt_pool.shares());
+        if !shares.is_zero() {
             self.debt_pool.leave(shares)?;
-            Ok(shares)
         }
+        Ok(shares)
     }
 
     pub fn capacity(&self) -> Result<Uint128, ContractError> {

@@ -172,13 +172,21 @@ pub fn execute_market(
                 .map(|d| deps.api.addr_validate(&d))
                 .transpose()?;
 
+            // Find the shares owned by the actor
             let borrower_shares = match delegate_address.as_ref() {
                 Some(d) => borrower.delegate_shares(deps.storage, d.clone()),
                 None => borrower.shares,
             };
+            // Calculate the total liability of this actor's shares
+            // Liability is rounded up to ensure marginal overpayment
             let borrower_debt = state.debt_pool.liability(borrower_shares);
-            let repay_amount = min(amount, borrower_debt);
 
+            // Limit the repay to the debt in the case of an overpayment
+            let repay_amount = min(amount, borrower_debt);
+            // Allocate the remainder as a refund
+            let refund_amount = amount.checked_sub(repay_amount)?;
+            // Calculate shares that this capped amount is worth.
+            // Internally, repay will ceil the multiplication to retain parity with the `liability` behaviour
             let shares = state.repay(repay_amount)?;
 
             match delegate_address.clone() {
@@ -193,11 +201,10 @@ pub fn execute_market(
                 shares,
             ));
 
-            let refund = amount.checked_sub(repay_amount)?;
-            if !refund.is_zero() {
+            if !refund_amount.is_zero() {
                 response = response.add_message(BankMsg::Send {
                     to_address: delegate_address.unwrap_or(info.sender).to_string(),
-                    amount: coins(refund.u128(), &config.denom),
+                    amount: coins(refund_amount.u128(), &config.denom),
                 });
             }
             response
