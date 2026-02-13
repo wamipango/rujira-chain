@@ -1,6 +1,6 @@
 use cosmwasm_std::{Event, Uint128};
 
-use crate::{order::Order, pool::Pool};
+use super::{Order, Pool};
 
 pub fn event_create_order(pool: &Pool, order: &Order) -> Event {
     Event::new(format!("{}/order.create", env!("CARGO_PKG_NAME")))

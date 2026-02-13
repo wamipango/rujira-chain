@@ -1,6 +1,6 @@
 use std::cmp::min;
 
-use crate::{error::ContractError, pool::Pool, pool_key::PoolKey};
+use crate::error::ContractError;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Map;
@@ -8,6 +8,8 @@ use rujira_rs::{
     bid_pool,
     fin::{Price, Side},
 };
+
+use super::{Pool, PoolKey};
 
 pub const ORDERS: Map<(Addr, Side, Price), (Timestamp, Uint128, bid_pool::Bid)> =
     Map::new("orders");
@@ -147,12 +149,9 @@ mod tests {
 
     use super::*;
     use cosmwasm_std::{testing::MockStorage, Addr, Decimal, Timestamp, Uint128};
-    use rujira_rs::{
-        exchange::Swappable,
-        fin::{Price, Side},
-    };
+    use rujira_rs::fin::{Price, Side};
 
-    use crate::pool::Pool;
+    use crate::order_pool::Pool;
 
     #[test]
     fn query_order() {
@@ -161,7 +160,7 @@ mod tests {
         let owner = Addr::unchecked("owner");
         let offer = Uint128::from(100u128);
         let oracle = Decimal::one();
-        let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle);
+        let mut pool = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle).unwrap();
         pool.create_order(&mut store, &timestamp, &owner, offer)
             .unwrap();
 
@@ -180,33 +179,37 @@ mod tests {
         let owner2 = Addr::unchecked("owner2");
         let offer = Uint128::from(100u128);
         let oracle = Decimal::one();
-        let mut pool1 = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle);
-        let mut pool2 = Pool::load(&store, &Price::Oracle(1), &Side::Quote, &oracle);
-        let mut pool3 = Pool::load(&store, &Price::Oracle(2), &Side::Quote, &oracle);
+        let mut pool1 = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle).unwrap();
+        let mut pool2 = Pool::load(&store, &Price::Oracle(1), &Side::Quote, &oracle).unwrap();
+        let mut pool3 = Pool::load(&store, &Price::Oracle(2), &Side::Quote, &oracle).unwrap();
         let mut pool4 = Pool::load(
             &store,
             &Price::Fixed(Decimal::from_str("1.0").unwrap()),
             &Side::Quote,
             &oracle,
-        );
+        )
+        .unwrap();
         let mut pool5 = Pool::load(
             &store,
             &Price::Fixed(Decimal::from_str("1.1").unwrap()),
             &Side::Quote,
             &oracle,
-        );
+        )
+        .unwrap();
         let mut pool6 = Pool::load(
             &store,
             &Price::Fixed(Decimal::from_str("1.2").unwrap()),
             &Side::Quote,
             &oracle,
-        );
+        )
+        .unwrap();
         let mut pool7 = Pool::load(
             &store,
             &Price::Fixed(Decimal::from_str("1.2").unwrap()),
             &Side::Base,
             &oracle,
-        );
+        )
+        .unwrap();
 
         pool1
             .create_order(&mut store, &timestamp, &owner, offer)

@@ -1,13 +1,13 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, QuerierWrapper, StdResult};
 use rujira_rs::{
-    exchange::Swappable,
+    exchange::SwapItem,
     fin::{Denoms, Side, Tick},
     MergeNByIter,
 };
 use schemars::Set;
 
-use crate::market_maker::{MarketMaker, MarketMakerOffer};
+use crate::market_maker::{MarketMakerIter, MarketMakerOffer};
 
 #[cw_serde]
 pub struct MarketMakers {
@@ -33,7 +33,7 @@ impl MarketMakers {
     ) -> impl Iterator<Item = Vec<MarketMakerOffer>> + 'a {
         MergeNByIter::new(
             self.contracts.iter().map(|addr| {
-                MarketMaker::new(
+                MarketMakerIter::new(
                     querier,
                     denoms.clone(),
                     side.clone(),

@@ -63,9 +63,11 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
                 ]),
                 market_makers: vec![bow.to_string()],
                 tick: Tick::new(8),
-                fee_taker: Decimal::from_ratio(15u128, 1000u128),
-                fee_maker: Decimal::from_ratio(30u128, 1000u128),
+                fee_taker: Decimal::permille(15),
+                fee_maker: Decimal::permille(30),
+                fee_amm: Decimal::permille(0),
                 fee_address: fees.to_string(),
+                range_delta: Decimal::permille(50),
             },
             &[],
             "fin",
@@ -309,6 +311,12 @@ fn mm_book() {
 #[test]
 fn combined_book() {
     let mut app = mock_rujira_app();
+    app.init_modules(|a, _, _| {
+        a.stargate.with_prices(vec![
+            ("BTC", Decimal::from_str("100100.00000000").unwrap()),
+            ("USDC", Decimal::from_str("1.00100000").unwrap()),
+        ]);
+    });
     let owner = app.api().addr_make("owner");
     let fees = app.api().addr_make("fees");
     let (fin, bow) = setup(&mut app, &owner, &fees);
@@ -622,6 +630,13 @@ fn test_arbitrage_quote_single() {
         ("sender", fin.as_str()),
         ("recipient", owner.as_str()),
         ("amount", "9840158usdc"),
+    ]));
+
+    // Ensure taker fees are sent
+    res.assert_event(&Event::new("transfer").add_attributes(vec![
+        ("sender", fin.as_str()),
+        ("recipient", fees.as_str()),
+        ("amount", "149851usdc"),
     ]));
 }
 

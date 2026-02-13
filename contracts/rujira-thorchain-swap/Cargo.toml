@@ -28,7 +28,7 @@ cw-multi-test      = { workspace = true, optional = true }
 cw-storage-plus    = { workspace = true }
 cw-utils           = { workspace = true }
 cw2                = { workspace = true }
-rujira-ghost-vault = { path = "../rujira-ghost-vault", optional = true }
+rujira-ghost-vault = { path = "../rujira-ghost-vault", features = ["mock"], optional = true }
 rujira-rs          = { workspace = true, features = ["interface-thorchain-swap", "share-pool", "coin", "query"], default-features = false }
 rujira-rs-testing  = { workspace = true, optional = true }
 schemars           = { workspace = true }
@@ -38,5 +38,5 @@ thiserror          = { workspace = true }
 [dev-dependencies]
 anyhow             = { workspace = true }
 cw-multi-test      = { workspace = true }
-rujira-ghost-vault = { path = "../rujira-ghost-vault" }
+rujira-ghost-vault = { path = "../rujira-ghost-vault", features = ["mock"] }
 rujira-rs-testing  = { workspace = true }

@@ -1,10 +1,12 @@
-use cosmwasm_std::{coins, Addr, Decimal, Uint128};
+use std::str::FromStr;
+
+use cosmwasm_std::{coins, Addr, Coin, Decimal, SignedDecimal, Uint128};
 use cw_multi_test::{ContractWrapper, Executor};
 
 use rujira_rs::{
     fin::{
-        BookResponse, Denoms, ExecuteMsg, InstantiateMsg, OrderResponse, Price, QueryMsg, Side,
-        SwapRequest, Tick,
+        BookResponse, Denoms, ExecuteMsg, InstantiateMsg, OrderResponse, Price, QueryMsg,
+        RangeConfig, RangeMsg, Side, SwapRequest, Tick,
     },
     Layer1Asset,
 };
@@ -55,7 +57,7 @@ impl Fin {
         side: Side,
         price: Price,
         size: Option<Uint128>,
-        funds: &[cosmwasm_std::Coin],
+        funds: &[Coin],
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
         app.execute_contract(
             sender.clone(),
@@ -71,7 +73,7 @@ impl Fin {
         app: &mut RujiraApp,
         sender: &Addr,
         orders: Vec<(Side, Price, Option<Uint128>)>,
-        funds: &[cosmwasm_std::Coin],
+        funds: &[Coin],
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
         app.execute_contract(
             sender.clone(),
@@ -127,6 +129,71 @@ impl Fin {
         )?)
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_range(
+        &self,
+        app: &mut RujiraApp,
+        sender: &Addr,
+        (high, low): (&str, &str),
+        spread: &str,
+        fee: &str,
+        skew: &str,
+        funds: &[Coin],
+    ) -> anyhow::Result<cw_multi_test::AppResponse> {
+        app.execute_contract(
+            sender.clone(),
+            self.0.clone(),
+            &ExecuteMsg::Range(RangeMsg::Create {
+                config: RangeConfig {
+                    high: Decimal::from_str(high).unwrap(),
+                    low: Decimal::from_str(low).unwrap(),
+                    skew: SignedDecimal::from_str(skew).unwrap(),
+                    spread: Decimal::from_str(spread).unwrap(),
+                    fee: Decimal::from_str(fee).unwrap(),
+                },
+                slippage: None,
+            }),
+            funds,
+        )
+    }
+
+    pub fn claim_range(
+        &self,
+        app: &mut RujiraApp,
+        sender: &Addr,
+        idx: &Uint128,
+    ) -> anyhow::Result<cw_multi_test::AppResponse> {
+        app.execute_contract(
+            sender.clone(),
+            self.0.clone(),
+            &ExecuteMsg::Range(RangeMsg::Claim { idx: *idx }),
+            &[],
+        )
+    }
+
+    pub fn close_range(
+        &self,
+        app: &mut RujiraApp,
+        sender: &Addr,
+        idx: &Uint128,
+    ) -> anyhow::Result<cw_multi_test::AppResponse> {
+        app.execute_contract(
+            sender.clone(),
+            self.0.clone(),
+            &ExecuteMsg::Range(RangeMsg::Close { idx: *idx }),
+            &[],
+        )
+    }
+
+    pub fn query_range(
+        &self,
+        app: &RujiraApp,
+        idx: &Uint128,
+    ) -> anyhow::Result<rujira_rs::fin::RangeResponse> {
+        Ok(app
+            .wrap()
+            .query_wasm_smart(self.0.clone(), &QueryMsg::Range(*idx))?)
+    }
     /// Setup FIN contract
     pub fn create(
         app: &mut RujiraApp,
@@ -152,9 +219,11 @@ impl Fin {
                     oracles,
                     market_makers: market_makers.iter().map(|x| x.to_string()).collect(),
                     tick: Tick::new(8),
-                    fee_taker: Decimal::from_ratio(15u128, 1000u128), // 1.5%
-                    fee_maker: Decimal::from_ratio(30u128, 1000u128), // 3.0%
+                    fee_taker: Decimal::permille(15), // 1.5%
+                    fee_maker: Decimal::permille(30), // 3.0%
+                    fee_amm: Decimal::permille(0),
                     fee_address: fees.to_string(),
+                    range_delta: Decimal::permille(50),
                 },
                 &[],
                 "fin",

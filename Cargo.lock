@@ -1125,7 +1125,6 @@ dependencies = [
  "cw-utils",
  "cw2",
  "itertools 0.14.0",
- "rujira-rs",
  "schemars",
  "serde",
  "thiserror 1.0.63",
@@ -1167,7 +1166,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-fin"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -1177,6 +1176,7 @@ dependencies = [
  "cw-utils",
  "cw2",
  "itertools 0.14.0",
+ "proptest",
  "rujira-bow",
  "rujira-ghost-vault",
  "rujira-rs",
@@ -1311,6 +1311,7 @@ dependencies = [
  "prost",
  "schemars",
  "serde",
+ "sha2",
  "thiserror 1.0.63",
 ]
 

@@ -88,7 +88,6 @@ mod tests {
 
     use super::*;
     use cosmwasm_std::{testing::MockStorage, Addr, Decimal, Timestamp, Uint128};
-    use rujira_rs::exchange::Swappable;
 
     use crate::pool::Pool;
 

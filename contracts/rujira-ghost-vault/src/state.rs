@@ -192,7 +192,7 @@ impl State {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::{testing::mock_env, Decimal};
+    use cosmwasm_std::{testing::mock_env, Addr, Decimal};
     use rujira_rs::DecimalScaled;
 
     #[test]
@@ -211,7 +211,7 @@ mod tests {
                 step2: Decimal::from_ratio(100u128, 100u128),
             },
             fee: Decimal::from_ratio(1u128, 10u128), // 10% fee
-            fee_address: cosmwasm_std::Addr::unchecked("fee_addr"),
+            fee_address: Addr::unchecked("fee_addr"),
         };
 
         // Deposit 1000, borrow 800
@@ -259,7 +259,7 @@ mod tests {
                 step2: Decimal::from_ratio(100u128, 100u128),
             },
             fee: Decimal::from_ratio(1u128, 10u128), // 10% fee
-            fee_address: cosmwasm_std::Addr::unchecked("fee_addr"),
+            fee_address: Addr::unchecked("fee_addr"),
         };
 
         // Deposit 1000, borrow 800

@@ -339,7 +339,6 @@ mod tests {
             .wrap()
             .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
             .unwrap();
-        // dbg!(comment, &status);
         assert_eq!(status, *expected);
     }
 

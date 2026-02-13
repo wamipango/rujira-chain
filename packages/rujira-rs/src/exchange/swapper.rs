@@ -1,14 +1,12 @@
-use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Attribute, Decimal, Event, Storage, Uint128};
-use std::ops::Mul;
+use cosmwasm_std::{Attribute, Decimal, Event, Uint128};
+use std::{cmp::min, ops::Mul};
 
 use crate::fin::SwapRequest;
 
-use super::{commitment::Commitment, error::SwapError, Swappable};
+use super::{error::SwapError, SwapItem};
 
 /// Executes a swap over an Iterator<Swappable>, consuming the offer and returning the returned amount
-#[cw_serde]
-pub struct Swapper<T> {
+pub struct Swapper<T: SwapItem> {
     event_prefix: String,
     events: Vec<Event>,
     fee: Decimal,
@@ -16,20 +14,26 @@ pub struct Swapper<T> {
     consumed_offer: Uint128,
     remaining_offer: Uint128,
     returned: Uint128,
-    pending: Vec<T>,
+    pub context: T::Context,
 }
 
-impl<T: Swappable> Swapper<T> {
-    pub fn new(event_prefix: &str, offer: Uint128, req: SwapRequest, fee: Decimal) -> Self {
+impl<T: SwapItem> Swapper<T> {
+    pub fn new(
+        prefix: &str,
+        context: T::Context,
+        offer: Uint128,
+        req: SwapRequest,
+        fee: Decimal,
+    ) -> Self {
         Self {
-            event_prefix: event_prefix.to_string(),
-            events: vec![],
+            event_prefix: prefix.to_string(),
             fee,
             req,
             consumed_offer: Uint128::zero(),
             remaining_offer: offer,
             returned: Uint128::zero(),
-            pending: vec![],
+            context,
+            events: vec![],
         }
     }
 
@@ -38,8 +42,8 @@ impl<T: Swappable> Swapper<T> {
         T: std::fmt::Debug,
     {
         for mut v in iter {
-            let (offer, bids) = v.swap(self.remaining_offer)?;
-
+            let mut next_context = self.context.clone();
+            let (offer, bids, atts) = v.swap(&mut next_context, self.remaining_offer)?;
             // If we've breached reached a SwapRequest::Limit, don't commit this step and break
             if let SwapRequest::Limit { price: limit, .. } = self.req {
                 if !bids.is_zero() {
@@ -49,13 +53,11 @@ impl<T: Swappable> Swapper<T> {
                     }
                 }
             }
-
-            let attrs = v.attributes();
+            self.context = next_context;
             self.events
-                .push(event(&v, &self.event_prefix, offer, bids, &attrs));
-            self.pending.push(v);
+                .push(trade_event(&v, &self.event_prefix, offer, bids, &atts));
             self.consumed_offer += offer;
-            self.remaining_offer -= offer;
+            self.remaining_offer -= min(offer, self.remaining_offer);
             self.returned += bids;
             if self.remaining_offer.is_zero() {
                 break;
@@ -89,27 +91,18 @@ impl<T: Swappable> Swapper<T> {
         }
 
         Ok(SwapResult {
-            events: self.events.clone(),
             fee_amount: fee,
             return_amount: self.returned,
             consumed_offer: self.consumed_offer,
             remaining_offer: self.remaining_offer,
+            events: self.events.clone(),
         })
-    }
-
-    pub fn commit(&self, storage: &mut dyn Storage) -> Result<Commitment, SwapError> {
-        let mut res = Commitment::default();
-        for pool in self.pending.iter() {
-            res += pool.commit(storage)?;
-        }
-
-        Ok(res)
     }
 }
 
-pub fn event<T: Swappable>(
+pub fn trade_event<T: SwapItem>(
     s: &T,
-    prefix: &String,
+    prefix: &str,
     offer: Uint128,
     bid: Uint128,
     attributes: &[Attribute],
@@ -123,11 +116,11 @@ pub fn event<T: Swappable>(
 
 #[derive(Debug)]
 pub struct SwapResult {
-    pub events: Vec<Event>,
     pub fee_amount: Uint128,
     pub return_amount: Uint128,
     pub consumed_offer: Uint128,
     pub remaining_offer: Uint128,
+    pub events: Vec<Event>,
 }
 
 #[cfg(test)]
@@ -136,7 +129,7 @@ mod tests {
 
     use cosmwasm_std::Fraction;
 
-    use crate::exchange::testing::TestIter;
+    use crate::exchange::testing::{TestIter, TestIterContext};
 
     use super::*;
     use std::str::FromStr;
@@ -156,6 +149,7 @@ mod tests {
 
         let mut s = Swapper::new(
             "some-prefix",
+            TestIterContext::default(),
             Uint128::from(7500u128),
             SwapRequest::Yolo {
                 to: None,
@@ -168,7 +162,8 @@ mod tests {
         assert_eq!(res.fee_amount, Uint128::from(7u128));
         assert_eq!(res.remaining_offer, Uint128::zero());
 
-        let event = res.events[0].clone();
+        let events = res.events;
+        let event = events[0].clone();
         assert_eq!(event.ty, "some-prefix/trade");
         assert_eq!(event.attributes[0].key, "rate");
         assert_eq!(event.attributes[0].value, "1");
@@ -179,7 +174,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "test");
         assert_eq!(event.attributes[3].value, "attr");
 
-        let event = res.events[1].clone();
+        let event = events[1].clone();
         assert_eq!(event.ty, "some-prefix/trade");
         assert_eq!(event.attributes[0].key, "rate");
         assert_eq!(event.attributes[0].value, "0.95");
@@ -190,7 +185,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "test");
         assert_eq!(event.attributes[3].value, "attr");
 
-        let event = res.events[2].clone();
+        let event = events[2].clone();
         assert_eq!(event.ty, "some-prefix/trade");
         assert_eq!(event.attributes[0].key, "rate");
         assert_eq!(event.attributes[0].value, "0.9");
@@ -201,7 +196,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "test");
         assert_eq!(event.attributes[3].value, "attr");
 
-        let event = res.events[3].clone();
+        let event = events[3].clone();
         assert_eq!(event.ty, "some-prefix/trade");
         assert_eq!(event.attributes[0].key, "rate");
         assert_eq!(event.attributes[0].value, "0.85");
@@ -212,7 +207,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "test");
         assert_eq!(event.attributes[3].value, "attr");
 
-        let event = res.events[4].clone();
+        let event = events[4].clone();
         assert_eq!(event.ty, "some-prefix/trade");
         assert_eq!(event.attributes[0].key, "rate");
         assert_eq!(event.attributes[0].value, "0.8");
@@ -223,7 +218,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "test");
         assert_eq!(event.attributes[3].value, "attr");
 
-        let event = res.events[5].clone();
+        let event = events[5].clone();
         assert_eq!(event.ty, "some-prefix/trade");
         assert_eq!(event.attributes[0].key, "rate");
         assert_eq!(event.attributes[0].value, "0.7");
@@ -234,7 +229,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "test");
         assert_eq!(event.attributes[3].value, "attr");
 
-        let event = res.events[6].clone();
+        let event = events[6].clone();
         assert_eq!(event.ty, "some-prefix/trade");
         assert_eq!(event.attributes[0].key, "rate");
         assert_eq!(event.attributes[0].value, "0.6");
@@ -335,7 +330,7 @@ mod tests {
                 (Decimal::from_str("0.6").unwrap(), Uint128::from(1000u128)),
             ]);
 
-            let mut s = Swapper::new("some-prefix", offer, req, fee);
+            let mut s = Swapper::new("some-prefix", Default::default(), offer, req, fee);
             let res = s.swap(&mut iter);
             match result {
                 Some((returned, fee, remaining)) => {

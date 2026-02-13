@@ -1,28 +1,32 @@
 use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
-use crate::market_makers::MarketMakers;
-use crate::order::Order;
-use crate::order_manager::OrderManager;
-use crate::pool::Pool;
-use crate::swap_iter::SwapIter;
+use crate::order_pool::execute::execute_order;
+use crate::order_pool::{query as order_query, OrderManager};
+use crate::ranges::execute::execute_range;
+use crate::ranges::{query as range_query, Range};
+use crate::swap_iter::{create_context, RootItem, SwapIter};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, ensure_eq, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Empty, Env,
-    MessageInfo, Response, WasmMsg,
+    coin, ensure, ensure_eq, to_json_binary, Addr, BankMsg, Binary, CosmosMsg, Deps, DepsMut,
+    Empty, Env, MessageInfo, Response, WasmMsg,
 };
 use cw2::{ensure_from_older_version, set_contract_version};
+use cw_storage_plus::Item;
 use cw_utils::{one_coin, NativeBalance};
-use rujira_rs::exchange::{Arber, Swappable, Swapper};
+use rujira_rs::exchange::{Arber, SwapContext, SwapItem, Swapper};
 use rujira_rs::fin::{
-    BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse,
-    OrdersResponse, Price, QueryMsg, Side, SimulationResponse, SudoMsg, SwapRequest,
+    BookItemResponse, BookResponse, ConfigResponse, ConfigUpdate, ExecuteMsg, InstantiateMsg,
+    QueryMsg, Side, SimulationResponse, SudoMsg, SwapRequest,
 };
+use rujira_rs::proto::scheduler::MsgScheduleExecuteContract;
+use rujira_rs::utils::module_address;
 use rujira_rs::{Oracle, Premiumable};
 
 // version info for migration info
-const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
+pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+static SCHEDULE: Item<u64> = Item::new("s");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -49,10 +53,7 @@ pub fn execute(
     let oracle = config
         .oracles
         .clone()
-        .and_then(|x| x.tor_price(deps.querier).ok());
-    let mut messages: Vec<CosmosMsg> = vec![];
-    let mut fees = NativeBalance::default();
-    let swap_iter = SwapIter::new(deps.querier, &config);
+        .and_then(|x| x.oracle_price(deps.querier).ok());
 
     match msg {
         ExecuteMsg::Swap(req) => {
@@ -77,14 +78,30 @@ pub fn execute(
 
             Ok(Response::default().add_message(msg))
         }
+        ExecuteMsg::Range(msg) => {
+            let msg = WasmMsg::Execute {
+                contract_addr: env.contract.address.to_string(),
+                msg: to_json_binary(&ExecuteMsg::Arb {
+                    then: Some(to_json_binary(&ExecuteMsg::DoRange((info.sender, msg)))?),
+                })?,
+                funds: info.funds,
+            };
+
+            Ok(Response::default().add_message(msg))
+        }
         ExecuteMsg::Arb { then } => {
-            let mut arb = Arber::default();
+            let scheduler = deps.api.addr_humanize(&module_address("scheduler"))?;
+
+            let swap_iter = SwapIter::new(deps.querier, &config);
+            let mut messages: Vec<CosmosMsg> = vec![];
+            let mut fees = NativeBalance::default();
+            let mut arb = Arber::new(create_context(&config), CONTRACT_NAME.to_string());
             let base_iter = swap_iter.iter(deps.storage, &Side::Base, &oracle);
             let quote_iter = swap_iter.iter(deps.storage, &Side::Quote, &oracle);
             let res = arb.run(base_iter, quote_iter)?;
-            let commit = arb.commit(deps.storage)?;
-            messages.append(&mut commit.0.to_msgs(&config.denoms, &Side::Base)?);
-            messages.append(&mut commit.1.to_msgs(&config.denoms, &Side::Quote)?);
+            let response = arb
+                .context
+                .commit(deps.storage, Response::default().add_events(res.events))?;
 
             fees += coin(res.profit_quote.u128(), config.denoms.bid(&Side::Quote));
             fees += coin(res.profit_base.u128(), config.denoms.bid(&Side::Base));
@@ -98,6 +115,11 @@ pub fn execute(
             }
 
             if let Some(msg) = then {
+                ensure!(
+                    info.sender == env.contract.address,
+                    ContractError::Unauthorized {}
+                );
+
                 messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: env.contract.address.to_string(),
                     msg,
@@ -105,7 +127,22 @@ pub fn execute(
                 }))
             }
 
-            Ok(Response::default().add_messages(messages))
+            match SCHEDULE.load(deps.storage) {
+                Ok(after) => {
+                    if info.sender == scheduler {
+                        Ok(response.add_messages(messages).add_message(
+                            MsgScheduleExecuteContract {
+                                sender: env.contract.address.to_string(),
+                                after,
+                                msg: to_json_binary(&ExecuteMsg::Arb { then: None })?.to_vec(),
+                            },
+                        ))
+                    } else {
+                        Ok(response.add_messages(messages))
+                    }
+                }
+                Err(_) => Ok(response.add_messages(messages)),
+            }
         }
 
         ExecuteMsg::DoSwap((sender, req)) => {
@@ -114,54 +151,8 @@ pub fn execute(
                 env.contract.address,
                 ContractError::Unauthorized {}
             );
-            let to = req.to().map(|x| deps.api.addr_validate(&x)).transpose()?;
-            let funds = one_coin(&info)?;
-            let side = config.denoms.ask_side(&funds)?;
-            let mut swapper = Swapper::new(
-                env!("CARGO_PKG_NAME"),
-                funds.amount,
-                req.clone(),
-                config.fee_taker,
-            );
-            let res = {
-                let mut iter = swap_iter.iter(deps.storage, &side, &oracle);
-                swapper.swap(&mut iter)?
-            };
-            let commit = swapper.commit(deps.storage)?;
-            messages.append(&mut commit.to_msgs(&config.denoms, &side)?);
-            let mut funds = NativeBalance(vec![
-                coin(res.return_amount.u128(), config.denoms.bid(&side)),
-                coin(res.remaining_offer.u128(), config.denoms.ask(&side)),
-            ]);
 
-            let recipient = to.unwrap_or(sender);
-
-            funds.normalize();
-            if !funds.is_empty() {
-                match req.callback() {
-                    None => messages.push(CosmosMsg::Bank(BankMsg::Send {
-                        to_address: recipient.to_string(),
-                        amount: funds.into_vec(),
-                    })),
-                    Some(cb) => messages.push(
-                        cb.to_message(&recipient, Empty {}, funds.into_vec())?
-                            .into(),
-                    ),
-                }
-            };
-
-            fees += coin(res.fee_amount.u128(), config.denoms.bid(&side));
-            fees.normalize();
-            if !fees.is_empty() {
-                messages.push(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: config.fee_address.to_string(),
-                    amount: fees.into_vec(),
-                }))
-            }
-
-            Ok(Response::default()
-                .add_messages(messages)
-                .add_events(res.events))
+            execute_swap(deps, info, sender, req, &config, &oracle)
         }
         ExecuteMsg::DoOrder((recipient, (vec, callback))) => {
             ensure_eq!(
@@ -169,77 +160,53 @@ pub fn execute(
                 env.contract.address,
                 ContractError::Unauthorized {}
             );
-
-            let mut e = OrderManager::new(
+            let mut manager = OrderManager::new(
                 &config,
                 recipient.clone(),
                 env.block.time,
                 NativeBalance(info.funds),
             );
-
-            let mut res = e.execute_orders(deps.storage, &swap_iter, vec, &oracle)?;
-            fees += res.fees;
-            messages.append(&mut res.messages);
-
-            if !res.withdraw.is_empty() {
-                match callback {
-                    None => messages.push(CosmosMsg::Bank(BankMsg::Send {
-                        to_address: recipient.to_string(),
-                        amount: res.withdraw.into_vec(),
-                    })),
-                    Some(cb) => messages.push(
-                        cb.to_message(&recipient, Empty {}, res.withdraw.into_vec())?
-                            .into(),
-                    ),
-                }
-            }
-
-            fees.normalize();
-
-            if !fees.is_empty() {
-                messages.push(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: config.fee_address.to_string(),
-                    amount: fees.into_vec(),
-                }))
-            }
-
-            Ok(Response::default()
-                .add_messages(messages)
-                .add_events(res.events))
+            execute_order(
+                deps,
+                &mut manager,
+                recipient,
+                vec,
+                callback,
+                &config,
+                &oracle,
+            )
+        }
+        ExecuteMsg::DoRange((sender, msg)) => {
+            ensure_eq!(
+                info.sender,
+                env.contract.address,
+                ContractError::Unauthorized {}
+            );
+            execute_range(deps, env, info, sender, msg)
         }
     }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
     match msg {
-        SudoMsg::UpdateConfig {
-            tick,
-            fee_taker,
-            fee_maker,
-            fee_address,
-            market_makers,
-            oracles,
-        } => {
-            let fee_address = fee_address
-                .map(|x| deps.api.addr_validate(&x))
-                .transpose()?;
-
-            let market_makers = market_makers
-                .map(|xx| MarketMakers::new(deps.api, xx))
-                .transpose()?;
+        SudoMsg::UpdateConfig(update) => {
             let mut config = CONFIG.load(deps.storage)?;
-
-            config.update(
-                tick,
-                market_makers,
-                fee_taker,
-                fee_maker,
-                fee_address,
-                oracles,
-            );
+            config.update(deps.api, &update)?;
             config.validate(deps.as_ref())?;
             config.save(deps.storage)?;
+            Ok(Response::default())
+        }
+        SudoMsg::StartSchedule(after) => {
+            SCHEDULE.save(deps.storage, &after)?;
+            Ok(Response::default().add_message(MsgScheduleExecuteContract {
+                sender: env.contract.address.to_string(),
+                after,
+                msg: to_json_binary(&ExecuteMsg::Arb { then: None })?.to_vec(),
+            }))
+        }
+        SudoMsg::EndSchedule {} => {
+            SCHEDULE.remove(deps.storage);
             Ok(Response::default())
         }
     }
@@ -257,31 +224,22 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 
     match msg {
         QueryMsg::Config {} => to_json_binary(&ConfigResponse::from(config)),
-        QueryMsg::Order((owner, side, price)) => {
-            let addr = deps.api.addr_validate(&owner)?;
-            let pool = Pool::load(deps.storage, &price, &side, &oracle);
-            let order = pool.load_order(deps.storage, &addr)?;
-            to_json_binary(&order_response(&order, &pool.side, &pool.price, &oracle))
-        }
+        QueryMsg::Order((owner, side, price)) => to_json_binary(&order_query::query_order(
+            deps, &owner, side, price, &oracle,
+        )?),
         QueryMsg::Orders {
             owner,
             side,
             offset,
             limit,
-        } => {
-            let addr = deps.api.addr_validate(owner.as_str())?;
-            let orders: Result<Vec<OrderResponse>, ContractError> =
-                Order::by_owner(deps.storage, &addr, side, offset, limit)?
-                    .iter_mut()
-                    .map(|(k, order)| {
-                        let pool = Pool::load(deps.storage, &k.price, &k.side, &oracle);
-                        pool.sync_order(deps.storage, order)?;
-                        Ok(order_response(order, &k.side, &k.price, &oracle))
-                    })
-                    .collect();
-
-            to_json_binary(&OrdersResponse { orders: orders? })
-        }
+        } => to_json_binary(&order_query::query_orders(
+            deps,
+            owner.as_str(),
+            side,
+            offset,
+            limit,
+            &oracle,
+        )?),
         QueryMsg::Book { limit, offset } => {
             let limit = limit.unwrap_or(100);
             let offset = offset.unwrap_or(0);
@@ -310,7 +268,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
         QueryMsg::Simulate(offer) => {
             let side = config.denoms.ask_side(&offer)?;
             let mut swapper = Swapper::new(
-                env!("CARGO_PKG_NAME"),
+                CONTRACT_NAME,
+                create_context(&config),
                 offer.amount,
                 SwapRequest::Yolo {
                     to: None,
@@ -325,34 +284,94 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                 fee: res.fee_amount,
             })
         }
+        QueryMsg::Range(idx) => to_json_binary(&range_query::query_range(deps, idx)?),
+        QueryMsg::Ranges {
+            cursor,
+            limit,
+            owner,
+        } => to_json_binary(&range_query::query_ranges(
+            deps,
+            cursor,
+            limit,
+            owner.map(|x| deps.api.addr_validate(&x)).transpose()?,
+        )?),
     }
     .map_err(ContractError::Std)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
-    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+pub fn migrate(deps: DepsMut, _env: Env, msg: ConfigUpdate) -> Result<Response, ContractError> {
     ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    Config::migrate(deps)?;
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    Range::migrate(deps.storage)?;
+    let mut config = CONFIG.load(deps.storage)?;
+    config.update(deps.api, &msg)?;
+    config.validate(deps.as_ref())?;
+    config.save(deps.storage)?;
+
     Ok(Response::default())
 }
 
-fn order_response(
-    order: &Order,
-    side: &Side,
-    price: &Price,
+fn execute_swap(
+    deps: DepsMut,
+    info: MessageInfo,
+    sender: Addr,
+    req: SwapRequest,
+    config: &Config,
     oracle: &impl Premiumable,
-) -> OrderResponse {
-    OrderResponse {
-        owner: order.owner.to_string(),
-        side: side.clone(),
-        price: price.clone(),
-        rate: price.to_rate(oracle),
-        updated_at: order.updated_at,
-        offer: order.offer,
-        remaining: order.bid.amount().try_into().unwrap(),
-        filled: order.bid.filled().try_into().unwrap(),
+) -> Result<Response, ContractError> {
+    let swap_iter = SwapIter::new(deps.querier, config);
+
+    let to = req.to().map(|x| deps.api.addr_validate(&x)).transpose()?;
+    let funds = one_coin(&info)?;
+    let side = config.denoms.ask_side(&funds)?;
+    let mut swapper: Swapper<RootItem> = Swapper::new(
+        CONTRACT_NAME,
+        create_context(config),
+        funds.amount,
+        req.clone(),
+        config.fee_taker,
+    );
+    let res = {
+        let mut iter = swap_iter.iter(deps.storage, &side, oracle);
+        swapper.swap(&mut iter)?
+    };
+    let response = swapper
+        .context
+        .commit(deps.storage, Response::default().add_events(res.events))?;
+    let mut payout = NativeBalance(vec![
+        coin(res.return_amount.u128(), config.denoms.bid(&side)),
+        coin(res.remaining_offer.u128(), config.denoms.ask(&side)),
+    ]);
+
+    let recipient = to.unwrap_or(sender);
+
+    let mut messages: Vec<CosmosMsg> = vec![];
+    payout.normalize();
+    if !payout.is_empty() {
+        match req.callback() {
+            None => messages.push(CosmosMsg::Bank(BankMsg::Send {
+                to_address: recipient.to_string(),
+                amount: payout.into_vec(),
+            })),
+            Some(cb) => messages.push(
+                cb.to_message(&recipient, Empty {}, payout.into_vec())?
+                    .into(),
+            ),
+        }
+    };
+
+    let mut fees = NativeBalance::default();
+    fees += coin(res.fee_amount.u128(), config.denoms.bid(&side));
+    fees.normalize();
+    if !fees.is_empty() {
+        messages.push(CosmosMsg::Bank(BankMsg::Send {
+            to_address: config.fee_address.to_string(),
+            amount: fees.into_vec(),
+        }))
     }
+
+    Ok(response.add_messages(messages))
 }
 
 #[cfg(test)]
@@ -364,13 +383,19 @@ mod tests {
     use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{
-        fin::{Denoms, SwapRequest, Tick},
+        fin::{ConfigUpdate, Denoms, OrdersResponse, Price, SwapRequest, Tick},
         Layer1Asset,
     };
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};
 
     fn setup() -> (RujiraApp, Addr) {
         let mut app = mock_rujira_app();
+        app.init_modules(|a, _, _| {
+            a.stargate.with_prices(vec![
+                ("BTC", Decimal::from_str("100100.00000000").unwrap()),
+                ("USDC", Decimal::from_str("1.00100000").unwrap()),
+            ]);
+        });
 
         let owner = app.api().addr_make("owner");
 
@@ -393,7 +418,9 @@ mod tests {
                     tick: Tick::new(6u8),
                     fee_taker: Decimal::zero(),
                     fee_maker: Decimal::zero(),
+                    fee_amm: Decimal::zero(),
                     fee_address: app.api().addr_make("fee").to_string(),
+                    range_delta: Decimal::permille(50),
                 },
                 &[],
                 "template",
@@ -499,7 +526,9 @@ mod tests {
                 tick: Tick::new(4u8),
                 fee_taker: Decimal::zero(),
                 fee_maker: Decimal::zero(),
+                fee_amm: Decimal::zero(),
                 fee_address: app.api().addr_make("fee").to_string(),
+                range_delta: Decimal::permille(50),
             },
             &[],
             "template",
@@ -774,8 +803,7 @@ mod tests {
         let (mut app, contract) = setup();
         app.wasm_sudo(
             contract.clone(),
-            &SudoMsg::UpdateConfig {
-                tick: Some(Tick::new(8)),
+            &SudoMsg::UpdateConfig(ConfigUpdate {
                 fee_taker: Some(Decimal::from_ratio(1u128, 100u128)),
                 fee_maker: Some(Decimal::from_ratio(2u128, 100u128)),
                 fee_address: Some(app.api().addr_make("fees2").to_string()),
@@ -785,7 +813,9 @@ mod tests {
                         .unwrap(),
                     Layer1Asset::try_from("BTC.BTC").unwrap(),
                 ]),
-            },
+                fee_amm: Some(Decimal::from_ratio(3u128, 100u128)),
+                range_delta: Some(Decimal::from_ratio(4u128, 100u128)),
+            }),
         )
         .unwrap();
 
@@ -794,9 +824,10 @@ mod tests {
             .query_wasm_smart(contract.clone(), &QueryMsg::Config {})
             .unwrap();
 
-        assert_eq!(config.tick, Tick::new(8));
         assert_eq!(config.fee_taker, Decimal::from_ratio(1u128, 100u128));
         assert_eq!(config.fee_maker, Decimal::from_ratio(2u128, 100u128));
+        assert_eq!(config.fee_amm, Decimal::from_ratio(3u128, 100u128));
+        assert_eq!(config.range_delta, Decimal::from_ratio(4u128, 100u128));
         assert_eq!(config.fee_address, app.api().addr_make("fees2").to_string());
         assert_eq!(
             config.market_makers[0],

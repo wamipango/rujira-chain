@@ -1,14 +1,12 @@
 mod arb;
-mod commitment;
 mod error;
-mod swappable;
+mod swap;
 mod swapper;
 
 pub use arb::{Arber, Arbitrage};
-pub use commitment::Commitment;
 pub use error::SwapError;
-pub use swappable::Swappable;
-pub use swapper::{SwapResult, Swapper};
+pub use swap::{SwapContext, SwapItem};
+pub use swapper::{trade_event, SwapResult, Swapper};
 
 #[cfg(test)]
 mod testing;

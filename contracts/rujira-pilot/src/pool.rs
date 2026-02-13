@@ -1,11 +1,13 @@
+use std::collections::BTreeMap;
+
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    Addr, Attribute, Decimal, Decimal256, StdResult, Storage, Timestamp, Uint128, Uint256,
+    Addr, Attribute, Decimal, Decimal256, Response, StdResult, Storage, Timestamp, Uint128, Uint256,
 };
 use cw_storage_plus::Map;
 use rujira_rs::{
-    bid_pool::{self, SumSnapshot},
-    exchange::{Commitment, SwapError, Swappable},
+    bid_pool::{self, SumSnapshot, SumSnapshotKey},
+    exchange::{SwapContext, SwapError, SwapItem},
     DecimalScaled,
 };
 
@@ -23,8 +25,6 @@ pub struct Pool {
     pub premium: u8,
     pub rate: Decimal,
     pub pool: bid_pool::Pool,
-    #[serde(skip)]
-    pending_sum_snapshots: Vec<SumSnapshot>,
 }
 
 impl Pool {
@@ -42,7 +42,6 @@ impl Pool {
                         // The presence of the key indicates a BidPool should be present,
                         // so we should panic if this is incorrect
                         pool: BID_POOLS.load(storage, premium).unwrap(),
-                        pending_sum_snapshots: vec![],
                     }),
                     Err(_) => None,
                 }
@@ -56,7 +55,6 @@ impl Pool {
             premium: *premium,
             rate: premium.to_rate(oracle),
             pool: BID_POOLS.load(storage, *premium).unwrap_or_default(),
-            pending_sum_snapshots: vec![],
         }
     }
 
@@ -138,40 +136,63 @@ impl Pool {
         let key = (self.premium, bid.sum_snapshot_key());
         SNAPSHOTS.load(storage, key)
     }
-}
-
-impl Swappable for Pool {
-    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
-        let res = self
-            .pool
-            .distribute(offer.into(), &Decimal256::from(self.rate))?;
-
-        self.pending_sum_snapshots = res.snapshots;
-
-        Ok((
-            res.consumed_offer.try_into()?,
-            res.consumed_bids.try_into()?,
-        ))
-    }
-
-    fn commit(&self, storage: &mut dyn Storage) -> Result<Commitment, SwapError> {
-        for s in self.pending_sum_snapshots.clone() {
-            SNAPSHOTS.save(storage, (self.premium, s.key()), &s.sum)?;
-        }
-
+    pub fn commit(&mut self, storage: &mut dyn Storage) -> Result<(), SwapError> {
         BID_POOLS.save(storage, self.premium, &self.pool)?;
         // Clear empty pools so they're not iterated over during a swap
         if self.pool.is_zero() {
             POOLS.remove(storage, self.premium);
-            return Ok(Commitment::default());
+            return Ok(());
         }
 
         POOLS.save(storage, self.premium, &())?;
-        Ok(Commitment::default())
+        Ok(())
     }
+}
 
-    fn attributes(&self) -> Vec<Attribute> {
-        vec![Attribute::new("premium", self.premium.to_string())]
+#[derive(Default, Clone)]
+pub struct PoolContext {
+    pools: Vec<Pool>,
+    pending_sum_snapshots: BTreeMap<(u8, u32), SumSnapshot>,
+}
+
+impl SwapContext for PoolContext {
+    fn commit(
+        &mut self,
+        storage: &mut dyn Storage,
+        response: Response,
+    ) -> Result<Response, SwapError> {
+        for mut pool in self.pools.clone() {
+            pool.commit(storage)?;
+        }
+        for ((k, l), v) in self.pending_sum_snapshots.clone() {
+            SNAPSHOTS.save(storage, (k, SumSnapshotKey::new(l)), &v.sum)?;
+        }
+        Ok(response)
+    }
+}
+
+impl SwapItem for Pool {
+    type Context = PoolContext;
+    fn swap(
+        &mut self,
+        context: &mut Self::Context,
+        offer: Uint128,
+    ) -> Result<(Uint128, Uint128, Vec<Attribute>), SwapError> {
+        let res = self
+            .pool
+            .distribute(offer.into(), &Decimal256::from(self.rate))?;
+        for s in res.snapshots {
+            context
+                .pending_sum_snapshots
+                .insert((self.premium, s.key().raw()), s);
+        }
+        context.pools.push(self.clone());
+
+        Ok((
+            res.consumed_offer.try_into()?,
+            res.consumed_bids.try_into()?,
+            vec![Attribute::new("premium", self.premium.to_string())],
+        ))
     }
 
     fn rate(&self) -> Decimal {
@@ -206,11 +227,11 @@ mod tests {
         // Check both the pool and bid pool are stored
         POOLS.load(&store, premium).unwrap();
         BID_POOLS.load(&store, premium).unwrap();
-
-        pool.swap(Uint128::from(100u128)).unwrap();
+        let mut context = PoolContext::default();
+        pool.swap(&mut context, Uint128::from(100u128)).unwrap();
 
         // Bid Pool should have been emptied, so the container Pool shold be cleared, but the BidPool should remain
-        pool.commit(&mut store).unwrap();
+        context.commit(&mut store, Response::default()).unwrap();
         POOLS.load(&store, premium).unwrap_err();
         let bp = BID_POOLS.load(&store, premium).unwrap();
         // Check it's different from the default

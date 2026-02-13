@@ -1,6 +1,6 @@
 use crate::{CallbackData, Layer1Asset};
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Binary, Decimal, Uint128};
+use cosmwasm_std::{Addr, Binary, Decimal, SignedDecimal, Uint128};
 
 use super::{price::Price, side::Side, Denoms, Tick};
 
@@ -21,11 +21,17 @@ pub struct InstantiateMsg {
     /// (e.g. 4sf is plenty for most tokens < $10 - 1 cent, but above $1000 it creates a $1 tick)  
     pub tick: Tick,
 
+    /// The price delta used to calculate the tick size for Range order book population
+    pub range_delta: Decimal,
+
     /// The fee charged on swaps, and instantly filled limit orders
     pub fee_taker: Decimal,
 
     /// The fee charged on withdrawals from filled limit orders
     pub fee_maker: Decimal,
+
+    /// The fee charged on trades executed via MarketMakers or Range's
+    pub fee_amm: Decimal,
 
     /// The destination address for fees collected
     pub fee_address: String,
@@ -38,6 +44,9 @@ pub type OrderTarget = (Side, Price, Option<Uint128>);
 pub enum ExecuteMsg {
     /// Executes a market trade based on current order book.
     Swap(SwapRequest),
+
+    /// Messages for managing CCL Ranges
+    Range(RangeMsg),
 
     /// Manage all orders
     /// Submit a list of price and target offer amounts
@@ -59,6 +68,8 @@ pub enum ExecuteMsg {
     DoSwap((Addr, SwapRequest)),
     /// Callback action to support an arb prior to a order execution
     DoOrder((Addr, (Vec<OrderTarget>, Option<CallbackData>))),
+    /// Callback action to support an arb prior to a range execution
+    DoRange((Addr, RangeMsg)),
 }
 
 #[cw_serde]
@@ -89,6 +100,48 @@ pub enum SwapRequest {
         to: Option<String>,
         callback: Option<CallbackData>,
     },
+}
+
+#[cw_serde]
+pub enum RangeMsg {
+    Create {
+        /// Specific config of the range
+        config: RangeConfig,
+        /// Optional (price, slippage) parameters to ensure orderly Range creation
+        slippage: Option<(Decimal, Decimal)>,
+    },
+    Claim {
+        idx: Uint128,
+    },
+    Deposit {
+        idx: Uint128,
+    },
+    Withdraw {
+        idx: Uint128,
+        amount: Decimal,
+    },
+    Close {
+        idx: Uint128,
+    },
+    Transfer {
+        idx: Uint128,
+        to: String,
+    },
+}
+
+#[cw_serde]
+pub struct RangeConfig {
+    /// Highest price of the Range
+    pub high: Decimal,
+    /// Lowest price of the Range
+    pub low: Decimal,
+    /// Slope of order distribution - y = `slope` * x
+    pub skew: SignedDecimal,
+    /// Percentage deviation of the best bid/ask price offered by the Range,
+    /// Away from the XY=K invariant price
+    pub spread: Decimal,
+    /// Fee collected from the returned tokens. Should be less than spread otherwise the Range will consume itself
+    pub fee: Decimal,
 }
 
 impl SwapRequest {

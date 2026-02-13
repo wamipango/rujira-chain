@@ -65,7 +65,7 @@ impl Pool {
         // To account for rounding issues, if a bids_value is short by 1 unit, we treat it as fully consumed.
         if bids_value + Uint256::one() >= self.total {
             // Offer is worth more than pool. Empty the pool an increase the epoch
-            return self.distribute_full(rate);
+            return self.distribute_full(offer, rate);
         }
         // Pool is worth more than the offer. Consume the rest of the offer
         self.distribute_partial(bids_value, offer)
@@ -79,10 +79,15 @@ impl Pool {
         self.epoch
     }
 
-    fn distribute_full(&mut self, rate: &Decimal256) -> Result<DistributionResult, BidPoolError> {
+    fn distribute_full(
+        &mut self,
+        offer: Uint256,
+        rate: &Decimal256,
+    ) -> Result<DistributionResult, BidPoolError> {
         let consumed_offer = self
             .total
-            .multiply_ratio(rate.denominator(), rate.numerator());
+            .multiply_ratio(rate.denominator(), rate.numerator())
+            .min(offer);
         let consumed_bids = self.total;
         let offer_per_bid = DecimalScaled::from_ratio(consumed_offer, consumed_bids);
 

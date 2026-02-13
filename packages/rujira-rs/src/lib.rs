@@ -30,8 +30,11 @@ pub mod query;
 pub mod schema;
 #[cfg(feature = "share-pool")]
 mod share_pool;
+#[cfg(feature = "signed-decimal256")]
+mod signed_decimal256;
 #[cfg(feature = "token-factory")]
 mod token_factory;
+pub mod utils;
 
 pub use account_pool::{AccountPool, AccountPoolAccount};
 #[cfg(feature = "asset")]
@@ -54,5 +57,7 @@ pub use oracle::{Oracle, OracleError, OracleValue};
 pub use premium::Premiumable;
 #[cfg(feature = "share-pool")]
 pub use share_pool::{SharePool, SharePoolError};
+#[cfg(feature = "signed-decimal256")]
+pub use signed_decimal256::SignedDecimal256;
 #[cfg(feature = "token-factory")]
 pub use token_factory::{TokenFactory, TokenMetadata};

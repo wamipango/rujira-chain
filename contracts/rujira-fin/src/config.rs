@@ -1,8 +1,8 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Api, Decimal, Deps, DepsMut, StdResult, Storage};
+use cosmwasm_std::{Addr, Api, Decimal, Deps, StdResult, Storage};
 use cw_storage_plus::Item;
 use rujira_rs::{
-    fin::{ConfigResponse, Denoms, InstantiateMsg, Tick},
+    fin::{ConfigResponse, ConfigUpdate, Denoms, InstantiateMsg, Tick},
     Layer1Asset, Oracle,
 };
 
@@ -15,9 +15,13 @@ pub struct Config {
     pub denoms: Denoms,
     pub oracles: Option<[Layer1Asset; 2]>,
     pub market_makers: MarketMakers,
+    #[serde(default)]
+    pub range_delta: Decimal,
     pub tick: Tick,
     pub fee_maker: Decimal,
     pub fee_taker: Decimal,
+    #[serde(default)]
+    pub fee_amm: Decimal,
     pub fee_address: Addr,
 }
 
@@ -30,6 +34,8 @@ impl Config {
             tick: value.tick,
             fee_taker: value.fee_taker,
             fee_maker: value.fee_maker,
+            fee_amm: value.fee_amm,
+            range_delta: value.range_delta,
             fee_address: api.addr_validate(value.fee_address.as_str())?,
         })
     }
@@ -46,6 +52,9 @@ impl Config {
         if self.fee_taker >= Decimal::one() {
             return Err(ContractError::Invalid("fee_take >= 1".into()));
         }
+        if self.range_delta.is_zero() {
+            return Err(ContractError::Invalid("range_delta = 0".into()));
+        }
         self.tick.validate()?;
         Ok(())
     }
@@ -54,59 +63,30 @@ impl Config {
         CONFIG.save(storage, self)
     }
 
-    pub fn update(
-        &mut self,
-        tick: Option<Tick>,
-        market_makers: Option<MarketMakers>,
-        fee_taker: Option<Decimal>,
-        fee_maker: Option<Decimal>,
-        fee_address: Option<Addr>,
-        oracles: Option<[Layer1Asset; 2]>,
-    ) {
-        if let Some(tick) = tick {
-            self.tick = tick;
+    pub fn update(&mut self, api: &dyn Api, update: &ConfigUpdate) -> StdResult<()> {
+        if let Some(market_makers) = &update.market_makers {
+            self.market_makers = MarketMakers::new(api, market_makers.to_vec())?;
         }
-        if let Some(market_makers) = market_makers {
-            self.market_makers = market_makers;
-        }
-        if let Some(fee_taker) = fee_taker {
+        if let Some(fee_taker) = update.fee_taker {
             self.fee_taker = fee_taker;
         }
-        if let Some(fee_maker) = fee_maker {
+        if let Some(fee_maker) = update.fee_maker {
             self.fee_maker = fee_maker;
         }
-        if let Some(fee_address) = fee_address {
-            self.fee_address = fee_address;
+        if let Some(fee_amm) = update.fee_amm {
+            self.fee_amm = fee_amm;
         }
-        if let Some(oracles) = oracles {
-            self.oracles = Some(oracles);
+        if let Some(range_delta) = update.range_delta {
+            self.range_delta = range_delta;
         }
-    }
 
-    pub fn migrate(deps: DepsMut) -> StdResult<()> {
-        #[cw_serde]
-        pub struct Legacy {
-            pub denoms: Denoms,
-            pub oracles: Option<[Layer1Asset; 2]>,
-            pub market_maker: Option<Addr>,
-            pub tick: Tick,
-            pub fee_maker: Decimal,
-            pub fee_taker: Decimal,
-            pub fee_address: Addr,
+        if let Some(fee_address) = &update.fee_address {
+            self.fee_address = api.addr_validate(fee_address)?;
         }
-        let legacy: Legacy = Item::new("config").load(deps.storage)?;
-        Self {
-            denoms: legacy.denoms,
-            oracles: legacy.oracles,
-            market_makers: MarketMakers {
-                contracts: legacy.market_maker.into_iter().collect(),
-            },
-            tick: legacy.tick,
-            fee_maker: legacy.fee_maker,
-            fee_taker: legacy.fee_taker,
-            fee_address: legacy.fee_address,
+        if let Some(oracles) = &update.oracles {
+            self.oracles = Some(oracles.clone());
         }
-        .save(deps.storage)
+        Ok(())
     }
 }
 
@@ -124,6 +104,8 @@ impl From<Config> for ConfigResponse {
             tick: value.tick,
             fee_maker: value.fee_maker,
             fee_taker: value.fee_taker,
+            fee_amm: value.fee_amm,
+            range_delta: value.range_delta,
             fee_address: value.fee_address.to_string(),
         }
     }

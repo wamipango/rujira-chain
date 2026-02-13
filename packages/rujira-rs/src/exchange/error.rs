@@ -1,4 +1,6 @@
-use cosmwasm_std::{CheckedMultiplyRatioError, ConversionOverflowError, StdError, Uint128};
+use cosmwasm_std::{
+    CheckedMultiplyRatioError, ConversionOverflowError, DecimalRangeExceeded, StdError, Uint128,
+};
 use thiserror::Error;
 
 use crate::bid_pool::BidPoolError;
@@ -16,6 +18,12 @@ pub enum SwapError {
 
     #[error("{0}")]
     BidPool(#[from] BidPoolError),
+
+    #[error("{0}")]
+    DecimalRangeExceeded(#[from] DecimalRangeExceeded),
+
+    #[error("AlreadyComitted")]
+    AlreadyComitted {},
 
     #[error("InsufficientReturn expected {expected} got {returned}")]
     InsufficientReturn {

@@ -1,4 +1,4 @@
-use cosmwasm_std::StdError;
+use cosmwasm_std::{StdError, StdResult};
 use cw_storage_plus::{Key, KeyDeserialize, Prefixer, PrimaryKey};
 use rujira_rs::fin::{Price, Side};
 
@@ -33,7 +33,7 @@ impl KeyDeserialize for PoolType {
     type Output = Self;
     const KEY_ELEMS: u16 = 1;
 
-    fn from_vec(value: Vec<u8>) -> cosmwasm_std::StdResult<Self::Output> {
+    fn from_vec(value: Vec<u8>) -> StdResult<Self::Output> {
         match value.first() {
             Some(0u8) => Ok(Self::Fixed),
             Some(1u8) => Ok(Self::Oracle),

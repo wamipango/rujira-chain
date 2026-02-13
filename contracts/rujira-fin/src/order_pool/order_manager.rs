@@ -1,20 +1,22 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{coin, Addr, CosmosMsg, Decimal, Event, Fraction, Storage, Timestamp, Uint128};
+use cosmwasm_std::Response;
+use cosmwasm_std::{coin, Addr, Decimal, Fraction, Storage, Timestamp, Uint128};
 use cw_utils::NativeBalance;
-use rujira_rs::exchange::Swappable;
 use rujira_rs::exchange::Swapper;
+use rujira_rs::exchange::{SwapContext, SwapItem};
 use rujira_rs::fin::{Price, Side, SwapRequest};
 use rujira_rs::Premiumable;
 use std::cmp::Ordering;
 use std::ops::{Mul, Sub};
 
 use crate::config::Config;
-use crate::swap_iter::SwapIter;
-use crate::{
+use crate::contract::CONTRACT_NAME;
+use crate::swap_iter::{create_context, SwapIter};
+use crate::ContractError;
+
+use super::{
     events::{event_create_order, event_increase_order, event_retract_order, event_withdraw_order},
-    order::Order,
-    pool::Pool,
-    ContractError,
+    Order, Pool,
 };
 
 #[cw_serde]
@@ -29,8 +31,7 @@ pub struct OrderManager {
     // What we spend creating and increasing orders
     send: NativeBalance,
     fees: NativeBalance,
-    events: Vec<Event>,
-    messages: Vec<CosmosMsg>,
+    response: Response,
 }
 
 impl OrderManager {
@@ -42,8 +43,7 @@ impl OrderManager {
             receive: funds,
             send: NativeBalance::default(),
             fees: NativeBalance::default(),
-            events: vec![],
-            messages: vec![],
+            response: Response::default(),
         }
     }
 
@@ -55,16 +55,17 @@ impl OrderManager {
         oracle: &impl Premiumable,
     ) -> Result<ExecutionResult, ContractError> {
         for (side, price, target) in o {
+            price.validate()?;
             if let Price::Fixed(x) = price {
                 self.config.tick.validate_price(&x)?;
             }
-            let mut pool = Pool::load(storage, &price, &side, oracle);
+            let mut pool = Pool::load(storage, &price, &side, oracle)?;
             match pool.load_order(storage, &self.owner) {
                 Ok(mut order) => {
                     self.execute_existing_order(storage, &mut pool, &mut order, &side, target)?
                 }
                 Err(ContractError::NotFound {}) => {
-                    self.execute_new_order(storage, swap_iter, &mut pool, &side, target, oracle)?
+                    self.execute_new_order(storage, swap_iter, &mut pool, &side, target, oracle)?;
                 }
                 Err(err) => return Err(err),
             }
@@ -100,14 +101,20 @@ impl OrderManager {
                     let amount = pool.increase_order(storage, order, &self.timestamp, diff)?;
                     let coins = coin(amount.u128(), self.config.denoms.bid(side));
                     self.send += coins;
-                    self.events.push(event_increase_order(pool, order, &diff));
+                    self.response = self
+                        .response
+                        .clone()
+                        .add_event(event_increase_order(pool, order, &diff));
                 }
                 Ordering::Greater => {
                     let diff = amount - target;
                     let amount = pool.retract_order(storage, order, &self.timestamp, Some(diff))?;
                     let coins = coin(amount.u128(), self.config.denoms.bid(side));
                     self.receive += coins;
-                    self.events.push(event_retract_order(pool, order, &diff));
+                    self.response = self
+                        .response
+                        .clone()
+                        .add_event(event_retract_order(pool, order, &diff));
                 }
                 Ordering::Equal => {}
             }
@@ -128,7 +135,8 @@ impl OrderManager {
         if let Some(target) = target {
             let opposite = side.other();
             let mut swapper = Swapper::new(
-                env!("CARGO_PKG_NAME"),
+                CONTRACT_NAME,
+                create_context(&self.config),
                 target,
                 SwapRequest::Limit {
                     price: match opposite {
@@ -140,25 +148,27 @@ impl OrderManager {
                 },
                 self.config.fee_taker,
             );
-            let mut swap = {
+            let swap = {
                 let mut iter = swap_iter.iter(storage, &opposite, oracle);
                 swapper.swap(&mut iter)?
             };
+            self.response = swapper.context.commit(storage, self.response.clone())?;
+            self.response = self.response.clone().add_events(swap.events);
             let order =
                 pool.create_order(storage, &self.timestamp, &self.owner, swap.remaining_offer)?;
             if !swap.return_amount.is_zero() {
-                let commit = swapper.commit(storage)?;
-                self.events.append(&mut swap.events);
-                self.messages
-                    .append(&mut commit.to_msgs(&self.config.denoms, &opposite)?);
                 // Allocate the swap return to funds sent from user
                 self.receive += coin(swap.return_amount.u128(), self.config.denoms.ask(side));
+                self.fees += coin(swap.fee_amount.u128(), self.config.denoms.ask(side));
                 self.receive = (self.receive.clone()
                     - coin(swap.consumed_offer.u128(), self.config.denoms.bid(side)))?;
             }
             // Allocate order size as received amount
             self.send += coin(order.amount().u128(), self.config.denoms.bid(side));
-            self.events.push(event_create_order(pool, &order));
+            self.response = self
+                .response
+                .clone()
+                .add_event(event_create_order(pool, &order));
         }
         Ok(())
     }
@@ -182,7 +192,10 @@ impl OrderManager {
 
         self.receive += receive;
         self.fees += fees;
-        self.events.push(event_withdraw_order(pool, order, &amount));
+        self.response = self
+            .response
+            .clone()
+            .add_event(event_withdraw_order(pool, order, &amount));
         Ok(())
     }
 }
@@ -194,8 +207,7 @@ impl From<&mut OrderManager> for ExecutionResult {
         Self {
             withdraw: e.receive.clone(),
             fees: e.fees.clone(),
-            events: e.events.clone(),
-            messages: e.messages.clone(),
+            response: e.response.clone(),
         }
     }
 }
@@ -204,8 +216,7 @@ impl From<&mut OrderManager> for ExecutionResult {
 pub struct ExecutionResult {
     pub withdraw: NativeBalance,
     pub fees: NativeBalance,
-    pub events: Vec<Event>,
-    pub messages: Vec<CosmosMsg>,
+    pub response: Response,
 }
 
 #[cfg(test)]
@@ -236,9 +247,11 @@ mod tests {
             oracles: None,
             market_makers: MarketMakers::new(mut_deps.api, vec![]).unwrap(),
             tick: Tick::new(4),
-            fee_maker: Decimal::from_str("0.001").unwrap(),
-            fee_taker: Decimal::from_str("0.002").unwrap(),
+            fee_maker: Decimal::permille(1),
+            fee_taker: Decimal::permille(2),
+            fee_amm: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
+            range_delta: Decimal::permille(50),
         };
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
         let mut e = OrderManager::new(&config, info.sender, env.block.time, funds);
@@ -257,7 +270,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(res.withdraw, NativeBalance::default());
-        let event = res.events[0].clone();
+        let event = res.response.events[0].clone();
         assert_eq!(event.ty, "rujira-fin/order.create");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -285,9 +298,11 @@ mod tests {
             oracles: None,
             market_makers: MarketMakers::new(mut_deps.api, vec![]).unwrap(),
             tick: Tick::new(4),
-            fee_maker: Decimal::from_str("0.001").unwrap(),
-            fee_taker: Decimal::from_str("0.002").unwrap(),
+            fee_maker: Decimal::permille(1),
+            fee_taker: Decimal::permille(2),
+            fee_amm: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
+            range_delta: Decimal::permille(50),
         };
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
 
@@ -320,7 +335,7 @@ mod tests {
             .unwrap();
         let returned = NativeBalance(vec![coin(7500, "ruji"), coin(7000, "usdc")]);
         assert_eq!(res.withdraw, returned);
-        let event = res.events[0].clone();
+        let event = res.response.events[0].clone();
         assert_eq!(event.ty, "rujira-fin/order.create");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -331,7 +346,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "offer");
         assert_eq!(event.attributes[3].value, "1000");
 
-        let event = res.events[1].clone();
+        let event = res.response.events[1].clone();
         assert_eq!(event.ty, "rujira-fin/order.create");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -342,7 +357,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "offer");
         assert_eq!(event.attributes[3].value, "2000");
 
-        let event = res.events[2].clone();
+        let event = res.response.events[2].clone();
         assert_eq!(event.ty, "rujira-fin/order.create");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -353,7 +368,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "offer");
         assert_eq!(event.attributes[3].value, "1200");
 
-        let event = res.events[3].clone();
+        let event = res.response.events[3].clone();
         assert_eq!(event.ty, "rujira-fin/order.create");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -380,9 +395,11 @@ mod tests {
             oracles: None,
             market_makers: MarketMakers::new(mut_deps.api, vec![]).unwrap(),
             tick: Tick::new(4),
-            fee_maker: Decimal::from_str("0.001").unwrap(),
-            fee_taker: Decimal::from_str("0.002").unwrap(),
+            fee_maker: Decimal::permille(1),
+            fee_taker: Decimal::permille(2),
+            fee_amm: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
+            range_delta: Decimal::permille(50),
         };
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
 
@@ -418,9 +435,11 @@ mod tests {
             oracles: None,
             market_makers: MarketMakers::new(mut_deps.api, vec![]).unwrap(),
             tick: Tick::new(4),
-            fee_maker: Decimal::from_str("0.001").unwrap(),
-            fee_taker: Decimal::from_str("0.002").unwrap(),
+            fee_maker: Decimal::permille(1),
+            fee_taker: Decimal::permille(2),
+            fee_amm: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
+            range_delta: Decimal::permille(50),
         };
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
 
@@ -488,9 +507,9 @@ mod tests {
 
         let returned = NativeBalance::default();
         assert_eq!(res.withdraw, returned);
-        assert_eq!(res.events.len(), 4);
+        assert_eq!(res.response.events.len(), 4);
 
-        let event = res.events[0].clone();
+        let event = res.response.events[0].clone();
         assert_eq!(event.ty, "rujira-fin/order.create");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -501,7 +520,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "offer");
         assert_eq!(event.attributes[3].value, "600");
 
-        let event = res.events[1].clone();
+        let event = res.response.events[1].clone();
         assert_eq!(event.ty, "rujira-fin/order.retract");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -512,7 +531,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "amount");
         assert_eq!(event.attributes[3].value, "600");
 
-        let event = res.events[2].clone();
+        let event = res.response.events[2].clone();
         assert_eq!(event.ty, "rujira-fin/order.retract");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -523,7 +542,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "amount");
         assert_eq!(event.attributes[3].value, "1000");
 
-        let event = res.events[3].clone();
+        let event = res.response.events[3].clone();
         assert_eq!(event.ty, "rujira-fin/order.create");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -560,9 +579,9 @@ mod tests {
 
         let returned = NativeBalance::default();
         assert_eq!(res.withdraw, returned);
-        assert_eq!(res.events.len(), 2);
+        assert_eq!(res.response.events.len(), 2);
 
-        let event = res.events[0].clone();
+        let event = res.response.events[0].clone();
         assert_eq!(event.ty, "rujira-fin/order.retract");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -573,7 +592,7 @@ mod tests {
         assert_eq!(event.attributes[3].key, "amount");
         assert_eq!(event.attributes[3].value, "300");
 
-        let event = res.events[1].clone();
+        let event = res.response.events[1].clone();
         assert_eq!(event.ty, "rujira-fin/order.increase");
         assert_eq!(event.attributes[0].key, "owner");
         assert_eq!(event.attributes[0].value, "addr0000");
@@ -599,9 +618,11 @@ mod tests {
             oracles: None,
             market_makers: MarketMakers::new(mut_deps.api, vec![]).unwrap(),
             tick: Tick::new(2),
-            fee_maker: Decimal::from_str("0.001").unwrap(),
-            fee_taker: Decimal::from_str("0.002").unwrap(),
+            fee_maker: Decimal::permille(1),
+            fee_taker: Decimal::permille(2),
+            fee_amm: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
+            range_delta: Decimal::permille(50),
         };
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
         let mut e = OrderManager::new(&config, info.sender, env.block.time, funds);

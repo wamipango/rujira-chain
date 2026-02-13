@@ -1,10 +1,12 @@
-use super::{Commitment, SwapError, Swappable};
-use cosmwasm_std::{Attribute, Decimal, Fraction, Storage, Uint128};
+use crate::exchange::swap::SwapContext;
+
+use super::{SwapError, SwapItem};
+use cosmwasm_std::{Attribute, Decimal, Fraction, Response, Storage, Uint128};
 use std::cmp::Ordering;
 use std::ops::{Div, Mul};
 use std::str::FromStr;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct TestItem {
     pub price: Decimal,
     pub amount: Uint128,
@@ -25,27 +27,43 @@ impl TestItem {
     }
 }
 
-impl Swappable for TestItem {
+#[derive(Default, Clone)]
+pub struct TestIterContext {
+    items: Vec<TestItem>,
+}
+
+impl SwapContext for TestIterContext {
+    fn commit(
+        &mut self,
+        _storage: &mut dyn Storage,
+        response: Response,
+    ) -> Result<Response, SwapError> {
+        Ok(response)
+    }
+}
+
+impl SwapItem for TestItem {
+    type Context = TestIterContext;
     fn rate(&self) -> Decimal {
         self.price
-    }
-
-    fn attributes(&self) -> Vec<Attribute> {
-        vec![Attribute::new("test", "attr")]
     }
 
     fn total(&self) -> Uint128 {
         self.amount
     }
 
-    fn swap(&mut self, offer: Uint128) -> Result<(Uint128, Uint128), SwapError> {
+    fn swap(
+        &mut self,
+        context: &mut Self::Context,
+        offer: Uint128,
+    ) -> Result<(Uint128, Uint128, Vec<Attribute>), SwapError> {
         let offer_value = Decimal::from_ratio(offer, 1u128)
             .mul(self.price)
             .to_uint_ceil();
         let pool_value = Decimal::from_ratio(self.amount, 1u128)
             .div(self.price)
             .to_uint_floor();
-        let res = match self.amount.cmp(&offer_value) {
+        let (offer, ask) = match self.amount.cmp(&offer_value) {
             // Partial fill
             Ordering::Greater => {
                 self.amount -= offer_value;
@@ -58,14 +76,10 @@ impl Swappable for TestItem {
                 (pool_value, size)
             }
         };
-
+        context.items.push(self.clone());
         // Increment commitment as the same offer may be used multiple times, particularly during arbitrage
-        self.commitment = res;
-        Ok(res)
-    }
-
-    fn commit(&self, _storage: &mut dyn Storage) -> Result<Commitment, SwapError> {
-        Ok(Commitment::default())
+        self.commitment = (offer, ask);
+        Ok((offer, ask, vec![Attribute::new("test", "attr")]))
     }
 }
 

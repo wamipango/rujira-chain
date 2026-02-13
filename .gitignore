@@ -24,3 +24,5 @@ contracts.txt
 tarpaulin-report.*
 
 **/schema/raw
+
+*.json

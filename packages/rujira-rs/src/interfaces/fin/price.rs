@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Decimal, Fraction, StdError, Uint128};
+use cosmwasm_std::{Decimal, Fraction, StdError, StdResult, Uint128};
 use cw_storage_plus::{IntKey, Key, KeyDeserialize, PrimaryKey};
 
 use crate::Premiumable;
@@ -22,11 +22,28 @@ impl Display for Price {
 }
 
 impl Price {
-    pub fn to_rate(&self, oracle: &impl Premiumable) -> Decimal {
+    pub fn to_rate(&self, oracle: &impl Premiumable) -> StdResult<Decimal> {
+        self.validate()?;
         match self {
-            Price::Fixed(fixed) => *fixed,
-            Price::Oracle(bps) => oracle.adjust(bps),
+            Price::Fixed(fixed) => Ok(*fixed),
+            Price::Oracle(bps) => Ok(oracle.adjust(bps)),
         }
+    }
+
+    pub fn validate(&self) -> StdResult<()> {
+        match self {
+            Price::Fixed(fixed) => {
+                if fixed.is_zero() {
+                    return Err(StdError::generic_err("invalid zero price"));
+                }
+            }
+            Price::Oracle(bps) => {
+                if bps.abs() >= 10000 {
+                    return Err(StdError::generic_err("abs(bps) >= 10000"));
+                }
+            }
+        }
+        Ok(())
     }
 }
 

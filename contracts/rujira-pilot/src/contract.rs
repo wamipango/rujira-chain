@@ -12,7 +12,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_utils::{must_pay, NativeBalance};
-use rujira_rs::exchange::{SwapError, SwapResult, Swappable, Swapper};
+use rujira_rs::exchange::{SwapContext, SwapError, SwapItem, SwapResult, Swapper};
 use rujira_rs::fin::SwapRequest;
 use rujira_rs::pilot::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, OrderResponse, OrdersResponse, PoolResponse,
@@ -68,9 +68,15 @@ pub fn execute(
             };
             let to = to.map(|x| deps.api.addr_validate(&x)).transpose()?;
             let funds = must_pay(&info, config.denoms.ask())?;
-            let mut swapper = Swapper::new(env!("CARGO_PKG_NAME"), funds, req, config.fee_taker);
+            let mut swapper = Swapper::new(
+                CONTRACT_NAME,
+                Default::default(),
+                funds,
+                req,
+                config.fee_taker,
+            );
             let res = simulate_swap(&mut swapper, deps.as_ref(), &oracle)?;
-            swapper.commit(deps.storage)?;
+            let response = swapper.context.commit(deps.storage, Response::default())?;
 
             let mut funds = NativeBalance(vec![
                 coin(res.return_amount.u128(), config.denoms.bid()),
@@ -97,9 +103,7 @@ pub fn execute(
                 }))
             }
 
-            Ok(Response::default()
-                .add_messages(messages)
-                .add_events(res.events))
+            Ok(response.add_messages(messages).add_events(res.events))
         }
         ExecuteMsg::Order(vec) => {
             let mut e = OrderManager::new(
@@ -208,7 +212,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
         }
         QueryMsg::Simulate(offer) => {
             let mut swapper = Swapper::new(
-                env!("CARGO_PKG_NAME"),
+                CONTRACT_NAME,
+                Default::default(),
                 offer.amount,
                 SwapRequest::Yolo {
                     to: None,
@@ -415,7 +420,6 @@ mod tests {
                 &[swap_amount],
             )
             .unwrap();
-        dbg!(&res);
         res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
             ("offer", "100"),
             ("bid", "9000000"),

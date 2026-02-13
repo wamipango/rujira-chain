@@ -32,6 +32,9 @@ impl SumSnapshotKey {
     pub fn new(epoch: u32) -> Self {
         Self(epoch)
     }
+    pub fn raw(&self) -> u32 {
+        self.0
+    }
 }
 
 impl PrimaryKey<'_> for SumSnapshotKey {

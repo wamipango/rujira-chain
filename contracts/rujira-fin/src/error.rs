@@ -1,9 +1,14 @@
-use cosmwasm_std::{CheckedFromRatioError, Coin, ConversionOverflowError, OverflowError, StdError};
+use cosmwasm_std::{
+    CheckedFromRatioError, Coin, ConversionOverflowError, Decimal, DecimalRangeExceeded,
+    OverflowError, StdError,
+};
 use cw_utils::{NativeBalance, PaymentError};
 use rujira_rs::{
     bid_pool::BidPoolError, exchange::SwapError, fin::TickError, query::PoolError, OracleError,
 };
 use thiserror::Error;
+
+use crate::ranges::error::RangeError;
 
 #[derive(Error, Debug)]
 pub enum ContractError {
@@ -36,6 +41,15 @@ pub enum ContractError {
 
     #[error("{0}")]
     Oracle(#[from] OracleError),
+
+    #[error("{0}")]
+    Range(#[from] RangeError),
+
+    #[error("{0}")]
+    DecimalRangeExceeded(#[from] DecimalRangeExceeded),
+
+    #[error("SlippageExceeded price {0}")]
+    SlippageExceeded(Decimal),
 
     #[error("Insufficient Return. expected {requested} got {returned}")]
     InsufficientReturn { requested: Coin, returned: Coin },

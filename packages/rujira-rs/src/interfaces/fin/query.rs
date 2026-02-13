@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, Decimal, Timestamp, Uint128};
+use cosmwasm_std::{Coin, Decimal, SignedDecimal, Timestamp, Uint128};
 
 use crate::Layer1Asset;
 
@@ -31,6 +31,16 @@ pub enum QueryMsg {
         limit: Option<u8>,
     },
 
+    #[returns(RangeResponse)]
+    Range(Uint128),
+
+    #[returns(RangesResponse)]
+    Ranges {
+        owner: Option<String>,
+        cursor: Option<Uint128>,
+        limit: Option<u8>,
+    },
+
     #[returns(BookResponse)]
     Book {
         limit: Option<u8>,
@@ -52,11 +62,17 @@ pub struct ConfigResponse {
     /// See [InstantiateMsg::tick]
     pub tick: Tick,
 
+    /// See [InstantiateMsg::range_delta]
+    pub range_delta: Decimal,
+
     /// See [InstantiateMsg::fee_taker]    
     pub fee_taker: Decimal,
 
     /// See [InstantiateMsg::fee_maker]
     pub fee_maker: Decimal,
+
+    /// See [InstantiateMsg::fee_amm]
+    pub fee_amm: Decimal,
 
     /// See [InstantiateMsg::fee_address]
     pub fee_address: String,
@@ -92,6 +108,28 @@ pub struct OrderResponse {
 #[cw_serde]
 pub struct OrdersResponse {
     pub orders: Vec<OrderResponse>,
+}
+
+#[cw_serde]
+pub struct RangeResponse {
+    pub idx: Uint128,
+    pub owner: String,
+    pub high: Decimal,
+    pub low: Decimal,
+    pub skew: SignedDecimal,
+    pub spread: Decimal,
+    pub fee: Decimal,
+    pub base: Decimal,
+    pub quote: Decimal,
+    pub price: Decimal,
+    pub ask: Decimal,
+    pub bid: Decimal,
+    pub fees: [Decimal; 2],
+}
+
+#[cw_serde]
+pub struct RangesResponse {
+    pub ranges: Vec<RangeResponse>,
 }
 
 #[cw_serde]
