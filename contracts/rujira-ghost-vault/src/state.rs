@@ -2,7 +2,10 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal, Decimal256, Env, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Item;
 use rujira_rs::{ghost::vault::Interest, DecimalScaled, SharePool, SharePoolError};
-use std::ops::{Add, Mul, Sub};
+use std::{
+    cmp::min,
+    ops::{Add, Mul, Sub},
+};
 
 use crate::{config::Config, ContractError};
 
@@ -67,12 +70,19 @@ impl State {
             return Err(ContractError::ZeroDebt {});
         }
         // Calculate the amount of shares that this repay will burn
-        let shares = amount.multiply_ratio(self.debt_pool.shares(), self.debt_pool.size());
+        let shares = min(
+            amount.multiply_ratio(self.debt_pool.shares(), self.debt_pool.size()),
+            // Clamp shares to the size of the pool, to accommodate the final repayment
+            self.debt_pool.shares(),
+        );
         // If zero, leave <1 unit of debt in the pool that's now shared across all other borrowers
-        if !shares.is_zero() {
+        // Return 1 so that the borrower's allocation is correctly reduced
+        if shares.is_zero() {
+            Ok(Uint128::one())
+        } else {
             self.debt_pool.leave(shares)?;
+            Ok(shares)
         }
-        Ok(shares)
     }
 
     pub fn capacity(&self) -> Result<Uint128, ContractError> {
