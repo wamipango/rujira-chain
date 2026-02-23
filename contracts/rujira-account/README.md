@@ -10,10 +10,10 @@ There are no user-executable messages.
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
+- `execute` and `query` always return `Unauthorized`, so users cannot invoke arbitrary account logic directly.
+- `sudo` only forwards a supplied `CosmosMsg`; it does not add business logic or mutate internal accounting state.
+- The contract stores no mutable balances/debt state; value custody is only whatever tokens sit on the contract address.
+- Safety depends on the parent controller contract (for example ghost-credit) that is configured as admin/governance caller.
 
 ## Notes
 

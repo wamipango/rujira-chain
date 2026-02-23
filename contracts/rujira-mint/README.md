@@ -10,10 +10,10 @@ Not available.
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
+- On instantiate, the contract creates exactly one token-factory denom (`x/<id>`) and mints the declared initial amount to the instantiator.
+- There are no post-deployment control paths: `execute`, `sudo`, and `query` all return `Unauthorized`.
+- The contract stores no mutable supply/accounting state after instantiation; token supply changes are not possible through this module.
+- Safety is one-shot by design: all mint authority usage happens in the instantiate transaction.
 
 ## Notes
 

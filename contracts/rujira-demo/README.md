@@ -6,8 +6,7 @@ It also exposes a simple pool query for inspecting THORChain pool state.
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
-
+- `execute` and `sudo` are intentional pass-throughs that forward arbitrary `CosmosMsg` without extra authorization checks.
+- The contract keeps no business state beyond contract version metadata, so it has no internal accounting invariants to preserve.
+- `query` exposes only pool lookup (`QueryMsg::Pool`) and does not mutate state.
+- This module is a wiring/demo surface and should not be treated as a policy-enforcing vault/account contract.

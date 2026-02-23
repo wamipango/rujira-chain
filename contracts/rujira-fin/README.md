@@ -67,8 +67,8 @@ If `callback` is provided, the contract sends the swap result to the callback ad
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
-
+- User-facing `Swap`/`Order`/`Range` paths are wrapped into self-calls via `Arb`; `DoSwap`/`DoOrder`/`DoRange` reject non-contract callers.
+- Net taker/maker/arb fees are normalized and sent to `fee_address`, so fee accrual is explicit and not left in transient balances.
+- Config updates (`instantiate`, `sudo`, `migrate`) are re-validated: denoms valid, oracle pairs resolvable (if set), `fee_maker`/`fee_taker` < 1, non-zero `range_delta`, valid tick.
+- Order execution enforces fund sufficiency by netting required sends against available/withdrawn balances; insufficient collateralized orders fail atomically.
+- Scheduled arbitrage only re-schedules when invoked by the scheduler module address, preventing arbitrary callers from forcing recurring cranks.

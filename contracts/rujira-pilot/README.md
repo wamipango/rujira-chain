@@ -38,10 +38,11 @@ Pools:
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
+- Swap intake is constrained to the configured ask denom (`must_pay`), and outputs are only bid-denom return plus any unspent ask-denom remainder.
+- Order placement/updates enforce `premium <= max_premium`; out-of-range premium levels are rejected.
+- Order execution nets required sends against available funds/withdrawals, so orders cannot increase beyond user-provided collateral.
+- Maker and taker fees are separated from user payouts and routed to `fee_address`.
+- Query and execution derive prices from the same premium/oracle model, keeping pool pricing and simulation semantics aligned.
 
 ## Notes
 

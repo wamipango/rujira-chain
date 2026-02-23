@@ -43,10 +43,12 @@ Account:
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
+- Instantiate requires exact funding of `ruji_allocation` in `ruji_denom`; under/overfunded deployments fail.
+- Deposits accept only `merge_denom` (`must_pay`), and withdrawals are nonpayable requests against owned shares.
+- `allocate` is executed before each deposit/withdraw, so surplus RUJI distribution is applied to existing share holders before new share issuance.
+- Share math is pool-proportional (`SharePool` join/leave), and account state updates atomically with pool updates.
+- Withdrawals are clamped to owned shares (`min(requested, account_shares)`), preventing negative-share states.
+- Config validation enforces non-empty denoms, non-zero supplies/allocations, and valid decay window ordering.
 
 ## Notes
 

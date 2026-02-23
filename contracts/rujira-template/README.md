@@ -14,10 +14,10 @@ No-op; messages are empty and return an empty response.
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
+- Instantiate stores validated config and version metadata; runtime message handlers are intentionally no-op.
+- `execute` and `sudo` return empty responses and do not move funds or mutate business state.
+- `query` always returns an empty payload, so there is no state-derived read surface yet.
+- This contract is a scaffold; real invariants only exist after message types and state transitions are implemented.
 
 ## Notes
 

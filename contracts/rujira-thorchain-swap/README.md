@@ -32,10 +32,12 @@ Quote (BOW-style):
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
+- `swap` is market-gated: caller must be explicitly enabled in `MARKETS`, otherwise execution is unauthorized.
+- Before borrowing, the contract validates base-layer quote return (`expected + outbound`) against `min_return`; insufficient quotes revert.
+- Output denom borrow source is explicit per-denom vault mapping (`VAULTS`), and reserve fee is deducted before borrow payout.
+- Callback settlement is vault-authenticated: only the configured vault for the received denom can trigger `ExecuteMsg::Callback`.
+- Repayment runs before new swap borrow (or via `Repay`) and caps each repay to outstanding vault debt for that denom.
+- Unknown/random token balances are ignored by repayment scanning, preventing accidental hard failures from unsolicited deposits.
 
 ## Notes
 

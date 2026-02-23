@@ -252,8 +252,10 @@ and clear the preference with
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
-
+- Only the current account owner can execute `ExecuteMsg::Account` actions; registry-controlled `DoAccount` then processes the queued actions.
+- Every account mutation path ends in `CheckAccount`, enforcing post-action `adjusted_ltv < adjustment_threshold`.
+- Liquidation starts only from unsafe accounts (`adjusted_ltv >= liquidation_threshold`) and re-checks safety/over-liquidation bounds at each step.
+- Liquidation execution must satisfy preference-order constraints and max slippage limits (`liquidation_max_slip`) after accounting for protocol/liquidator fees.
+- Vault linkage is governance-gated: `SetVault` only allows denoms already present in `collateral_ratios`, and each denom is bound once in `BORROW`.
+- Repay-in-liquidation takes protocol and liquidator fees from real balance before vault repay; preference-step failures are non-blocking, solver-step failures revert.
+- Config validation bounds critical knobs: `liquidation_threshold > adjustment_threshold`, capped fees, collateral ratios <= 1, and `liquidation_max_slip < 1`.

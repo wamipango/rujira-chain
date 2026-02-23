@@ -41,10 +41,12 @@ Account:
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
+- All user staking paths (`Account` and `Liquid`) call `distribute` first, so rewards and pending swap accounting are synchronized before mutation.
+- `Settle` is self-call-only, preventing external spoofing of swap-return accounting into `PENDING_SWAP`.
+- Account staking always claims accrued rewards before bond/withdraw mutations, keeping per-account pending revenue consistent.
+- Liquid staking is share-based: bond mints receipt shares from `SharePool`, unbond burns shares and returns proportional bond principal.
+- Revenue allocation splits surplus across account and liquid pools pro-rata by bonded size; swap conversion is capped by `revenue_converter` limit.
+- Optional fee handling is bounded (`0 < fee <= 1`) and charged from distributable revenue before user allocations.
 
 ## Notes
 

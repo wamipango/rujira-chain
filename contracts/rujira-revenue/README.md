@@ -15,10 +15,12 @@ Run a cycle (executor-only):
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
+- `ExecuteMsg::Run` is executor-gated; non-executor callers are rejected.
+- Each run executes at most one configured action (bounded by per-action `limit`), then distribution executes in reply/fallback path.
+- Action execution is denom-consistent (`Action::execute` verifies queried coin denom matches action denom).
+- Distribution fans out each target denom by configured address weights, with final-recipient remainder handling to avoid stranded dust.
+- Action iteration is stateful (`LAST` cursor) and cycles deterministically over configured actions.
+- Target-denom additions are deduplicated, preventing repeated distribution loops for the same denom.
 
 ## Notes
 

@@ -57,10 +57,11 @@ Quote for market-making:
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
+- `swap` accepts exactly one input coin and must pass strategy-level `validate_swap`, so payout cannot bypass `min_return` checks.
+- `deposit`/`withdraw` mutate strategy state first, then mint/burn LP receipts, keeping pool state and receipt supply aligned.
+- Withdrawals require receipt-token payment (`must_pay` on LP denom), and burned shares match the shares redeemed.
+- Strategy changes are sudo-only and always re-validated before save (`SetStrategy`), preventing invalid fee/ratio params from being committed.
+- Callback flows route the same computed funds as direct sends, preserving accounting regardless of delivery path.
 
 ## Notes
 

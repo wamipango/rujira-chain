@@ -43,10 +43,12 @@ Borrowers (paged):
 
 ## Invariants
 
-- **Authorization:** which actors are allowed to execute privileged flows.
-- **Accounting:** balances/shares/debt conservation rules before and after each state transition.
-- **Safety bounds:** caps, thresholds, and ratio constraints that can never be exceeded.
-- **External calls:** callback/execute side effects that must preserve contract safety.
+- Borrow/repay market actions are restricted to whitelisted borrowers (`Borrower::load`), including delegate accounting per borrower.
+- Interest accrual runs before all execute and query paths (`state.distribute_interest`), so debt/deposit pools are always read/written at current accrual.
+- Borrowing is capacity-capped (`deposits - debt`) and borrower-limit-capped (share ownership value cannot exceed configured borrower limit).
+- Repay is liability-capped per actor/delegate; overpayments are refunded and cannot burn more shares than owed.
+- Deposit receipt minting and withdrawal burn paths are symmetric around `SharePool` joins/leaves, preserving receipt-to-pool ownership semantics.
+- Config safety checks enforce valid interest curve and `fee < 1`; protocol-fee shares mint only from accrued interest.
 
 ## Notes
 
