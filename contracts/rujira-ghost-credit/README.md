@@ -164,10 +164,12 @@ Whenever a Liquidation Step `execute`s a contract, the output from that executio
 
 - The Account's LTV must must be strictly **less** than `config.liquidation_threshold` (e.g. 100% LTV), otherwise the transaction will fail.
 - The Account's LTV must must be **equal to or above** the `config.adjustment_threshold` (e.g. 90% LTV), otherwise the transaction will fail. This protects the Account from over-liquidation.
+  - If `debt_value` < `config.full_liquidation_threshold`, that check is skipped, which allows full liquidation of small debt positions without running into rounding issues.
 - All tokens _received_ by the Account in the contract execution **must** be one of the Debt tokens owed by the Account. This is to prevent unnecessary exchanges of a user's collateral.
 - All tokens _received_ by the Account in the contract execution **must** be equal to or less than the corresponding debt owed. This is to prevent over-liquidation of a user's collateral.
 - All tokens _sent_ by the Account in the contract execution must match an Account's `Preferences`.
 - The $ value when collateral is exchanged for debt must not exceed `config.liquidation_max_slip`.
+
 
 ### Account Liquidation Preferences
 
