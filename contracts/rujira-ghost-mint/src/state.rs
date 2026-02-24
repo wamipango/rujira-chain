@@ -66,16 +66,14 @@ impl State {
 
     pub fn utilization(&self, mint_cap: Uint128) -> Result<Decimal, ContractError> {
         // We consider accrued interest and debt in the utilization rate
-        if self.minted.is_zero() {
+        if self.debt_pool.size().is_zero() {
             Ok(Decimal::zero())
         } else {
-            Ok(Decimal::one()
-                .checked_sub(Decimal::from_ratio(
-                    // We use the debt pool size to determine utilization
-                    self.debt_pool.size(),
-                    mint_cap,
-                ))
-                .unwrap_or(Decimal::one()))
+            Ok(Decimal::from_ratio(
+                // We use the debt pool size to determine utilization
+                self.debt_pool.size(),
+                mint_cap,
+            ))
         }
     }
 
@@ -85,14 +83,6 @@ impl State {
         mint_cap: Uint128,
     ) -> Result<Decimal, ContractError> {
         Ok(interest.rate(self.utilization(mint_cap)?)?)
-    }
-
-    pub fn lend_rate(&self, config: &Config, mint_cap: Uint128) -> Result<Decimal, ContractError> {
-        Ok(config
-            .interest
-            .rate(self.utilization(mint_cap)?)?
-            .mul(self.utilization(mint_cap)?)
-            .mul(Decimal::one() - config.fee))
     }
 
     pub fn calculate_interest(
@@ -201,11 +191,11 @@ mod tests {
         // All interest in pending amounts
         assert_eq!(
             state.pending_interest,
-            DecimalScaled::from_ratio(11415753424377u128, 10u128.pow(19))
+            DecimalScaled::from_ratio(45662328766017u128, 10u128.pow(19))
         );
         assert_eq!(
             state.pending_fees,
-            DecimalScaled::from_ratio(1268417047153u128, 10u128.pow(19))
+            DecimalScaled::from_ratio(5073592085113u128, 10u128.pow(19))
         );
     }
 
@@ -238,12 +228,12 @@ mod tests {
         // Distribute interest
         let shares = state.distribute_interest(&env, &config).unwrap();
 
-        assert_eq!(shares, Uint128::new(12));
-        assert_eq!(state.debt_pool.size(), Uint128::new(920));
+        assert_eq!(shares, Uint128::new(24));
+        assert_eq!(state.debt_pool.size(), Uint128::new(1040));
 
         // No pending amounts (exact integer calculations)
         assert_eq!(state.pending_interest, DecimalScaled::zero());
         assert_eq!(state.pending_fees, DecimalScaled::zero());
-        assert_eq!(state.debt_pool.size().u128() - 800, 120);
+        assert_eq!(state.debt_pool.size().u128() - 920, 120);
     }
 }
