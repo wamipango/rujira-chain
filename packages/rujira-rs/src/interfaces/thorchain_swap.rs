@@ -115,7 +115,7 @@ impl Vault {
         Ok(WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_json_binary(&ghost::vault::ExecuteMsg::Market(
-                ghost::vault::MarketMsg::Borrow {
+                ghost::common::MarketMsg::Borrow {
                     amount,
                     callback: Some(to_json_binary(&Callback { to, callback })?.into()),
                     delegate: None,
@@ -129,14 +129,14 @@ impl Vault {
         Ok(WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_json_binary(&ghost::vault::ExecuteMsg::Market(
-                ghost::vault::MarketMsg::Repay { delegate: None },
+                ghost::common::MarketMsg::Repay { delegate: None },
             ))?,
             funds: vec![amount],
         })
     }
 
     pub fn debt(&self, q: QuerierWrapper, owner: &Addr) -> StdResult<Uint128> {
-        let res: ghost::vault::BorrowerResponse = q.query_wasm_smart(
+        let res: ghost::common::BorrowerResponse = q.query_wasm_smart(
             self.0.clone(),
             &ghost::vault::QueryMsg::Borrower {
                 addr: owner.to_string(),
@@ -146,7 +146,7 @@ impl Vault {
     }
 
     pub fn available(&self, q: QuerierWrapper, owner: &Addr) -> StdResult<Uint128> {
-        let res: ghost::vault::BorrowerResponse = q.query_wasm_smart(
+        let res: ghost::common::BorrowerResponse = q.query_wasm_smart(
             self.0.clone(),
             &ghost::vault::QueryMsg::Borrower {
                 addr: owner.to_string(),

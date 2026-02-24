@@ -1,11 +1,9 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal, Decimal256, Env, StdResult, Storage, Timestamp, Uint128};
 use cw_storage_plus::Item;
-use rujira_rs::{ghost::vault::Interest, DecimalScaled, SharePool, SharePoolError};
-use std::{
-    cmp::min,
-    ops::{Add, Mul, Sub},
-};
+use rujira_rs::{ghost::interest::Interest, DecimalScaled, SharePool, SharePoolError};
+use std::cmp::min;
+use std::ops::{Add, Mul, Sub};
 
 use crate::{config::Config, ContractError};
 

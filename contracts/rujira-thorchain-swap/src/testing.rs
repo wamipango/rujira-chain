@@ -2,7 +2,7 @@ use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128};
 
 use cw_multi_test::{ContractWrapper, Executor};
 use rujira_rs::{
-    ghost::{self, vault::Interest},
+    ghost::{self, interest::Interest},
     thorchain_swap::{ExecuteMsg, InstantiateMsg, SudoMsg},
     TokenMetadata,
 };

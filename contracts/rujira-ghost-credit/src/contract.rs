@@ -520,7 +520,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 
     match msg {
         QueryMsg::Config {} => Ok(to_json_binary(&ConfigResponse::from(config))?),
-        QueryMsg::Borrows {} => Ok(to_json_binary(&ghost::vault::BorrowersResponse {
+        QueryMsg::Borrows {} => Ok(to_json_binary(&ghost::common::BorrowersResponse {
             borrowers: config
                 .collateral_ratios
                 .keys()
@@ -529,7 +529,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                         .load(deps.storage, x.clone())?
                         .borrower(deps.querier, &env.contract.address)?)
                 })
-                .collect::<Result<Vec<ghost::vault::BorrowerResponse>, ContractError>>()?,
+                .collect::<Result<Vec<ghost::common::BorrowerResponse>, ContractError>>()?,
         })?),
         QueryMsg::Account(addr) => Ok(to_json_binary(&AccountResponse::from(
             CreditAccount::load(

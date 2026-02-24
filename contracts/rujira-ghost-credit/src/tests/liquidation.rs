@@ -8,8 +8,8 @@ use rujira_ghost_vault::mock::GhostVault;
 use rujira_rs::{
     fin::{self, Denoms},
     ghost::{
+        common::{BorrowerResponse, DelegateResponse},
         credit::{AccountResponse, Collateral, CollateralResponse, Debt},
-        vault::{BorrowerResponse, DelegateResponse},
     },
 };
 use rujira_rs_testing::{mock_rujira_app, RujiraApp};

@@ -11,9 +11,11 @@ use cosmwasm_std::{
 };
 use cw2::{ensure_from_older_version, set_contract_version};
 use cw_utils::must_pay;
+use rujira_rs::ghost::common::{
+    BorrowerResponse, BorrowersResponse, DelegateResponse, MarketMsg, PoolResponse,
+};
 use rujira_rs::ghost::vault::{
-    BorrowerResponse, BorrowersResponse, ConfigResponse, DelegateResponse, ExecuteMsg,
-    InstantiateMsg, MarketMsg, PoolResponse, QueryMsg, StatusResponse, SudoMsg,
+    ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StatusResponse, SudoMsg,
 };
 use rujira_rs::TokenFactory;
 use std::cmp::min;
@@ -364,7 +366,7 @@ mod tests {
     use super::*;
     use cosmwasm_std::{coin, Decimal, Event, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
-    use rujira_rs::{ghost::vault::Interest, TokenMetadata};
+    use rujira_rs::{ghost::interest::Interest, TokenMetadata};
     use rujira_rs_testing::mock_rujira_app;
 
     #[test]

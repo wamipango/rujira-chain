@@ -1,12 +1,16 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{
-    coin, to_json_binary, Addr, Coin, CosmosMsg, Decimal, QuerierWrapper, StdResult, Timestamp,
-    Uint128, WasmMsg,
+    to_json_binary, Addr, Coin, CosmosMsg, Decimal, QuerierWrapper, StdResult, Timestamp, Uint128,
+    WasmMsg,
 };
 
-use crate::{CallbackData, OracleError, OracleValue, TokenMetadata};
-
-use super::interest::Interest;
+use crate::{
+    ghost::{
+        common::{self, BorrowerResponse, DelegateResponse, MarketMsg},
+        interest::Interest,
+    },
+    CallbackData, TokenMetadata,
+};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -25,30 +29,7 @@ pub enum ExecuteMsg {
     /// Withdraw the borrowable asset from the money market.
     Withdraw { callback: Option<CallbackData> },
     /// Privileged Msgs for whitelisted contracts
-    Market(MarketMsg),
-}
-
-#[cw_serde]
-pub enum MarketMsg {
-    /// Borrow the borrowable asset from the money market. Only callable by whitelisted market contracts.
-    Borrow {
-        amount: Uint128,
-        callback: Option<CallbackData>,
-        /// optional delegate address for the debt obligation to be allocated to
-        delegate: Option<String>,
-    },
-    /// Repay a borrow. Only callable by whitelisted market contracts.
-    Repay {
-        /// Optionally repay a delegate's debt obligation instead of the caller's
-        delegate: Option<String>,
-    },
-}
-
-#[cw_serde]
-pub enum SudoMsg {
-    SetBorrower { contract: String, limit: Uint128 },
-    SetInterest(Interest),
-    SetFee((Decimal, String)),
+    Market(common::MarketMsg),
 }
 
 #[cw_serde]
@@ -66,11 +47,18 @@ pub enum QueryMsg {
     #[returns(DelegateResponse)]
     Delegate { borrower: String, addr: String },
 
-    #[returns(BorrowersResponse)]
+    #[returns(common::BorrowersResponse)]
     Borrowers {
         limit: Option<u8>,
         start_after: Option<String>,
     },
+}
+
+#[cw_serde]
+pub enum SudoMsg {
+    SetBorrower { contract: String, limit: Uint128 },
+    SetInterest(Interest),
+    SetFee((Decimal, String)),
 }
 
 #[cw_serde]
@@ -91,55 +79,9 @@ pub struct StatusResponse {
 
     pub lend_rate: Decimal,
     // Share pool that accounts for accrued debt interest
-    pub debt_pool: PoolResponse,
+    pub debt_pool: common::PoolResponse,
     // Share pool that allocated collected debt interest to lenders
-    pub deposit_pool: PoolResponse,
-}
-
-#[cw_serde]
-pub struct PoolResponse {
-    /// The total deposits into the pool
-    pub size: Uint128,
-    /// The total ownership of the pool
-    pub shares: Uint128,
-    /// Ratio of shares / size
-    pub ratio: Decimal,
-}
-
-#[cw_serde]
-pub struct BorrowerResponse {
-    pub addr: String,
-    /// The denom being borrowed
-    pub denom: String,
-    /// The borrower's borrow limit
-    pub limit: Uint128,
-    /// The borrower's current utilization
-    pub current: Uint128,
-    /// The shares allocated to the current debt
-    pub shares: Uint128,
-    /// The remaining amount of borrowable funds for this borrower
-    pub available: Uint128,
-}
-
-#[cw_serde]
-pub struct BorrowersResponse {
-    pub borrowers: Vec<BorrowerResponse>,
-}
-
-#[cw_serde]
-pub struct DelegateResponse {
-    pub borrower: BorrowerResponse,
-    pub addr: String,
-    /// The borrower's current utilization
-    pub current: Uint128,
-    /// The shares allocated to the current debt
-    pub shares: Uint128,
-}
-
-impl OracleValue for DelegateResponse {
-    fn value_usd(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
-        coin(self.current.u128(), &self.borrower.denom).value_usd(q)
-    }
+    pub deposit_pool: common::PoolResponse,
 }
 
 #[cw_serde]

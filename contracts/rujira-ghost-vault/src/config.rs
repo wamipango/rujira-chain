@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, Decimal, StdResult, Storage};
 use cw_storage_plus::Item;
-use rujira_rs::ghost::vault::{InstantiateMsg, Interest};
+use rujira_rs::ghost::{interest::Interest, vault::InstantiateMsg};
 
 use crate::ContractError;
 

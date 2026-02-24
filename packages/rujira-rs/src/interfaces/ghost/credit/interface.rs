@@ -161,7 +161,7 @@ pub enum QueryMsg {
     #[returns(ConfigResponse)]
     Config {},
 
-    #[returns(crate::ghost::vault::BorrowersResponse)]
+    #[returns(crate::ghost::common::BorrowersResponse)]
     Borrows {},
 
     /// Queries an account by idx

@@ -2,7 +2,7 @@ use cosmwasm_std::{coins, Addr, Decimal, Uint128};
 use cw_multi_test::{ContractWrapper, Executor};
 
 use rujira_rs::{
-    ghost::{self, vault::Interest},
+    ghost::{self, interest::Interest},
     TokenMetadata,
 };
 use rujira_rs_testing::RujiraApp;
@@ -76,7 +76,7 @@ impl GhostVault {
         &self,
         app: &RujiraApp,
         addr: &str,
-    ) -> anyhow::Result<ghost::vault::BorrowerResponse> {
+    ) -> anyhow::Result<ghost::common::BorrowerResponse> {
         Ok(app.wrap().query_wasm_smart(
             self.0.clone(),
             &ghost::vault::QueryMsg::Borrower {

@@ -3,7 +3,7 @@ use cosmwasm_std::{coins, Coin, Decimal};
 use cw_utils::NativeBalance;
 use thiserror::Error;
 
-use crate::{ghost::vault::DelegateResponse, OracleError, OracleValue};
+use crate::{ghost::common::DelegateResponse, OracleError, OracleValue};
 
 #[cw_serde]
 pub struct Debt(DelegateResponse);
