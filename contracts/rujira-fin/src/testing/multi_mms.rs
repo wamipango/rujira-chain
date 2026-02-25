@@ -9,7 +9,7 @@ mod tests {
     use rujira_ghost_vault::mock::GhostVault;
     use rujira_rs::{
         fin::{Denoms, ExecuteMsg, Price, Side, SwapRequest},
-        Layer1Asset,
+        Layer1Asset, OraclePair,
     };
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};
     use rujira_thorchain_swap::mock::ThorchainSwap;
@@ -56,10 +56,10 @@ mod tests {
             fees,
             &[tc.addr().clone(), bow.addr().clone()],
             Denoms::new("rune", "btc-btc"),
-            Some([
+            Some(OraclePair::new(
                 Layer1Asset::new("THOR", "RUNE"),
                 Layer1Asset::new("BTC", "BTC"),
-            ]),
+            )),
         );
 
         // Configure thorchain swap to allow fin to use it as a market maker

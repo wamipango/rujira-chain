@@ -20,7 +20,7 @@ cw-storage-plus = { workspace = true }
 cw-utils        = { workspace = true }
 cw2             = { workspace = true }
 itertools       = { workspace = true }
-rujira-rs       = { workspace = true, features = ["interface-pilot", "decimal-scaled", "premium", "query", "bid-pool", "exchange"], default-features = false }
+rujira-rs       = { workspace = true, features = ["oracle", "interface-pilot", "decimal-scaled", "premium", "query", "bid-pool", "exchange"], default-features = false }
 schemars        = { workspace = true }
 serde           = { workspace = true }
 thiserror       = { workspace = true }

@@ -3,7 +3,7 @@ use crate::error::ContractError;
 use crate::order_pool::execute::execute_order;
 use crate::order_pool::{query as order_query, OrderManager};
 use crate::ranges::execute::execute_range;
-use crate::ranges::{query as range_query, Range};
+use crate::ranges::query as range_query;
 use crate::swap_iter::{create_context, RootItem, SwapIter};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
@@ -21,7 +21,7 @@ use rujira_rs::fin::{
 };
 use rujira_rs::proto::scheduler::MsgScheduleExecuteContract;
 use rujira_rs::utils::module_address;
-use rujira_rs::{Oracle, Premiumable};
+use rujira_rs::Premiumable;
 
 // version info for migration info
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -53,7 +53,7 @@ pub fn execute(
     let oracle = config
         .oracles
         .clone()
-        .and_then(|x| x.oracle_price(deps.querier).ok());
+        .and_then(|x| x.price(deps.querier).ok());
 
     match msg {
         ExecuteMsg::Swap(req) => {
@@ -218,7 +218,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     let oracle = config
         .oracles
         .clone()
-        .map(|x| x.tor_price(deps.querier))
+        .map(|x| x.price(deps.querier))
         .transpose()?;
     let swap_iter = SwapIter::new(deps.querier, &config);
 
@@ -303,7 +303,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 pub fn migrate(deps: DepsMut, _env: Env, msg: ConfigUpdate) -> Result<Response, ContractError> {
     ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    Range::migrate(deps.storage)?;
     let mut config = CONFIG.load(deps.storage)?;
     config.update(deps.api, &msg)?;
     config.validate(deps.as_ref())?;
@@ -384,7 +383,7 @@ mod tests {
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{
         fin::{ConfigUpdate, Denoms, OracleUpdate, OrdersResponse, Price, SwapRequest, Tick},
-        Layer1Asset,
+        Layer1Asset, OraclePair,
     };
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};
 
@@ -408,13 +407,13 @@ mod tests {
                 &InstantiateMsg {
                     denoms: Denoms::new("btc-btc", "eth-usdc"),
                     market_makers: vec![],
-                    oracles: Some([
+                    oracles: Some(OraclePair::new(
                         Layer1Asset::try_from("BTC.BTC").unwrap(),
                         Layer1Asset::try_from(
                             "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
                         )
                         .unwrap(),
-                    ]),
+                    )),
                     tick: Tick::new(6u8),
                     fee_taker: Decimal::zero(),
                     fee_maker: Decimal::zero(),
@@ -517,11 +516,11 @@ mod tests {
             owner,
             &InstantiateMsg {
                 denoms: Denoms::new("ruji", "eth-usdc"),
-                oracles: Some([
+                oracles: Some(OraclePair::new(
                     Layer1Asset::try_from("BTC.BTC").unwrap(),
                     Layer1Asset::try_from("ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48")
                         .unwrap(),
-                ]),
+                )),
                 market_makers: vec![],
                 tick: Tick::new(4u8),
                 fee_taker: Decimal::zero(),
@@ -808,11 +807,11 @@ mod tests {
                 fee_maker: Some(Decimal::from_ratio(2u128, 100u128)),
                 fee_address: Some(app.api().addr_make("fees2").to_string()),
                 market_makers: Some(vec![app.api().addr_make("mm2").to_string()]),
-                oracles: Some(OracleUpdate::Set([
+                oracles: Some(OracleUpdate::Set(OraclePair::new(
                     Layer1Asset::try_from("ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48")
                         .unwrap(),
                     Layer1Asset::try_from("BTC.BTC").unwrap(),
-                ])),
+                ))),
                 fee_amm: Some(Decimal::from_ratio(3u128, 100u128)),
                 range_delta: Some(Decimal::from_ratio(4u128, 100u128)),
             }),
@@ -835,11 +834,11 @@ mod tests {
         );
         assert_eq!(
             config.oracles,
-            Some([
+            Some(OraclePair::new(
                 Layer1Asset::try_from("ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",)
                     .unwrap(),
                 Layer1Asset::try_from("BTC.BTC").unwrap(),
-            ])
+            ))
         );
     }
 

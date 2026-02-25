@@ -10,7 +10,7 @@ use rujira_rs::{
         BookItemResponse, BookResponse, Denoms, ExecuteMsg, InstantiateMsg, OrderResponse,
         OrdersResponse, Price, QueryMsg, Side, SwapRequest, Tick,
     },
-    Layer1Asset, TokenMetadata,
+    Layer1Asset, OraclePair, TokenMetadata,
 };
 use rujira_rs_testing::{mock_rujira_app, RujiraApp};
 
@@ -57,10 +57,10 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
             owner.clone(),
             &InstantiateMsg {
                 denoms: Denoms::new("btc", "usdc"),
-                oracles: Some([
+                oracles: Some(OraclePair::new(
                     Layer1Asset::new("BTC", "BTC"),
                     Layer1Asset::new("ETH", "USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48"),
-                ]),
+                )),
                 market_makers: vec![bow.to_string()],
                 tick: Tick::new(8),
                 fee_taker: Decimal::permille(15),

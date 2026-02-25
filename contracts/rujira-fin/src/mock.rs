@@ -8,7 +8,7 @@ use rujira_rs::{
         BookResponse, Denoms, ExecuteMsg, InstantiateMsg, OrderResponse, Price, QueryMsg,
         RangeConfig, RangeMsg, Side, SwapRequest, Tick,
     },
-    Layer1Asset,
+    OraclePair,
 };
 use rujira_rs_testing::RujiraApp;
 
@@ -203,7 +203,7 @@ impl Fin {
         fees: &Addr,
         market_makers: &[Addr],
         denoms: Denoms,
-        oracles: Option<[Layer1Asset; 2]>,
+        oracles: Option<OraclePair>,
     ) -> Self {
         let fin_code = Box::new(ContractWrapper::new(execute, instantiate, query).with_sudo(sudo));
         let fin_code_id = app.store_code(fin_code);

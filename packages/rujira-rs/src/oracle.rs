@@ -1,3 +1,4 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Coin, Decimal, OverflowError, QuerierWrapper, Uint128};
 use cw_utils::NativeBalance;
 use std::ops::Add;
@@ -12,56 +13,69 @@ use crate::{
     Layer1Asset, SecuredAsset, SecuredAssetError,
 };
 
-pub trait Oracle {
-    fn tor_price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError>;
-    fn oracle_price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError>;
+#[cw_serde]
+pub struct OraclePair([Oracle; 2]);
+
+impl OraclePair {
+    pub fn new<T: Into<Oracle>>(a: T, b: T) -> Self {
+        Self([a.into(), b.into()])
+    }
+    pub fn price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
+        Ok(self.0[0].price(q)? / self.0[1].price(q)?)
+    }
+}
+
+#[cw_serde]
+#[serde(untagged)]
+pub enum Oracle {
+    Pool(Layer1Asset),
+    Enshrined(String),
+}
+
+impl From<Layer1Asset> for Oracle {
+    fn from(value: Layer1Asset) -> Self {
+        Self::Pool(value)
+    }
+}
+
+impl From<String> for Oracle {
+    fn from(value: String) -> Self {
+        Self::Enshrined(value)
+    }
 }
 
 pub trait OracleValue {
     fn value_usd(&self, q: QuerierWrapper) -> Result<Decimal, OracleError>;
 }
 
-impl Oracle for Layer1Asset {
-    fn tor_price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
-        if self.is_rune() {
-            Ok(Network::load(q)?.rune_price_in_tor)
-        } else {
-            Ok(Pool::load(q, self)?.asset_tor_price)
+impl Oracle {
+    pub fn price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
+        match self {
+            Oracle::Pool(layer1_asset) => {
+                if layer1_asset.is_rune() {
+                    Ok(Network::load(q)?.rune_price_in_tor)
+                } else {
+                    Ok(Pool::load(q, layer1_asset)?.asset_tor_price)
+                }
+            }
+            Oracle::Enshrined(ticker) => {
+                let price = OraclePrice::load(q, ticker)?;
+                if price.price.is_zero() {
+                    return Err(OracleError::InvalidZero(ticker.clone()));
+                }
+                Ok(price.price)
+            }
         }
-    }
-    fn oracle_price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
-        self.ticker().oracle_price(q)
-    }
-}
-
-impl Oracle for String {
-    fn tor_price(&self, _q: QuerierWrapper) -> Result<Decimal, OracleError> {
-        Err(OracleError::Unavailable {})
-    }
-    fn oracle_price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
-        let price = OraclePrice::load(q, self)?;
-        if price.price.is_zero() {
-            return Err(OracleError::InvalidZero(self.to_string()));
-        }
-        Ok(price.price)
-    }
-}
-
-impl<T: Oracle> Oracle for [T; 2] {
-    fn tor_price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
-        Ok(self[0].tor_price(q)? / self[1].tor_price(q)?)
-    }
-    fn oracle_price(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
-        Ok(self[0].oracle_price(q)? / self[1].oracle_price(q)?)
     }
 }
 
 impl OracleValue for Coin {
     fn value_usd(&self, q: QuerierWrapper) -> Result<Decimal, OracleError> {
-        Ok(SecuredAsset::from_denom(&self.denom)?
-            .to_layer_1()
-            .oracle_price(q)?
-            .checked_mul(Decimal::from_ratio(self.amount, Uint128::one()))?)
+        Ok(
+            Oracle::Enshrined(SecuredAsset::from_denom(&self.denom)?.to_layer_1().ticker())
+                .price(q)?
+                .checked_mul(Decimal::from_ratio(self.amount, Uint128::one()))?,
+        )
     }
 }
 

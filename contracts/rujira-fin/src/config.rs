@@ -3,7 +3,7 @@ use cosmwasm_std::{Addr, Api, Decimal, Deps, StdResult, Storage};
 use cw_storage_plus::Item;
 use rujira_rs::{
     fin::{ConfigResponse, ConfigUpdate, Denoms, InstantiateMsg, OracleUpdate, Tick},
-    Layer1Asset, Oracle,
+    OraclePair,
 };
 
 use crate::{market_makers::MarketMakers, ContractError};
@@ -13,7 +13,7 @@ pub static CONFIG: Item<Config> = Item::new("config");
 #[cw_serde]
 pub struct Config {
     pub denoms: Denoms,
-    pub oracles: Option<[Layer1Asset; 2]>,
+    pub oracles: Option<OraclePair>,
     pub market_makers: MarketMakers,
     #[serde(default)]
     pub range_delta: Decimal,
@@ -43,8 +43,7 @@ impl Config {
     pub fn validate(&self, deps: Deps) -> Result<(), ContractError> {
         self.denoms.validate()?;
         if let Some(oracles) = self.oracles.clone() {
-            oracles[0].tor_price(deps.querier)?;
-            oracles[1].tor_price(deps.querier)?;
+            oracles.price(deps.querier)?;
         }
         if self.fee_maker >= Decimal::one() {
             return Err(ContractError::Invalid("fee_maker >= 1".into()));

@@ -78,17 +78,6 @@ impl Range {
         format!("{}:{}-{}", self.idx, self.low, self.high)
     }
 
-    pub(crate) fn migrate(storage: &mut dyn Storage) -> StdResult<()> {
-        let v = match Self::map()
-            .keys(storage, None, None, Order::Descending)
-            .next()
-        {
-            Some(Ok(v)) => v,
-            _ => 0u128,
-        };
-        RANGE_COUNTER.save(storage, &v)
-    }
-
     pub(crate) fn map<'a>() -> IndexedMap<u128, Self, Indexes<'a>> {
         let indexes = Indexes {
             owner: MultiIndex::new(|_pk, d| d.owner.clone(), KEY, KEY_OWNER),

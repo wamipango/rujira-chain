@@ -1,7 +1,7 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, SignedDecimal, Timestamp, Uint128};
 
-use crate::Layer1Asset;
+use crate::OraclePair;
 
 use super::{side::Side, Denoms, Price, Tick};
 
@@ -54,7 +54,7 @@ pub struct ConfigResponse {
     pub denoms: Denoms,
 
     /// See [InstantiateMsg::oracles]
-    pub oracles: Option<[Layer1Asset; 2]>,
+    pub oracles: Option<OraclePair>,
 
     /// See [InstantiateMsg::market_maker]
     pub market_makers: Vec<String>,

@@ -53,7 +53,7 @@ pub use merge_n_by_iter::MergeNByIter;
 #[cfg(feature = "native-balance-plus")]
 pub use native_balance_plus::NativeBalancePlus;
 #[cfg(feature = "oracle")]
-pub use oracle::{Oracle, OracleError, OracleValue};
+pub use oracle::{Oracle, OracleError, OraclePair, OracleValue};
 #[cfg(feature = "premium")]
 pub use premium::Premiumable;
 #[cfg(feature = "share-pool")]

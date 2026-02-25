@@ -1,4 +1,4 @@
-use crate::{CallbackData, Layer1Asset};
+use crate::{CallbackData, OraclePair};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Binary, Decimal, SignedDecimal, Uint128};
 
@@ -9,7 +9,7 @@ pub struct InstantiateMsg {
     /// The denoms of the pair. The second denom is the quote denom
     pub denoms: Denoms,
 
-    pub oracles: Option<[Layer1Asset; 2]>,
+    pub oracles: Option<OraclePair>,
 
     /// The address of the market maker contract. Must implement [crate::market_maker::MarketMakerQuery],
     /// and return funds with [CallbackMsg::MarketMaker]

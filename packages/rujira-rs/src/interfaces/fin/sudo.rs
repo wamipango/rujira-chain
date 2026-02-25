@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Decimal;
 
-use crate::Layer1Asset;
+use crate::OraclePair;
 
 #[allow(clippy::large_enum_variant)]
 #[cw_serde]
@@ -24,6 +24,6 @@ pub struct ConfigUpdate {
 
 #[cw_serde]
 pub enum OracleUpdate {
-    Set([Layer1Asset; 2]),
+    Set(OraclePair),
     Unset {},
 }
