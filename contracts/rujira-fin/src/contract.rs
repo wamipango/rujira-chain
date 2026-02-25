@@ -383,7 +383,7 @@ mod tests {
     use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{
-        fin::{ConfigUpdate, Denoms, OrdersResponse, Price, SwapRequest, Tick},
+        fin::{ConfigUpdate, Denoms, OracleUpdate, OrdersResponse, Price, SwapRequest, Tick},
         Layer1Asset,
     };
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};
@@ -808,11 +808,11 @@ mod tests {
                 fee_maker: Some(Decimal::from_ratio(2u128, 100u128)),
                 fee_address: Some(app.api().addr_make("fees2").to_string()),
                 market_makers: Some(vec![app.api().addr_make("mm2").to_string()]),
-                oracles: Some([
+                oracles: Some(OracleUpdate::Set([
                     Layer1Asset::try_from("ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48")
                         .unwrap(),
                     Layer1Asset::try_from("BTC.BTC").unwrap(),
-                ]),
+                ])),
                 fee_amm: Some(Decimal::from_ratio(3u128, 100u128)),
                 range_delta: Some(Decimal::from_ratio(4u128, 100u128)),
             }),

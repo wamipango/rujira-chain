@@ -19,5 +19,11 @@ pub struct ConfigUpdate {
     pub fee_amm: Option<Decimal>,
     pub range_delta: Option<Decimal>,
     pub fee_address: Option<String>,
-    pub oracles: Option<[Layer1Asset; 2]>,
+    pub oracles: Option<OracleUpdate>,
+}
+
+#[cw_serde]
+pub enum OracleUpdate {
+    Set([Layer1Asset; 2]),
+    Unset {},
 }

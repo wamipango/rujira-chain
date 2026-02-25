@@ -2,7 +2,7 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, Decimal, Deps, StdResult, Storage};
 use cw_storage_plus::Item;
 use rujira_rs::{
-    fin::{ConfigResponse, ConfigUpdate, Denoms, InstantiateMsg, Tick},
+    fin::{ConfigResponse, ConfigUpdate, Denoms, InstantiateMsg, OracleUpdate, Tick},
     Layer1Asset, Oracle,
 };
 
@@ -84,7 +84,10 @@ impl Config {
             self.fee_address = api.addr_validate(fee_address)?;
         }
         if let Some(oracles) = &update.oracles {
-            self.oracles = Some(oracles.clone());
+            match oracles {
+                OracleUpdate::Set(v) => self.oracles = Some(v.clone()),
+                OracleUpdate::Unset {} => self.oracles = None,
+            }
         }
         Ok(())
     }

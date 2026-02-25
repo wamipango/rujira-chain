@@ -11,5 +11,5 @@ pub use execute::{ExecuteMsg, InstantiateMsg, OrderTarget, RangeConfig, RangeMsg
 pub use price::Price;
 pub use query::*;
 pub use side::Side;
-pub use sudo::{ConfigUpdate, SudoMsg};
+pub use sudo::{ConfigUpdate, OracleUpdate, SudoMsg};
 pub use tick::{Tick, TickError};
