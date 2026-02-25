@@ -1,20 +1,21 @@
-use anybuf::Bufany;
-use anyhow::{Error, Result as AnyResult};
+use anyhow::Result as AnyResult;
 use cosmwasm_std::{
-    attr, coins, ensure_eq,
     testing::{MockApi, MockStorage},
-    Addr, AnyMsg, Api, BankMsg, Binary, BlockInfo, CosmosMsg, CustomMsg, CustomQuery, Decimal,
-    DenomMetadata, DenomUnit, Empty, Event, GrpcQuery, Querier, Storage, Uint128,
+    Addr, AnyMsg, Api, Binary, BlockInfo, CustomMsg, CustomQuery, Decimal, DenomMetadata, Empty,
+    GrpcQuery, Querier, Storage,
 };
 use cw_multi_test::{
-    App, AppResponse, BankKeeper, BankSudo, BasicAppBuilder, CosmosRouter, FailingModule,
-    GovFailingModule, IbcFailingModule, Stargate, SudoMsg, WasmKeeper, WasmSudo,
+    App, AppResponse, BankKeeper, BasicAppBuilder, CosmosRouter, FailingModule, GovFailingModule,
+    IbcFailingModule, Stargate, WasmKeeper,
 };
 use cw_storage_plus::Map;
+use rujira_rs::proto::types::QueryNodeResponse;
 use serde::de::DeserializeOwned;
-use std::{collections::BTreeMap, str::FromStr};
+use std::{cell::RefCell, collections::BTreeMap};
 
-use crate::fixtures::{mock_mimir, mock_network, mock_oracle_price, mock_pool, mock_quote};
+mod denom;
+mod thorchain;
+mod wasm;
 
 pub type RujiraApp = App<
     BankKeeper,
@@ -32,18 +33,28 @@ pub type RujiraApp = App<
     RujiraStargate,
 >;
 
-static DENOM_ADMIN: Map<String, String> = Map::new("denom_admin");
-static DENOM_METADATA: Map<String, DenomMetadata> = Map::new("denom_meta");
-
 pub fn mock_rujira_app() -> RujiraApp {
     BasicAppBuilder::new()
         .with_stargate(RujiraStargate::default())
         .build(|_, _, _| {})
 }
 
-#[derive(Default)]
 pub struct RujiraStargate {
     prices: BTreeMap<String, Decimal>,
+    nodes: RefCell<BTreeMap<Addr, QueryNodeResponse>>,
+    denom_admin: Map<String, String>,
+    denom_metadata: Map<String, DenomMetadata>,
+}
+
+impl Default for RujiraStargate {
+    fn default() -> Self {
+        Self {
+            prices: BTreeMap::new(),
+            nodes: RefCell::new(BTreeMap::new()),
+            denom_admin: Map::new("denom_admin"),
+            denom_metadata: Map::new("denom_meta"),
+        }
+    }
 }
 
 impl RujiraStargate {
@@ -55,6 +66,10 @@ impl RujiraStargate {
         for (symbol, price) in prices {
             self.with_price(symbol, price);
         }
+    }
+
+    pub fn with_node(&mut self, addr: Addr, response: QueryNodeResponse) {
+        self.nodes.borrow_mut().insert(addr, response);
     }
 }
 
@@ -106,132 +121,26 @@ impl Stargate for RujiraStargate {
         ExecC: CustomMsg + DeserializeOwned + 'static,
         QueryC: CustomQuery + DeserializeOwned + 'static,
     {
-        let type_url = msg.type_url.clone();
-        let serialized = msg.value.to_vec();
-        let buf = Bufany::deserialize(&serialized)?;
-        match type_url.as_str() {
-            "/types.MsgDeposit" => Ok(AppResponse {
-                events: vec![],
-                data: None,
-            }),
-
-            "/thorchain.denom.v1.MsgCreateDenom" => {
-                let sender = buf.string(1).unwrap();
-                let id = buf.string(2).unwrap();
-                let m = buf.message(3).unwrap();
-                let metadata = decode_metadata(m);
-                let full = format!("x/{id}");
-                DENOM_ADMIN.save(storage, full.clone(), &sender)?;
-                DENOM_METADATA.save(storage, full, &metadata)?;
-
-                Ok(AppResponse {
-                    events: vec![],
-                    data: None,
-                })
-            }
-            "/thorchain.denom.v1.MsgMintTokens" => {
-                let sender = buf.string(1).unwrap();
-                let coin: Bufany<'_> = buf.message(2).unwrap();
-                let recipient = buf.string(3).unwrap();
-
-                let denom = coin.string(1).unwrap();
-                let amount = Uint128::from_str(&coin.string(2).unwrap())?;
-
-                let admin = DENOM_ADMIN.load(storage, denom.clone())?;
-                ensure_eq!(admin, sender, Error::msg("Unauthorized"));
-
-                router.sudo(
-                    api,
-                    storage,
-                    block,
-                    SudoMsg::Bank(BankSudo::Mint {
-                        to_address: recipient.clone(),
-                        amount: coins(amount.u128(), denom.clone()),
-                    }),
-                )?;
-                Ok(AppResponse {
-                    events: vec![Event::new("mint").add_attributes(vec![
-                        attr("amount", amount),
-                        attr("denom", denom.to_string()),
-                        attr("recipient", recipient),
-                    ])],
-                    data: None,
-                })
-            }
-            "/thorchain.denom.v1.MsgBurnTokens" => {
-                let sender = buf.string(1).unwrap();
-                let coin: Bufany<'_> = buf.message(2).unwrap();
-
-                let denom = coin.string(1).unwrap();
-                let amount = Uint128::from_str(&coin.string(2).unwrap())?;
-
-                let admin = DENOM_ADMIN.load(storage, denom.clone())?;
-                ensure_eq!(admin, sender, Error::msg("Unauthorized"));
-
-                router.execute(
-                    api,
-                    storage,
-                    block,
-                    api.addr_validate(&sender)?,
-                    CosmosMsg::Bank(BankMsg::Burn {
-                        amount: coins(amount.u128(), denom.clone()),
-                    }),
-                )?;
-                Ok(AppResponse {
-                    events: vec![Event::new("burn").add_attributes(vec![
-                        attr("amount", amount),
-                        attr("denom", denom.to_string()),
-                    ])],
-                    data: None,
-                })
-            }
-            "/thorchain.denom.v1.MsgSetDenomAdmin" => {
-                let sender = buf.string(1).unwrap();
-                let denom = buf.string(2).unwrap();
-                let new_admin = buf.string(3).unwrap();
-
-                let admin = DENOM_ADMIN.load(storage, denom.clone())?;
-                ensure_eq!(admin, sender, Error::msg("Unauthorized"));
-                DENOM_ADMIN.save(storage, denom, &new_admin)?;
-
-                Ok(AppResponse {
-                    events: vec![],
-                    data: None,
-                })
-            }
-            "/thorchain.denom.v1.MsgSetDenomMetadata" => {
-                let sender = buf.string(1).unwrap();
-                let denom = buf.string(2).unwrap();
-                let m = buf.message(3).unwrap();
-                let metadata = decode_metadata(m);
-
-                let admin = DENOM_ADMIN.load(storage, denom.clone())?;
-                ensure_eq!(admin, sender, Error::msg("Unauthorized"));
-                DENOM_METADATA.save(storage, denom, &metadata)?;
-
-                Ok(AppResponse {
-                    events: vec![],
-                    data: None,
-                })
-            }
-            "/cosmwasm.wasm.v1.MsgSudoContract" => {
-                let _sender = buf.string(1).unwrap();
-                let contract = buf.string(2).unwrap();
-                let msg = buf.bytes(3).unwrap();
-                router.sudo(
-                    api,
-                    storage,
-                    block,
-                    SudoMsg::Wasm(WasmSudo {
-                        contract_addr: api.addr_validate(&contract)?,
-                        message: msg.into(),
-                    }),
-                )
-            }
-            _ => {
-                anyhow::bail!("Unexpected any execute: msg={:?} from {}", msg, sender)
-            }
+        if let Some(response) =
+            thorchain::handle_execute_any(api, storage, router, block, &self.nodes, &msg)?
+        {
+            return Ok(response);
         }
+        if let Some(response) = denom::handle_execute_any(
+            api,
+            storage,
+            router,
+            block,
+            &self.denom_admin,
+            &self.denom_metadata,
+            &msg,
+        )? {
+            return Ok(response);
+        }
+        if let Some(response) = wasm::handle_execute_any(api, storage, router, block, &msg)? {
+            return Ok(response);
+        }
+        anyhow::bail!("Unexpected any execute: msg={:?} from {}", msg, sender)
     }
 
     fn query_grpc(
@@ -242,49 +151,20 @@ impl Stargate for RujiraStargate {
         _block: &BlockInfo,
         request: GrpcQuery,
     ) -> AnyResult<Binary> {
-        match request.path.as_str() {
-            "/types.Query/MimirWithKey" => mock_mimir(request.data),
-            "/types.Query/Pool" => mock_pool(request.data),
-            "/types.Query/Network" => mock_network(),
-            "/types.Query/QuoteSwap" => mock_quote(request.data),
-            "/types.Query/OraclePrice" => mock_oracle_price(request.data, &self.prices),
-            _ => {
-                anyhow::bail!("Unexpected grpc query: request={:?}", request)
-            }
+        if let Some(response) =
+            thorchain::handle_query_grpc(&self.nodes, &self.prices, request.clone())?
+        {
+            return Ok(response);
         }
-    }
-}
-
-fn decode_metadata(m: Bufany) -> DenomMetadata {
-    let denom_units = m
-        .repeated_bytes(2)
-        .unwrap_or_default()
-        .iter()
-        .map(|x| {
-            let m = Bufany::deserialize(x).unwrap();
-            DenomUnit {
-                denom: m.string(1).unwrap_or_default(),
-                exponent: m.uint32(2).unwrap_or_default(),
-                aliases: m.repeated_string(3).unwrap_or_default(),
-            }
-        })
-        .collect();
-
-    DenomMetadata {
-        description: m.string(1).unwrap_or_default(),
-        denom_units,
-        base: m.string(3).unwrap_or_default(),
-        display: m.string(4).unwrap_or_default(),
-        name: m.string(5).unwrap_or_default(),
-        symbol: m.string(6).unwrap_or_default(),
-        uri: m.string(7).unwrap_or_default(),
-        uri_hash: m.string(8).unwrap_or_default(),
+        anyhow::bail!("Unexpected grpc query: request={:?}", request)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::Decimal;
+    use std::str::FromStr;
+
+    use cosmwasm_std::{Decimal, Uint128};
     use rujira_rs::{
         query::{Pool, PoolStatus},
         Asset, Layer1Asset,

@@ -1,8 +1,8 @@
 use crate::proto::types::{
     QueryMimirWithKeyRequest, QueryMimirWithKeyResponse, QueryNetworkRequest, QueryNetworkResponse,
-    QueryOraclePriceRequest, QueryOraclePriceResponse, QueryOutboundFeeRequest,
-    QueryOutboundFeeResponse, QueryPoolRequest, QueryPoolResponse, QueryQuoteSwapRequest,
-    QueryQuoteSwapResponse,
+    QueryNodeRequest, QueryNodeResponse, QueryOraclePriceRequest, QueryOraclePriceResponse,
+    QueryOutboundFeeRequest, QueryOutboundFeeResponse, QueryPoolRequest, QueryPoolResponse,
+    QueryQuoteSwapRequest, QueryQuoteSwapResponse,
 };
 use cosmwasm_std::{Binary, QuerierWrapper, StdError};
 use prost::{DecodeError, EncodeError, Message};
@@ -112,5 +112,14 @@ impl QueryablePair for QueryMimirWithKeyResponse {
 
     fn grpc_path() -> &'static str {
         "/types.Query/MimirWithKey"
+    }
+}
+
+impl QueryablePair for QueryNodeResponse {
+    type Request = QueryNodeRequest;
+    type Response = QueryNodeResponse;
+
+    fn grpc_path() -> &'static str {
+        "/types.Query/Node"
     }
 }

@@ -1,4 +1,3 @@
-pub(crate) mod fixtures;
 mod mock;
 mod swap;
 pub use mock::*;

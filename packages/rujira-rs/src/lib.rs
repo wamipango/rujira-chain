@@ -16,7 +16,8 @@ pub mod exchange;
 mod interfaces;
 mod memoed;
 mod merge_n_by_iter;
-mod msg;
+#[cfg(feature = "msg")]
+pub mod msg;
 mod native_balance_plus;
 #[cfg(feature = "oracle")]
 mod oracle;

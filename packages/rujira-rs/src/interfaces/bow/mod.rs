@@ -6,4 +6,4 @@ mod xyk;
 pub use error::StrategyError;
 pub use interface::*;
 pub use strategy::{Strategies, Strategy, StrategyState};
-pub use xyk::Xyk;
+pub use xyk::{Xyk, XykState};

@@ -12,6 +12,8 @@ use rujira_rs::{
 };
 use rujira_rs_testing::RujiraApp;
 
+use crate::contract::{execute, instantiate, query, sudo};
+
 /// Wrapper struct for FIN contract with convenience methods
 #[derive(Debug, Clone)]
 pub struct Fin(pub Addr);
@@ -203,11 +205,7 @@ impl Fin {
         denoms: Denoms,
         oracles: Option<[Layer1Asset; 2]>,
     ) -> Self {
-        let fin_code = Box::new(ContractWrapper::new(
-            crate::contract::execute,
-            crate::contract::instantiate,
-            crate::contract::query,
-        ));
+        let fin_code = Box::new(ContractWrapper::new(execute, instantiate, query).with_sudo(sudo));
         let fin_code_id = app.store_code(fin_code);
 
         let fin_addr = app

@@ -2,6 +2,8 @@
 pub mod account;
 #[cfg(feature = "interface-bow")]
 pub mod bow;
+#[cfg(feature = "interface-brune")]
+pub mod brune;
 #[cfg(feature = "interface-demo")]
 pub mod demo;
 #[cfg(feature = "interface-fin")]

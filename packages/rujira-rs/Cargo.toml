@@ -21,6 +21,7 @@ serde                  = { workspace = true }
 sha2                   = { workspace = true }
 thiserror              = { workspace = true }
 
+
 [features]
 # Testing helpers bundle - for rujira-rs-testing convenience only
 # DO NOT use this in contracts. Use explicit features instead.
@@ -40,6 +41,7 @@ testing-helpers = [
   "exchange",
   "coin",
   "coins",
+  "msg",
 ]
 
 asset               = []
@@ -51,6 +53,7 @@ decimal-scaled      = []
 signed-decimal256   = []
 exchange            = ["bid-pool", "interface-fin", "interface-bow"]
 merge-n-by-iter     = []
+msg                 = ["coin"]
 native-balance-plus = []
 oracle              = ["query"]
 premium             = []
@@ -59,10 +62,11 @@ query               = ["asset", "proto"]
 reply               = []
 schema              = []
 share-pool          = []
-token-factory       = []
+token-factory       = ["msg"]
 
 interface-account        = []
 interface-bow            = ["callback", "token-factory"]
+interface-brune          = ["query", "interface-bow"]
 interface-demo           = ["asset", "query"]
 interface-fin            = ["asset", "callback", "premium", "signed-decimal256"]
 interface-ghost          = ["callback", "decimal-scaled", "oracle", "token-factory"]

@@ -1,0 +1,26 @@
+{
+  "body": {
+    "messages": [
+      {
+        "@type": "/cosmwasm.wasm.v1.MsgSudoContract",
+        "authority": "thor1e0lmk5juawc46jwjwd0xfz587njej7ay5fh6cd",
+        "contract": "thor1e5dmfdtpveprsznzyqjdygy2fd782d0q9zm7246e7jhvmq04nqnqm78vek",
+        "msg":{"update_config": {
+          "fee_amm": "0.0001",
+        }}
+      }
+    ],
+    "memo": "",
+    "timeout_height": "0",
+    "unordered": false,
+    "timeout_timestamp": null,
+    "extension_options": [],
+    "non_critical_extension_options": []
+  },
+  "auth_info": {
+    "signer_infos": [],
+    "fee": { "amount": [], "gas_limit": "200000", "payer": "", "granter": "" },
+    "tip": null
+  },
+  "signatures": []
+}
