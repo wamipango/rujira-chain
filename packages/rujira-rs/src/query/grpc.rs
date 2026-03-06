@@ -40,7 +40,11 @@ where
         let data = Binary::from(buf);
         let res = querier
             .query_grpc(path.clone(), data.clone())
-            .map_err(|_| QueryError::Grpc { path, data })?
+            .map_err(|e| QueryError::Grpc {
+                path,
+                data,
+                reason: e.to_string(),
+            })?
             .to_vec();
         Ok(Self::decode(&*res)?)
     }
@@ -57,8 +61,12 @@ pub enum QueryError {
     #[error("{0}")]
     Decode(#[from] DecodeError),
 
-    #[error("GRPC query error: {path} {data}")]
-    Grpc { path: String, data: Binary },
+    #[error("GRPC query error: {path} {data} {reason}")]
+    Grpc {
+        path: String,
+        data: Binary,
+        reason: String,
+    },
 }
 
 impl QueryablePair for QueryPoolResponse {

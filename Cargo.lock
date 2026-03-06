@@ -1407,7 +1407,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-thorchain-swap"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
