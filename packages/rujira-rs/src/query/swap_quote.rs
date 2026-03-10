@@ -140,15 +140,10 @@ impl TryFrom<QuoteFees> for SwapQuoteFees {
 }
 
 impl SwapQuoteQuery {
-    /// Queries THORNode for a swap quote. Returns `None` when the amount is
-    /// below dust threshold instead of propagating the GRPC error.
-    pub fn quote(&self, q: QuerierWrapper) -> Result<Option<SwapQuote>, SwapQuoteError> {
+    pub fn quote(&self, q: QuerierWrapper) -> Result<SwapQuote, SwapQuoteError> {
         let req = QueryQuoteSwapRequest::from(self.clone());
         match QueryQuoteSwapResponse::get(q, req) {
-            Ok(res) => Ok(Some(SwapQuote::from_response(self, res)?)),
-            Err(QueryError::Grpc { ref reason, .. }) if reason.contains("dust threshold") => {
-                Ok(None)
-            }
+            Ok(res) => Ok(SwapQuote::from_response(self, res)?),
             Err(e) => Err(e.into()),
         }
     }

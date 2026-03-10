@@ -67,9 +67,25 @@ pub fn execute(
             let config = Config::load(deps.storage)?;
             let from_asset = Asset::from_denom(&funds.denom)?;
             let to_asset = Asset::from_denom(&min_return.denom)?;
-            // quote() returns None when below dust/fee threshold,
-            // in this case we swallow the swap to proceed.
+            let to = to.unwrap_or(info.sender.to_string());
+            let vault = VAULTS.load(deps.storage, min_return.denom.clone())?;
+
+            // For very small return amounts, skip quote verification as it fails
+            // on zero emit asset.
             // The reserve_fee should cover this edge case as well.
+            if min_return.amount < Uint128::new(10) {
+                return Ok(Response::default()
+                    .add_event(event_swap(
+                        &to,
+                        &funds,
+                        &min_return,
+                        &coin(0u128, min_return.denom.clone()),
+                        &coin(min_return.amount.u128(), min_return.denom.clone()),
+                        &format!("%%skipped%%:{} < 100", min_return.amount),
+                    ))
+                    .add_messages(execute_repayments(deps.as_ref(), env, Some(funds))?)
+                    .add_message(vault.borrow_msg(min_return.amount, to.clone(), callback)?));
+            }
             let quote = SwapQuoteQuery {
                 from_asset,
                 to_asset,
@@ -82,19 +98,11 @@ pub fn execute(
             }
             .quote(deps.querier)?;
 
-            let outbound = quote
-                .as_ref()
-                .and_then(|q| q.fees.as_ref().map(|f| f.outbound))
-                .unwrap_or_default();
-            let liquidity = quote
-                .as_ref()
-                .and_then(|q| q.fees.as_ref().map(|f| f.liquidity))
-                .unwrap_or_default();
+            let outbound = quote.fees.as_ref().map(|f| f.outbound).unwrap_or_default();
+            let liquidity = quote.fees.as_ref().map(|f| f.liquidity).unwrap_or_default();
             // Include the outbound fee in the return calculations. Until this is set to 0 in thornode, the `reserve_fee` must cover it
-            let returned = quote
-                .as_ref()
-                .map_or(min_return.amount, |q| q.expected_amount_out + outbound);
-            let memo = quote.as_ref().map_or(String::new(), |q| q.memo.clone());
+            let returned = quote.expected_amount_out + outbound;
+            let memo = quote.memo.clone();
 
             // N.B. we can't check including the reserve_fee. The base layer swap simulation executes the msg as though it were
             // in the end block, and as such is subject to ordering amongst other swaps in the swap queue, eg streaming swaps,
@@ -104,18 +112,14 @@ pub fn execute(
             ensure!(
                 returned >= min_return.amount,
                 ContractError::InsufficientReturn {
-                    quoted: quote
-                        .as_ref()
-                        .map_or(Uint128::zero(), |q| q.expected_amount_out),
+                    quoted: quote.expected_amount_out,
                     asked: min_return.amount,
                     liquidity,
                     outbound,
                 }
             );
             let signer = deps.api.addr_canonicalize(env.contract.address.as_str())?;
-            let swap_msg = quote.map(|q| q.to_msg(signer));
-            let vault = VAULTS.load(deps.storage, min_return.denom.clone())?;
-            let to = to.unwrap_or(info.sender.to_string());
+            let swap_msg = quote.to_msg(signer);
             let fee = returned.mul_ceil(config.reserve_fee);
             let net_return = returned.checked_sub(fee).unwrap_or_default();
             Ok(Response::default()
@@ -129,7 +133,7 @@ pub fn execute(
                 ))
                 .add_messages(execute_repayments(deps.as_ref(), env, Some(funds))?)
                 .add_message(vault.borrow_msg(net_return, to.clone(), callback)?)
-                .add_messages(swap_msg))
+                .add_message(swap_msg))
         }
         ExecuteMsg::Callback(msg) => {
             let funds = one_coin(&info)?;
