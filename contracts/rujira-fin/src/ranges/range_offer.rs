@@ -54,7 +54,6 @@ impl SwapItem for RangeOffer {
         context: &mut Self::Context,
         offer: Uint128,
     ) -> Result<(Uint128, Uint128, Vec<Attribute>), SwapError> {
-        let mut iter = self.ranges.iter().peekable();
         let mut used: Vec<String> = vec![];
         let offer_dec = Decimal::from_atomics(offer, 0).unwrap();
 
@@ -73,22 +72,24 @@ impl SwapItem for RangeOffer {
         };
         let mut remaining_bids_used = bids_used;
         let mut remaining_offer_used = offer_used;
-        while let Some((r, v)) = iter.next() {
+        let len = self.ranges.len();
+        for i in 0..len {
+            let (r, v) = &self.ranges[i].clone();
+
             // Pro-rate the provision of return amount to the Range's share of total
-            let (deduct, add) = match iter.peek() {
-                Some(_) => {
-                    let (a, b) = (Decimal256::from(*v), Decimal256::from(self.total));
-                    (
-                        Decimal::try_from(a.mul(Decimal256::from(bids_used)).div(b))?,
-                        Decimal::try_from(a.mul(Decimal256::from(offer_used)).div(b))?,
-                    )
-                }
+            let (deduct, add) = if i + 1 == len {
                 // Collect dust
-                None => (remaining_bids_used, remaining_offer_used),
+                (remaining_bids_used, remaining_offer_used)
+            } else {
+                let (a, b) = (Decimal256::from(*v), Decimal256::from(self.total));
+                (
+                    Decimal::try_from(a.mul(Decimal256::from(bids_used)).div(b))?,
+                    Decimal::try_from(a.mul(Decimal256::from(offer_used)).div(b))?,
+                )
             };
             remaining_bids_used -= deduct;
             remaining_offer_used -= add;
-
+            self.ranges[i].1 -= deduct.min(*v);
             let mut ctx_r = context.ranges.remove(&r.idx).unwrap_or_else(|| r.clone());
             used.push(ctx_r.swap(context, &self.side, add, deduct));
             context.ranges.insert(ctx_r.idx, ctx_r);

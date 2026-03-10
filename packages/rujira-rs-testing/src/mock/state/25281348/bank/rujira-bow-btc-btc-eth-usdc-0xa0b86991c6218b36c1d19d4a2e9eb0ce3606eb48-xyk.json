@@ -1,0 +1,12 @@
+{
+  "balances": [
+    {
+      "denom": "btc-btc",
+      "amount": "209169168"
+    },
+    {
+      "denom": "eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amount": "14931957890499"
+    }
+  ]
+}

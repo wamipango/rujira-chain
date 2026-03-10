@@ -71,7 +71,7 @@ where
         match self {
             EitherOrBoth::Both(a, b) => {
                 let offer_a = amount.checked_multiply_ratio(a.total(), a.total().add(b.total()))?;
-                let offer_b = amount - offer_a;
+                let offer_b = amount.saturating_sub(offer_a);
                 let (consumed_offer_a, consumed_bids_a, mut atts_a) = a.swap(t, offer_a)?;
                 let (consumed_offer_b, consumed_bids_b, mut atts_b) = b.swap(v, offer_b)?;
                 atts_a.append(&mut atts_b);
@@ -129,7 +129,7 @@ where
             let (c_offer, c_bids, mut c_atts) = x.swap(context, offer)?;
             consumed_offer += c_offer;
             consumed_bids += c_bids;
-            remaining -= c_offer;
+            remaining -= c_offer.min(remaining);
             atts.append(&mut c_atts);
         }
         Ok((consumed_offer, consumed_bids, atts))

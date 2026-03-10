@@ -12,6 +12,7 @@ pub enum SudoMsg {
 }
 
 #[cw_serde]
+#[derive(Default)]
 pub struct ConfigUpdate {
     pub market_makers: Option<Vec<String>>,
     pub fee_taker: Option<Decimal>,

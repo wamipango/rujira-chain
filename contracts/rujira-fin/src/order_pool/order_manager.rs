@@ -156,13 +156,18 @@ impl OrderManager {
             self.response = self.response.clone().add_events(swap.events);
             let order =
                 pool.create_order(storage, &self.timestamp, &self.owner, swap.remaining_offer)?;
-            if !swap.return_amount.is_zero() {
-                // Allocate the swap return to funds sent from user
-                self.receive += coin(swap.return_amount.u128(), self.config.denoms.ask(side));
-                self.fees += coin(swap.fee_amount.u128(), self.config.denoms.ask(side));
-                self.receive = (self.receive.clone()
-                    - coin(swap.consumed_offer.u128(), self.config.denoms.bid(side)))?;
-            }
+
+            // Allocate the swap return to funds sent from user
+            self.receive += coin(swap.return_amount.u128(), self.config.denoms.ask(side));
+            self.fees += coin(swap.fee_amount.u128(), self.config.denoms.ask(side));
+
+            let consumed_offer = coin(swap.consumed_offer.u128(), self.config.denoms.bid(side));
+            self.receive = if self.receive.has(&coin(0, consumed_offer.denom.clone())) {
+                (self.receive.clone() - consumed_offer)?
+            } else {
+                self.receive.clone()
+            };
+
             // Allocate order size as received amount
             self.send += coin(order.amount().u128(), self.config.denoms.bid(side));
             self.response = self

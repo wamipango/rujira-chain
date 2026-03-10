@@ -204,6 +204,7 @@ impl Fin {
         market_makers: &[Addr],
         denoms: Denoms,
         oracles: Option<OraclePair>,
+        fee_amm: Decimal,
     ) -> Self {
         let fin_code = Box::new(ContractWrapper::new(execute, instantiate, query).with_sudo(sudo));
         let fin_code_id = app.store_code(fin_code);
@@ -219,7 +220,7 @@ impl Fin {
                     tick: Tick::new(8),
                     fee_taker: Decimal::permille(15), // 1.5%
                     fee_maker: Decimal::permille(30), // 3.0%
-                    fee_amm: Decimal::permille(0),
+                    fee_amm,
                     fee_address: fees.to_string(),
                     range_delta: Decimal::permille(50),
                 },
@@ -252,6 +253,7 @@ mod tests {
             &[owner],
             Denoms::new("btc", "usdc"),
             None,
+            Decimal::permille(0),
         );
 
         // Verify both contracts were created

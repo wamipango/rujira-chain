@@ -26,3 +26,4 @@ tarpaulin-report.*
 **/schema/raw
 
 *.json
+!packages/**/*.json

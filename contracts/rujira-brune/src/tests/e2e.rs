@@ -35,6 +35,7 @@ fn brune_fin_staking_e2e() {
         &[owner.clone()],
         Denoms::new("x/brune", "rune"),
         None,
+        Decimal::permille(0),
     );
 
     let staking = Staking::create(

@@ -38,6 +38,7 @@ fn test_composite_range_lifecycle() {
         &[],
         Denoms::new("rune", "btc-btc"),
         None,
+        Decimal::permille(0),
     );
     let res = fin
         .create_range(
@@ -334,6 +335,7 @@ fn test_range_positive_skew() {
         &[],
         Denoms::new("rune", "btc-btc"),
         None,
+        Decimal::permille(0),
     );
 
     // Create range with skew=+1: concentrates liquidity toward the spread edge (near current price)
@@ -410,6 +412,7 @@ fn test_range_negative_skew() {
         &[],
         Denoms::new("rune", "btc-btc"),
         None,
+        Decimal::permille(0),
     );
 
     // Create range with skew=-1: concentrates liquidity toward the limit edges (high/low bounds)

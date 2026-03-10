@@ -1,0 +1,20 @@
+{
+  "models": [
+    {
+      "key": "636F6E666967",
+      "value": "eyJzdHJhdGVneSI6eyJ4eWsiOnsieCI6ImJ0Yy1idGMiLCJ5IjoiZXRoLXVzZGMtMHhhMGI4Njk5MWM2MjE4YjM2YzFkMTlkNGEyZTllYjBjZTM2MDZlYjQ4Iiwic3RlcCI6IjAuMDAxIiwibWluX3F1b3RlIjoiMTAwMDAiLCJmZWUiOiIwLjAwMyJ9fX0="
+    },
+    {
+      "key": "636F6E74726163745F696E666F",
+      "value": "eyJjb250cmFjdCI6InJ1amlyYS1ib3ciLCJ2ZXJzaW9uIjoiMS4wLjIifQ=="
+    },
+    {
+      "key": "6D61726B6574",
+      "value": "InRob3IxZHdzbmxxdzNsZmhhbWM1ZHozcjU3aGxzcHB4M2EybjJkN2twcGNjeGZkaGZhempoMDZyczUwNzdzeiI="
+    },
+    {
+      "key": "73747261746567792D78796B",
+      "value": "WyIyMDc2NzA2ODYiLCIxNDc4NTc3Mjg0OTEwMCIsIjU1NDA5NjA2MzQyIl0="
+    }
+  ]
+}

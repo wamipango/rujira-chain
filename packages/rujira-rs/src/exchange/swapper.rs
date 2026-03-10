@@ -66,7 +66,8 @@ impl<T: SwapItem> Swapper<T> {
 
         let fee = Decimal::from_ratio(self.returned, 1u128)
             .mul(self.fee)
-            .to_uint_ceil();
+            .to_uint_ceil()
+            .min(self.returned);
 
         self.returned -= fee;
 

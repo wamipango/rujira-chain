@@ -41,6 +41,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr) -> Ctx {
         &[bow_btc_usdc.addr().clone()],
         Denoms::new(BTC, USDC),
         None,
+        Decimal::permille(0),
     );
     let fin_btc_usdt = Fin::create(
         app,
@@ -49,6 +50,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr) -> Ctx {
         &[bow_btc_usdt.addr().clone()],
         Denoms::new(BTC, USDT),
         None,
+        Decimal::permille(0),
     );
     let fin_eth_usdc = Fin::create(
         app,
@@ -57,6 +59,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr) -> Ctx {
         &[bow_eth_usdc.addr().clone()],
         Denoms::new(ETH, USDC),
         None,
+        Decimal::permille(0),
     );
     let _fin_eth_usdt = Fin::create(
         app,
@@ -65,6 +68,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr) -> Ctx {
         &[bow_eth_usdt.addr().clone()],
         Denoms::new(ETH, USDT),
         None,
+        Decimal::permille(0),
     );
 
     // Deposit into BOW pools at current oracle prices

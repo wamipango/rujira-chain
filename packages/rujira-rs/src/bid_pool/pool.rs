@@ -52,10 +52,10 @@ impl Pool {
         offer: Uint256,
         rate: &Decimal256,
     ) -> Result<DistributionResult, BidPoolError> {
-        if offer.is_zero() || self.total.is_zero() {
+        let bids_value = offer.mul_floor(*rate);
+        if offer.is_zero() || self.total.is_zero() || bids_value.is_zero() {
             return Ok(DistributionResult::default());
         }
-        let bids_value = offer.mul_floor(*rate);
 
         // Switch between entirely consuming either the pool or the offer.
         // This effectively carries the rounding truncation from the distribute_full,

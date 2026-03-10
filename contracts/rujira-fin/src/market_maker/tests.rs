@@ -252,7 +252,7 @@ fn test_market_maker_commit_fee() {
     // We're selling BTC into the quote side, so we expect to find a smaller swap amount, fees sent, with a correct min return
     // 1000 @ 1.25 = 1250 return
     // 1000 @ 1.5 = 1500 return
-    // Total 1900 in, 100 fees, 2750 return
+    // Total 1900 in, 100 fees, 2613 return (2750 reduced by 5% fee)
 
     assert_eq!(
         res.messages,
@@ -260,7 +260,7 @@ fn test_market_maker_commit_fee() {
             SubMsg::reply_never(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "bow".to_string(),
                 msg: to_json_binary(&bow::ExecuteMsg::Swap {
-                    min_return: coin(2750, "usdc"),
+                    min_return: coin(2613, "usdc"),
                     to: None,
                     callback: None
                 })

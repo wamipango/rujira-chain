@@ -51,30 +51,36 @@ impl MarketMakerContext {
         self.entries.push((addr.clone(), offer_coin, ask_coin));
     }
 
-    pub fn compile(&self) -> BTreeMap<Addr, (Coin, Coin)> {
-        let mut map = BTreeMap::new();
+    /// Reduce the `entries` into individual Swap events that should be executed
+    /// When a
+    pub fn compile(&self) -> Vec<(Addr, (Coin, Coin))> {
+        let mut vec = vec![];
+        // Aggregator. (contract, offer_denom, ask_denom)
+        let mut agg: BTreeMap<(Addr, String, String), (Uint128, Uint128)> = BTreeMap::new();
+
         for (addr, offer_coin, ask_coin) in self.entries.clone() {
-            map.entry(addr.clone())
-                .and_modify(|(o, a): &mut (Coin, Coin)| {
-                    // Same direction, increase
-                    if o.denom == offer_coin.denom {
-                        o.amount += offer_coin.amount;
-                        a.amount += ask_coin.amount;
-                        // Opposite direction but smaller than current, shrink
-                    } else if o.amount > offer_coin.amount && a.amount >= ask_coin.amount {
-                        o.amount -= offer_coin.amount;
-                        a.amount -= ask_coin.amount;
-                        // Larger than current, invert
-                    } else {
-                        o.amount = offer_coin.amount - o.amount;
-                        o.denom = offer_coin.denom.clone();
-                        a.amount = ask_coin.amount - a.amount;
-                        a.denom = ask_coin.denom.clone();
-                    }
+            let default = (offer_coin.amount, ask_coin.amount);
+            agg.entry((addr, offer_coin.denom, ask_coin.denom))
+                .and_modify(|(o, a)| {
+                    *o += offer_coin.amount;
+                    *a += ask_coin.amount;
                 })
-                .or_insert((offer_coin, ask_coin));
+                .or_insert(default);
         }
-        map
+        for ((addr, offer_denom, ask_denom), (offer_amount, ask_amount)) in agg {
+            if offer_amount.is_zero() || ask_amount.is_zero() {
+                continue;
+            }
+            vec.push((
+                addr,
+                (
+                    coin(offer_amount.u128(), offer_denom),
+                    coin(ask_amount.u128(), ask_denom),
+                ),
+            ));
+        }
+
+        vec
     }
 }
 
@@ -100,6 +106,12 @@ impl SwapContext for MarketMakerContext {
                 offer.denom.clone(),
             );
             let offer = coin(offer.amount.sub(offer_fee.amount).u128(), offer.denom);
+
+            let ask_fee = ask
+                .amount
+                .multiply_ratio(fee.numerator(), fee.denominator());
+            let ask = coin(ask.amount.sub(ask_fee).u128(), ask.denom);
+
             fees += offer_fee;
 
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -124,5 +136,86 @@ impl SwapContext for MarketMakerContext {
                 .add_event(event_market_maker_fee(&self.denoms, &fees));
         }
         Ok(response)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn compile_never_panics_two_entries(
+            o1 in 0u128..=1_000_000_000u128,
+            a1 in 0u128..=1_000_000_000u128,
+            o2 in 0u128..=1_000_000_000u128,
+            a2 in 0u128..=1_000_000_000u128,
+        ) {
+            let denoms = Denoms::new("btc", "usdc");
+            let bow = Addr::unchecked("bow");
+            let mut ctx =
+                MarketMakerContext::new(Addr::unchecked("fee"), Decimal::zero(), denoms.clone());
+
+            ctx.insert(&bow, &denoms, &Side::Quote, Uint128::new(o1), Uint128::new(a1));
+            ctx.insert(&bow, &denoms, &Side::Base, Uint128::new(o2), Uint128::new(a2));
+
+            let compiled = ctx.compile();
+            let (_,(offer, ask)) = compiled[0].clone();
+
+            // Denoms must be valid
+            prop_assert!(offer.denom == "btc" || offer.denom == "usdc");
+            prop_assert!(ask.denom == "btc" || ask.denom == "usdc");
+            prop_assert_ne!(&offer.denom, &ask.denom);
+        }
+
+        #[test]
+        fn compile_never_panics_many_entries(
+            entries in prop::collection::vec((0u128..=100_000_000u128, 0u128..=100_000_000u128, prop::bool::ANY), 2..10),
+        ) {
+            let denoms = Denoms::new("btc", "usdc");
+            let bow = Addr::unchecked("bow");
+            let mut ctx =
+                MarketMakerContext::new(Addr::unchecked("fee"), Decimal::zero(), denoms.clone());
+
+            for (o, a, is_quote) in &entries {
+                let side = if *is_quote { Side::Quote } else { Side::Base };
+                ctx.insert(&bow, &denoms, &side, Uint128::new(*o), Uint128::new(*a));
+            }
+
+            let compiled = ctx.compile();
+            if let Some((_,(offer, ask))) = compiled.first() {
+                prop_assert!(offer.denom == "btc" || offer.denom == "usdc");
+                prop_assert!(ask.denom == "btc" || ask.denom == "usdc");
+            }
+        }
+    }
+
+    #[test]
+    fn test_compile_overflow_small_amounts() {
+        let denoms = Denoms::new("btc", "usdc");
+        let bow = Addr::unchecked("bow");
+        let mut ctx =
+            MarketMakerContext::new(Addr::unchecked("fee"), Decimal::zero(), denoms.clone());
+
+        // MM at price 1.5 (Quote): arb sells 3 btc, gets floor(3*1.5)=4 usdc
+        ctx.insert(
+            &bow,
+            &denoms,
+            &Side::Quote,
+            Uint128::new(30),
+            Uint128::new(45),
+        );
+        // MM at price 2.0 (Base): complete fill, pool_value=floor(5/2)=2, ask=5
+        ctx.insert(
+            &bow,
+            &denoms,
+            &Side::Base,
+            Uint128::new(25),
+            Uint128::new(50),
+        );
+
+        let res = ctx.compile();
+        dbg!(&res);
     }
 }

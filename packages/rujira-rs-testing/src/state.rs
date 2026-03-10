@@ -1,41 +1,71 @@
 use anyhow::{Context, Result as AnyResult};
-use cosmwasm_std::{Addr, Binary, Storage};
+use cosmwasm_std::{from_base64, from_hex, Addr, Coin};
 use serde::Deserialize;
 
 use crate::mock::RujiraApp;
 
 #[derive(Debug, Deserialize)]
-pub struct ExportedContractState {
+struct ExportedContractState {
     #[serde(default)]
-    pub models: Vec<ExportedStateModel>,
-    #[serde(default, rename = "data")]
-    pub data: Vec<ExportedStateModel>,
-}
-
-impl ExportedContractState {
-    pub fn iter(&self) -> impl Iterator<Item = &ExportedStateModel> {
-        self.models.iter().chain(self.data.iter())
-    }
+    models: Vec<ExportedStateModel>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ExportedStateModel {
-    pub key: String,
-    pub value: String,
+struct ExportedStateModel {
+    key: String,
+    value: String,
 }
 
-pub fn load_contract_state_all(
+#[derive(Debug, Deserialize)]
+struct ExportedBankState {
+    #[serde(default)]
+    balances: Vec<Coin>,
+}
+
+pub fn load_contract_state(
     app: &mut RujiraApp,
     contract_addr: &Addr,
-    export: &ExportedContractState,
+    label: &str,
+    height: u64,
+) -> AnyResult<()> {
+    let base = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("src/mock/state")
+        .join(height.to_string());
+    let wasm_path = base.join("wasm").join(format!("{label}.json"));
+    let bank_path = base.join("bank").join(format!("{label}.json"));
+
+    let wasm_data = std::fs::read(&wasm_path)
+        .with_context(|| format!("failed to read wasm state from {}", wasm_path.display()))?;
+
+    load_wasm_state_from_slice(app, contract_addr, &wasm_data).with_context(|| {
+        format!(
+            "failed to load wasm state for label '{}' at height {}",
+            label, height
+        )
+    })?;
+
+    let bank_data = std::fs::read(&bank_path)
+        .with_context(|| format!("failed to read bank balances from {}", bank_path.display()))?;
+    load_bank_balances_from_slice(app, contract_addr, &bank_data)?;
+
+    Ok(())
+}
+
+fn load_wasm_state_from_slice(
+    app: &mut RujiraApp,
+    contract_addr: &Addr,
+    data: &[u8],
 ) -> AnyResult<usize> {
+    let export: ExportedContractState =
+        serde_json::from_slice(data).context("failed to parse contract-state JSON")?;
+
     let mut storage = app.contract_storage_mut(contract_addr);
     let mut loaded = 0usize;
 
-    for model in export.iter() {
-        let key = Binary::from_base64(&model.key)
-            .with_context(|| format!("invalid base64 key: {}", model.key))?;
-        let value = Binary::from_base64(&model.value)
+    for model in export.models.iter() {
+        let key =
+            from_hex(&model.key).with_context(|| format!("invalid base64 key: {}", model.key))?;
+        let value = from_base64(&model.value)
             .with_context(|| format!("invalid base64 value for key {}", model.key))?;
         storage.set(key.as_slice(), value.as_slice());
         loaded += 1;
@@ -44,26 +74,18 @@ pub fn load_contract_state_all(
     Ok(loaded)
 }
 
-pub fn load_contract_state_all_from_slice(
+fn load_bank_balances_from_slice(
     app: &mut RujiraApp,
     contract_addr: &Addr,
     data: &[u8],
-) -> AnyResult<usize> {
-    let export: ExportedContractState =
-        serde_json::from_slice(data).context("failed to parse contract-state JSON")?;
-    load_contract_state_all(app, contract_addr, &export)
-}
+) -> AnyResult<()> {
+    let export: ExportedBankState =
+        serde_json::from_slice(data).context("failed to parse bank balances JSON")?;
 
-pub fn load_contract_state_all_from_path(
-    app: &mut RujiraApp,
-    contract_addr: &Addr,
-    path: impl AsRef<std::path::Path>,
-) -> AnyResult<usize> {
-    let data = std::fs::read(path.as_ref()).with_context(|| {
-        format!(
-            "failed to read contract-state JSON from {}",
-            path.as_ref().display()
-        )
+    app.init_modules(|router, _, storage| {
+        router
+            .bank
+            .init_balance(storage, contract_addr, export.balances)
     })?;
-    load_contract_state_all_from_slice(app, contract_addr, &data)
+    Ok(())
 }

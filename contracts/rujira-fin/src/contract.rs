@@ -16,8 +16,8 @@ use cw_storage_plus::Item;
 use cw_utils::{one_coin, NativeBalance};
 use rujira_rs::exchange::{Arber, SwapContext, SwapItem, Swapper};
 use rujira_rs::fin::{
-    BookItemResponse, BookResponse, ConfigResponse, ConfigUpdate, ExecuteMsg, InstantiateMsg,
-    QueryMsg, Side, SimulationResponse, SudoMsg, SwapRequest,
+    BookItemResponse, BookResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, Side,
+    SimulationResponse, SudoMsg, SwapRequest,
 };
 use rujira_rs::proto::scheduler::MsgScheduleExecuteContract;
 use rujira_rs::utils::module_address;
@@ -300,14 +300,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, msg: ConfigUpdate) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let mut config = CONFIG.load(deps.storage)?;
-    config.update(deps.api, &msg)?;
-    config.validate(deps.as_ref())?;
-    config.save(deps.storage)?;
-
     Ok(Response::default())
 }
 
