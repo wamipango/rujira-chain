@@ -20,7 +20,7 @@ use super::event_market_maker_fee;
 #[derive(Clone, Debug)]
 pub struct MarketMakerContext {
     entries: Vec<(Addr, Coin, Coin)>,
-    fee_config: (Addr, Decimal),
+    pub(crate) fee_config: (Addr, Decimal),
     denoms: Denoms,
     // Safety check to ensure we're not comitting multiple times
     comitted: bool,

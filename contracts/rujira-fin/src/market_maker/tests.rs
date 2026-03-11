@@ -215,6 +215,28 @@ fn test_market_market_item_swap() {
 }
 
 #[test]
+fn test_mm_swap_deducts_amm_fee() {
+    let contract = Addr::unchecked("bow");
+    let denoms = Denoms::new("btc", "usdc");
+    let mut ctx =
+        MarketMakerContext::new(Addr::unchecked("fee"), Decimal::percent(5), denoms.clone());
+
+    let mut o = MarketMakerOffer {
+        contract: contract.clone(),
+        price: Decimal::from_str("1.25").unwrap(),
+        rate: Decimal::from_str("1.25").unwrap(),
+        total: Uint128::from(10000u128),
+        side: Side::Quote,
+        denoms: denoms.clone(),
+    };
+    // offer=500, ask=625 before fee
+    // 5% fee on 625 = 31, so ask returned = 594
+    let (offer, ask, _) = o.swap(&mut ctx, Uint128::from(500u128)).unwrap();
+    assert_eq!(offer, Uint128::from(500u128));
+    assert_eq!(ask, Uint128::from(594u128));
+}
+
+#[test]
 fn test_market_maker_commit_fee() {
     let mut deps = mock_dependencies();
     let contract = Addr::unchecked("bow");

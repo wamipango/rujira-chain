@@ -64,6 +64,13 @@ impl SwapItem for MarketMakerOffer {
         // Commit to context
         context.insert(&self.contract, &self.denoms, &self.side, offer, ask);
 
+        // Deduct AMM fee from ask so the Swapper's return_amount
+        let ask = ask
+            - ask.multiply_ratio(
+                context.fee_config.1.numerator(),
+                context.fee_config.1.denominator(),
+            );
+
         Ok((
             offer,
             ask,

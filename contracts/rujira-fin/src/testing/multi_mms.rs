@@ -281,7 +281,9 @@ mod tests {
         )
         .unwrap();
 
-        // Swap 10_000 BTC → RUNE with non-zero fee_amm
+        let balance_rune_before = app.wrap().query_balance(owner.to_string(), "rune").unwrap();
+
+        // Swap 10_000 BTC → RUNE with non-zero fee_amm (0.5%)
         let swap_amount = 10_000u128;
         let res = app
             .execute_contract(
@@ -295,7 +297,14 @@ mod tests {
             )
             .unwrap();
 
+        let balance_rune_after = app.wrap().query_balance(owner.to_string(), "rune").unwrap();
+        let received = balance_rune_after.amount - balance_rune_before.amount;
+
+        // Without fee_amm: 167_967_815, with 0.5% fee_amm: 167_127_977
+        assert_eq!(received, Uint128::from(167_127_977u128));
+
         res.assert_event(&Event::new("wasm-rujira-bow/swap"));
         res.assert_event(&Event::new("wasm-rujira-thorchain-swap/swap"));
+        res.assert_event(&Event::new("wasm-rujira-fin/market-maker.fee"));
     }
 }
