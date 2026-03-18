@@ -96,7 +96,7 @@ fn brune_fin_staking_e2e() {
             fee_address: None,
             market_makers: Some(vec![brune.to_string()]),
             oracles: None,
-            fee_amm: None,
+            fee_range: None,
             range_delta: None,
         }),
     )

@@ -26,7 +26,6 @@ mod tests {
         app: &mut RujiraApp,
         owner: &Addr,
         fees: &Addr,
-        fee_amm: Decimal,
     ) -> (Fin, GhostVault, GhostVault, ThorchainSwap, Bow) {
         // 1. Setup Ghost Vaults for BTC and RUNE
         let btc_ghost = GhostVault::create(app, owner, "btc-btc");
@@ -61,7 +60,7 @@ mod tests {
                 Layer1Asset::new("THOR", "RUNE"),
                 Layer1Asset::new("BTC", "BTC"),
             )),
-            fee_amm,
+            Decimal::permille(0),
         );
 
         // Configure thorchain swap to allow fin to use it as a market maker
@@ -77,8 +76,7 @@ mod tests {
         let fees = app.api().addr_make("fees");
 
         // Setup
-        let (fin, btc_ghost, rune_ghost, _, bow) =
-            setup(&mut app, &owner, &fees, Decimal::permille(0));
+        let (fin, btc_ghost, rune_ghost, _, bow) = setup(&mut app, &owner, &fees);
 
         // Initialize owner with funds
         app.init_modules(|router, _, storage| {
@@ -154,8 +152,7 @@ mod tests {
         let fees = app.api().addr_make("fees");
 
         // Setup
-        let (fin, btc_ghost, rune_ghost, _, bow) =
-            setup(&mut app, &owner, &fees, Decimal::permille(0));
+        let (fin, btc_ghost, rune_ghost, _, bow) = setup(&mut app, &owner, &fees);
 
         // Initialize owner with funds
         app.init_modules(|router, _, storage| {
@@ -237,74 +234,5 @@ mod tests {
 
         res.assert_event(&Event::new("wasm-rujira-bow/swap"));
         res.assert_event(&Event::new("wasm-rujira-thorchain-swap/swap"));
-    }
-
-    /// Verifies the fee_amm fix: swapping through BOW market maker with non-zero
-    /// fee_amm succeeds (the old code would fail with a min_return violation
-    /// because fee_amm was only deducted from the offer but not from min_return).
-    #[test]
-    fn test_swap_with_bow_market_maker_with_fee_amm() {
-        let mut app: RujiraApp = mock_rujira_app();
-        let owner = app.api().addr_make("owner");
-        let fees = app.api().addr_make("fees");
-
-        let (fin, btc_ghost, rune_ghost, _, bow) =
-            setup(&mut app, &owner, &fees, Decimal::permille(5));
-
-        app.init_modules(|router, _, storage| {
-            router.bank.init_balance(
-                storage,
-                &owner,
-                vec![
-                    coin(1_000_000_000_000_000_000_000, "btc-btc"),
-                    coin(9_500_000_000_000_000_000, "rune"),
-                ],
-            )
-        })
-        .unwrap();
-
-        btc_ghost
-            .deposit(&mut app, &owner, 500_000_000, "btc-btc")
-            .unwrap();
-        rune_ghost
-            .deposit(&mut app, &owner, 500_000_000_000, "rune")
-            .unwrap();
-
-        bow.deposit(
-            &mut app,
-            &owner,
-            &[
-                coin(68_602_648_901, "btc-btc"),
-                coin(1_171_021_570_000_000, "rune"),
-            ],
-            None,
-        )
-        .unwrap();
-
-        let balance_rune_before = app.wrap().query_balance(owner.to_string(), "rune").unwrap();
-
-        // Swap 10_000 BTC → RUNE with non-zero fee_amm (0.5%)
-        let swap_amount = 10_000u128;
-        let res = app
-            .execute_contract(
-                owner.clone(),
-                fin.addr().clone(),
-                &ExecuteMsg::Swap(SwapRequest::Yolo {
-                    to: None,
-                    callback: None,
-                }),
-                &coins(swap_amount, "btc-btc"),
-            )
-            .unwrap();
-
-        let balance_rune_after = app.wrap().query_balance(owner.to_string(), "rune").unwrap();
-        let received = balance_rune_after.amount - balance_rune_before.amount;
-
-        // Without fee_amm: 167_967_815, with 0.5% fee_amm: 167_127_977
-        assert_eq!(received, Uint128::from(167_127_977u128));
-
-        res.assert_event(&Event::new("wasm-rujira-bow/swap"));
-        res.assert_event(&Event::new("wasm-rujira-thorchain-swap/swap"));
-        res.assert_event(&Event::new("wasm-rujira-fin/market-maker.fee"));
     }
 }

@@ -65,7 +65,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
                 tick: Tick::new(8),
                 fee_taker: Decimal::permille(15),
                 fee_maker: Decimal::permille(30),
-                fee_amm: Decimal::permille(0),
+                fee_range: Decimal::permille(0),
                 fee_address: fees.to_string(),
                 range_delta: Decimal::permille(50),
             },
@@ -488,9 +488,9 @@ fn combined_book() {
         .query_wasm_smart(
             fin.to_string(),
             &QueryMsg::Orders {
-                owner: owner.to_string(),
+                owner: Some(owner.to_string()),
                 side: None,
-                offset: None,
+                start_after: None,
                 limit: None,
             },
         )

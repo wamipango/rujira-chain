@@ -1,4 +1,4 @@
-use crate::config::{Config, CONFIG};
+use crate::config::{self, Config, CONFIG};
 use crate::error::ContractError;
 use crate::order_pool::execute::execute_order;
 use crate::order_pool::{query as order_query, OrderManager};
@@ -230,25 +230,25 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
         QueryMsg::Orders {
             owner,
             side,
-            offset,
+            start_after,
             limit,
         } => to_json_binary(&order_query::query_orders(
             deps,
-            owner.as_str(),
+            owner.as_deref(),
             side,
-            offset,
+            start_after,
             limit,
             &oracle,
         )?),
         QueryMsg::Book { limit, offset } => {
-            let limit = limit.unwrap_or(100);
-            let offset = offset.unwrap_or(0);
+            let limit = limit.unwrap_or(100) as usize;
+            let offset = offset.unwrap_or(0) as usize;
 
             to_json_binary(&BookResponse {
                 base: swap_iter
                     .iter(deps.storage, &Side::Base, &oracle)
-                    .skip(offset as usize)
-                    .take(limit as usize)
+                    .skip(offset)
+                    .take(limit)
                     .map(|v| BookItemResponse {
                         price: v.rate(),
                         total: v.total(),
@@ -256,8 +256,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
                     .collect(),
                 quote: swap_iter
                     .iter(deps.storage, &Side::Quote, &oracle)
-                    .skip(offset as usize)
-                    .take(limit as usize)
+                    .skip(offset)
+                    .take(limit)
                     .map(|v| BookItemResponse {
                         price: v.rate(),
                         total: v.total(),
@@ -302,6 +302,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    config::migrate(deps.storage)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     Ok(Response::default())
 }
@@ -412,7 +413,7 @@ mod tests {
                     tick: Tick::new(6u8),
                     fee_taker: Decimal::zero(),
                     fee_maker: Decimal::zero(),
-                    fee_amm: Decimal::zero(),
+                    fee_range: Decimal::zero(),
                     fee_address: app.api().addr_make("fee").to_string(),
                     range_delta: Decimal::permille(50),
                 },
@@ -520,7 +521,7 @@ mod tests {
                 tick: Tick::new(4u8),
                 fee_taker: Decimal::zero(),
                 fee_maker: Decimal::zero(),
-                fee_amm: Decimal::zero(),
+                fee_range: Decimal::zero(),
                 fee_address: app.api().addr_make("fee").to_string(),
                 range_delta: Decimal::permille(50),
             },
@@ -807,7 +808,7 @@ mod tests {
                         .unwrap(),
                     Layer1Asset::try_from("BTC.BTC").unwrap(),
                 ))),
-                fee_amm: Some(Decimal::from_ratio(3u128, 100u128)),
+                fee_range: Some(Decimal::from_ratio(3u128, 100u128)),
                 range_delta: Some(Decimal::from_ratio(4u128, 100u128)),
             }),
         )
@@ -820,7 +821,7 @@ mod tests {
 
         assert_eq!(config.fee_taker, Decimal::from_ratio(1u128, 100u128));
         assert_eq!(config.fee_maker, Decimal::from_ratio(2u128, 100u128));
-        assert_eq!(config.fee_amm, Decimal::from_ratio(3u128, 100u128));
+        assert_eq!(config.fee_range, Decimal::from_ratio(3u128, 100u128));
         assert_eq!(config.range_delta, Decimal::from_ratio(4u128, 100u128));
         assert_eq!(config.fee_address, app.api().addr_make("fees2").to_string());
         assert_eq!(
@@ -926,9 +927,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: owner.clone().to_string(),
+                    owner: Some(owner.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -943,9 +944,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: user2.clone().to_string(),
+                    owner: Some(user2.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -959,9 +960,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: user3.clone().to_string(),
+                    owner: Some(user3.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -997,9 +998,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: owner.clone().to_string(),
+                    owner: Some(owner.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -1014,9 +1015,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: user2.clone().to_string(),
+                    owner: Some(user2.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -1030,9 +1031,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: user3.clone().to_string(),
+                    owner: Some(user3.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -1154,9 +1155,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: owner.clone().to_string(),
+                    owner: Some(owner.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -1171,9 +1172,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: user2.clone().to_string(),
+                    owner: Some(user2.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -1187,9 +1188,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: user3.clone().to_string(),
+                    owner: Some(user3.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -1226,9 +1227,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: owner.clone().to_string(),
+                    owner: Some(owner.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -1243,9 +1244,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: user2.clone().to_string(),
+                    owner: Some(user2.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )
@@ -1259,9 +1260,9 @@ mod tests {
             .query_wasm_smart(
                 contract.clone(),
                 &QueryMsg::Orders {
-                    owner: user3.clone().to_string(),
+                    owner: Some(user3.clone().to_string()),
                     side: None,
-                    offset: None,
+                    start_after: None,
                     limit: None,
                 },
             )

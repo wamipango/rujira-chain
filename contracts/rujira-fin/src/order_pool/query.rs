@@ -21,22 +21,32 @@ pub fn query_order(
 
 pub fn query_orders(
     deps: Deps,
-    owner: &str,
+    owner: Option<&str>,
     side: Option<Side>,
-    offset: Option<u8>,
+    start_after: Option<(String, Side, Price)>,
     limit: Option<u8>,
     oracle: &impl Premiumable,
 ) -> Result<OrdersResponse, ContractError> {
-    let addr = deps.api.addr_validate(owner)?;
-    let orders: Result<Vec<OrderResponse>, ContractError> =
-        Order::by_owner(deps.storage, &addr, side, offset, limit)?
-            .iter_mut()
-            .map(|(k, order)| {
-                let pool = Pool::load(deps.storage, &k.price, &k.side, oracle)?;
-                pool.sync_order(deps.storage, order)?;
-                Ok(order_response(order, &k.side, &k.price, oracle)?)
-            })
-            .collect();
+    let orders: Result<Vec<OrderResponse>, ContractError> = match owner {
+        Some(owner) => {
+            let addr = deps.api.addr_validate(owner)?;
+            let cursor = start_after.map(|(_, s, p)| (s, p));
+            Order::by_owner(deps.storage, &addr, side, cursor, limit)?
+        }
+        None => {
+            let cursor = start_after
+                .map(|(a, s, p)| Ok::<_, ContractError>((deps.api.addr_validate(&a)?, s, p)))
+                .transpose()?;
+            Order::all(deps.storage, side, cursor, limit)?
+        }
+    }
+    .iter_mut()
+    .map(|(k, order)| {
+        let pool = Pool::load(deps.storage, &k.price, &k.side, oracle)?;
+        pool.sync_order(deps.storage, order)?;
+        Ok(order_response(order, &k.side, &k.price, oracle)?)
+    })
+    .collect();
 
     Ok(OrdersResponse { orders: orders? })
 }

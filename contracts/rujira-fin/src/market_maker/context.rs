@@ -1,37 +1,30 @@
-use std::{collections::BTreeMap, ops::Sub};
+use std::collections::BTreeMap;
 
 use cosmwasm_std::{
-    coin, ensure, to_json_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Fraction, Response,
-    Storage, Uint128, WasmMsg,
+    coin, ensure, to_json_binary, Addr, Coin, CosmosMsg, Response, Storage, Uint128, WasmMsg,
 };
-use cw_utils::NativeBalance;
 use rujira_rs::{
     bow,
     exchange::{SwapContext, SwapError},
     fin::{Denoms, Side},
 };
 
-use super::event_market_maker_fee;
 /// Due to type Context = T::Context for impl SwapItem<Vec<T: SwapItem>>,
 /// we share a MarketMakerContext between all market maker instances.
 /// We need to collect raw requests and then compile the net requests in
 /// `commit`, otherwise the Arb flow will attempt to sub overflow during
 /// its temporary context updates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MarketMakerContext {
     entries: Vec<(Addr, Coin, Coin)>,
-    pub(crate) fee_config: (Addr, Decimal),
-    denoms: Denoms,
     // Safety check to ensure we're not comitting multiple times
     comitted: bool,
 }
 
 impl MarketMakerContext {
-    pub fn new(fee_addr: Addr, fee_amm: Decimal, denoms: Denoms) -> Self {
+    pub fn new() -> Self {
         Self {
             entries: vec![],
-            fee_config: (fee_addr, fee_amm),
-            denoms,
             comitted: false,
         }
     }
@@ -93,27 +86,11 @@ impl SwapContext for MarketMakerContext {
         ensure!(!self.comitted, SwapError::AlreadyComitted {});
         self.comitted = true;
 
-        let (fee_addr, fee) = self.fee_config.clone();
-        let mut fees = NativeBalance::default();
         let mut messages: Vec<CosmosMsg> = vec![];
 
+        // Each market maker handles its own fees internally.
+        // We send the full offer and request the full ask as min_return.
         for (addr, (offer, ask)) in self.compile() {
-            let offer_fee = coin(
-                offer
-                    .amount
-                    .multiply_ratio(fee.numerator(), fee.denominator())
-                    .u128(),
-                offer.denom.clone(),
-            );
-            let offer = coin(offer.amount.sub(offer_fee.amount).u128(), offer.denom);
-
-            let ask_fee = ask
-                .amount
-                .multiply_ratio(fee.numerator(), fee.denominator());
-            let ask = coin(ask.amount.sub(ask_fee).u128(), ask.denom);
-
-            fees += offer_fee;
-
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: addr.to_string(),
                 msg: to_json_binary(&bow::ExecuteMsg::Swap {
@@ -125,17 +102,7 @@ impl SwapContext for MarketMakerContext {
             }));
         }
 
-        fees.normalize();
-        let mut response = response.add_messages(messages);
-        if !fees.is_empty() {
-            response = response
-                .add_message(BankMsg::Send {
-                    to_address: fee_addr.to_string(),
-                    amount: fees.clone().into_vec(),
-                })
-                .add_event(event_market_maker_fee(&self.denoms, &fees));
-        }
-        Ok(response)
+        Ok(response.add_messages(messages))
     }
 }
 
@@ -154,8 +121,7 @@ mod test {
         ) {
             let denoms = Denoms::new("btc", "usdc");
             let bow = Addr::unchecked("bow");
-            let mut ctx =
-                MarketMakerContext::new(Addr::unchecked("fee"), Decimal::zero(), denoms.clone());
+            let mut ctx = MarketMakerContext::new();
 
             ctx.insert(&bow, &denoms, &Side::Quote, Uint128::new(o1), Uint128::new(a1));
             ctx.insert(&bow, &denoms, &Side::Base, Uint128::new(o2), Uint128::new(a2));
@@ -175,8 +141,7 @@ mod test {
         ) {
             let denoms = Denoms::new("btc", "usdc");
             let bow = Addr::unchecked("bow");
-            let mut ctx =
-                MarketMakerContext::new(Addr::unchecked("fee"), Decimal::zero(), denoms.clone());
+            let mut ctx = MarketMakerContext::new();
 
             for (o, a, is_quote) in &entries {
                 let side = if *is_quote { Side::Quote } else { Side::Base };
@@ -195,8 +160,7 @@ mod test {
     fn test_compile_overflow_small_amounts() {
         let denoms = Denoms::new("btc", "usdc");
         let bow = Addr::unchecked("bow");
-        let mut ctx =
-            MarketMakerContext::new(Addr::unchecked("fee"), Decimal::zero(), denoms.clone());
+        let mut ctx = MarketMakerContext::new();
 
         // MM at price 1.5 (Quote): arb sells 3 btc, gets floor(3*1.5)=4 usdc
         ctx.insert(

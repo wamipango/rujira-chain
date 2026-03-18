@@ -254,7 +254,7 @@ mod tests {
             tick: Tick::new(4),
             fee_maker: Decimal::permille(1),
             fee_taker: Decimal::permille(2),
-            fee_amm: Decimal::permille(5),
+            fee_range: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
             range_delta: Decimal::permille(50),
         };
@@ -305,7 +305,7 @@ mod tests {
             tick: Tick::new(4),
             fee_maker: Decimal::permille(1),
             fee_taker: Decimal::permille(2),
-            fee_amm: Decimal::permille(5),
+            fee_range: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
             range_delta: Decimal::permille(50),
         };
@@ -402,7 +402,7 @@ mod tests {
             tick: Tick::new(4),
             fee_maker: Decimal::permille(1),
             fee_taker: Decimal::permille(2),
-            fee_amm: Decimal::permille(5),
+            fee_range: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
             range_delta: Decimal::permille(50),
         };
@@ -442,7 +442,7 @@ mod tests {
             tick: Tick::new(4),
             fee_maker: Decimal::permille(1),
             fee_taker: Decimal::permille(2),
-            fee_amm: Decimal::permille(5),
+            fee_range: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
             range_delta: Decimal::permille(50),
         };
@@ -625,7 +625,7 @@ mod tests {
             tick: Tick::new(2),
             fee_maker: Decimal::permille(1),
             fee_taker: Decimal::permille(2),
-            fee_amm: Decimal::permille(5),
+            fee_range: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
             range_delta: Decimal::permille(50),
         };

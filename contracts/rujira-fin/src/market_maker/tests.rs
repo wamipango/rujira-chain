@@ -4,8 +4,8 @@ use super::*;
 use cosmwasm_std::{
     coin, coins, from_json,
     testing::{mock_dependencies, MockQuerier},
-    to_json_binary, Addr, BankMsg, ContractResult, CosmosMsg, Decimal, Event, QuerierWrapper,
-    Response, SubMsg, SystemError, SystemResult, Uint128, WasmMsg, WasmQuery,
+    to_json_binary, Addr, ContractResult, CosmosMsg, Decimal, QuerierWrapper, Response, SubMsg,
+    SystemError, SystemResult, Uint128, WasmMsg, WasmQuery,
 };
 use rujira_rs::{
     bow,
@@ -134,10 +134,7 @@ fn test_market_market_item_swap() {
         denoms: denoms.clone(),
     };
     let (bid_returned, offer_consumed, _) = o
-        .swap(
-            &mut MarketMakerContext::new(Addr::unchecked(""), Decimal::zero(), denoms.clone()),
-            Uint128::from(500u128),
-        )
+        .swap(&mut MarketMakerContext::new(), Uint128::from(500u128))
         .unwrap();
     assert_eq!(bid_returned, Uint128::from(500u128));
     assert_eq!(offer_consumed, Uint128::from(625u128));
@@ -152,10 +149,7 @@ fn test_market_market_item_swap() {
         denoms: denoms.clone(),
     };
     let (bid_returned, offer_consumed, _) = o
-        .swap(
-            &mut MarketMakerContext::new(Addr::unchecked(""), Decimal::zero(), denoms.clone()),
-            Uint128::from(500000u128),
-        )
+        .swap(&mut MarketMakerContext::new(), Uint128::from(500000u128))
         .unwrap();
     assert_eq!(bid_returned, Uint128::from(8000u128));
     assert_eq!(offer_consumed, Uint128::from(10000u128));
@@ -170,10 +164,7 @@ fn test_market_market_item_swap() {
         denoms: denoms.clone(),
     };
     let (bid_returned, offer_consumed, _) = o
-        .swap(
-            &mut MarketMakerContext::new(Addr::unchecked(""), Decimal::zero(), denoms.clone()),
-            Uint128::from(500u128),
-        )
+        .swap(&mut MarketMakerContext::new(), Uint128::from(500u128))
         .unwrap();
     assert_eq!(bid_returned, Uint128::from(500u128));
     assert_eq!(offer_consumed, Uint128::from(625u128));
@@ -188,10 +179,7 @@ fn test_market_market_item_swap() {
         denoms: denoms.clone(),
     };
     let (bid_returned, offer_consumed, _) = o
-        .swap(
-            &mut MarketMakerContext::new(Addr::unchecked(""), Decimal::zero(), denoms.clone()),
-            Uint128::from(500000u128),
-        )
+        .swap(&mut MarketMakerContext::new(), Uint128::from(500000u128))
         .unwrap();
     assert_eq!(bid_returned, Uint128::from(8000u128));
     assert_eq!(offer_consumed, Uint128::from(10000u128));
@@ -205,47 +193,18 @@ fn test_market_market_item_swap() {
         denoms: denoms.clone(),
     };
     let (bid_returned, offer_consumed, _) = o
-        .swap(
-            &mut MarketMakerContext::new(Addr::unchecked(""), Decimal::zero(), denoms.clone()),
-            Uint128::from(50000000u128),
-        )
+        .swap(&mut MarketMakerContext::new(), Uint128::from(50000000u128))
         .unwrap();
     assert_eq!(bid_returned, Uint128::from(50000000u128));
     assert_eq!(offer_consumed, Uint128::from(499u128));
 }
 
 #[test]
-fn test_mm_swap_deducts_amm_fee() {
-    let contract = Addr::unchecked("bow");
-    let denoms = Denoms::new("btc", "usdc");
-    let mut ctx =
-        MarketMakerContext::new(Addr::unchecked("fee"), Decimal::percent(5), denoms.clone());
-
-    let mut o = MarketMakerOffer {
-        contract: contract.clone(),
-        price: Decimal::from_str("1.25").unwrap(),
-        rate: Decimal::from_str("1.25").unwrap(),
-        total: Uint128::from(10000u128),
-        side: Side::Quote,
-        denoms: denoms.clone(),
-    };
-    // offer=500, ask=625 before fee
-    // 5% fee on 625 = 31, so ask returned = 594
-    let (offer, ask, _) = o.swap(&mut ctx, Uint128::from(500u128)).unwrap();
-    assert_eq!(offer, Uint128::from(500u128));
-    assert_eq!(ask, Uint128::from(594u128));
-}
-
-#[test]
-fn test_market_maker_commit_fee() {
+fn test_market_maker_commit_no_fee() {
     let mut deps = mock_dependencies();
     let contract = Addr::unchecked("bow");
     let denoms = Denoms::new("btc", "usdc");
-    let mut ctx = MarketMakerContext::new(
-        Addr::unchecked("fee-address"),
-        Decimal::percent(5),
-        denoms.clone(),
-    );
+    let mut ctx = MarketMakerContext::new();
 
     MarketMakerOffer {
         contract: contract.clone(),
@@ -271,34 +230,24 @@ fn test_market_maker_commit_fee() {
     let res = ctx
         .commit(deps.as_mut().storage, Response::default())
         .unwrap();
-    // We're selling BTC into the quote side, so we expect to find a smaller swap amount, fees sent, with a correct min return
+    // Full offer sent to BOW, full ask as min_return, no fees collected
     // 1000 @ 1.25 = 1250 return
     // 1000 @ 1.5 = 1500 return
-    // Total 1900 in, 100 fees, 2613 return (2750 reduced by 5% fee)
+    // Total 2000 in, 2750 min_return
 
     assert_eq!(
         res.messages,
-        vec![
-            SubMsg::reply_never(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "bow".to_string(),
-                msg: to_json_binary(&bow::ExecuteMsg::Swap {
-                    min_return: coin(2613, "usdc"),
-                    to: None,
-                    callback: None
-                })
-                .unwrap(),
-                funds: coins(1900, "btc")
-            })),
-            SubMsg::reply_never(CosmosMsg::Bank(BankMsg::Send {
-                to_address: "fee-address".to_string(),
-                amount: coins(100, "btc"),
-            }))
-        ]
+        vec![SubMsg::reply_never(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "bow".to_string(),
+            msg: to_json_binary(&bow::ExecuteMsg::Swap {
+                min_return: coin(2750, "usdc"),
+                to: None,
+                callback: None
+            })
+            .unwrap(),
+            funds: coins(2000, "btc")
+        }))]
     );
 
-    assert_eq!(
-        res.events,
-        vec![Event::new("rujira-fin/market-maker.fee")
-            .add_attributes(vec![("base", "100"), ("quote", "0")])]
-    );
+    assert!(res.events.is_empty());
 }

@@ -21,7 +21,7 @@ pub struct Config {
     pub fee_maker: Decimal,
     pub fee_taker: Decimal,
     #[serde(default)]
-    pub fee_amm: Decimal,
+    pub fee_range: Decimal,
     pub fee_address: Addr,
 }
 
@@ -34,7 +34,7 @@ impl Config {
             tick: value.tick,
             fee_taker: value.fee_taker,
             fee_maker: value.fee_maker,
-            fee_amm: value.fee_amm,
+            fee_range: value.fee_range,
             range_delta: value.range_delta,
             fee_address: api.addr_validate(value.fee_address.as_str())?,
         })
@@ -72,8 +72,8 @@ impl Config {
         if let Some(fee_maker) = update.fee_maker {
             self.fee_maker = fee_maker;
         }
-        if let Some(fee_amm) = update.fee_amm {
-            self.fee_amm = fee_amm;
+        if let Some(fee_range) = update.fee_range {
+            self.fee_range = fee_range;
         }
         if let Some(range_delta) = update.range_delta {
             self.range_delta = range_delta;
@@ -92,6 +92,39 @@ impl Config {
     }
 }
 
+pub fn migrate(storage: &mut dyn Storage) -> StdResult<()> {
+    #[cw_serde]
+    struct OldConfig {
+        pub denoms: Denoms,
+        pub oracles: Option<OraclePair>,
+        pub market_makers: MarketMakers,
+        #[serde(default)]
+        pub range_delta: Decimal,
+        pub tick: Tick,
+        pub fee_maker: Decimal,
+        pub fee_taker: Decimal,
+        #[serde(default)]
+        pub fee_amm: Decimal,
+        pub fee_address: Addr,
+    }
+
+    let old: OldConfig = Item::new("config").load(storage)?;
+    CONFIG.save(
+        storage,
+        &Config {
+            denoms: old.denoms,
+            oracles: old.oracles,
+            market_makers: old.market_makers,
+            range_delta: old.range_delta,
+            tick: old.tick,
+            fee_maker: old.fee_maker,
+            fee_taker: old.fee_taker,
+            fee_range: old.fee_amm,
+            fee_address: old.fee_address,
+        },
+    )
+}
+
 impl From<Config> for ConfigResponse {
     fn from(value: Config) -> Self {
         Self {
@@ -106,7 +139,7 @@ impl From<Config> for ConfigResponse {
             tick: value.tick,
             fee_maker: value.fee_maker,
             fee_taker: value.fee_taker,
-            fee_amm: value.fee_amm,
+            fee_range: value.fee_range,
             range_delta: value.range_delta,
             fee_address: value.fee_address.to_string(),
         }

@@ -17,7 +17,7 @@ pub struct ConfigUpdate {
     pub market_makers: Option<Vec<String>>,
     pub fee_taker: Option<Decimal>,
     pub fee_maker: Option<Decimal>,
-    pub fee_amm: Option<Decimal>,
+    pub fee_range: Option<Decimal>,
     pub range_delta: Option<Decimal>,
     pub fee_address: Option<String>,
     pub oracles: Option<OracleUpdate>,

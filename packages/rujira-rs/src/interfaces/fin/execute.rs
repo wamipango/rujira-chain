@@ -30,8 +30,8 @@ pub struct InstantiateMsg {
     /// The fee charged on withdrawals from filled limit orders
     pub fee_maker: Decimal,
 
-    /// The fee charged on trades executed via MarketMakers or Range's
-    pub fee_amm: Decimal,
+    /// The fee charged on trades executed via Range liquidity providers
+    pub fee_range: Decimal,
 
     /// The destination address for fees collected
     pub fee_address: String,

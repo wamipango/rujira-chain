@@ -147,7 +147,7 @@ impl Range {
     pub fn new(
         storage: &mut dyn Storage,
         tick: &Tick,
-        fee_amm: &Decimal,
+        fee_range: &Decimal,
         owner: Addr,
         rc: RangeConfig,
         (base, quote): (Decimal, Decimal),
@@ -178,8 +178,8 @@ impl Range {
             quote,
             fees: [Decimal::zero(), Decimal::zero()],
             price,
-            bid: scl.bid(price, spread.add(fee_amm), tick),
-            ask: scl.ask(price, spread.add(fee_amm), tick),
+            bid: scl.bid(price, spread.add(fee_range), tick),
+            ask: scl.ask(price, spread.add(fee_range), tick),
         })
     }
 
@@ -264,7 +264,7 @@ impl Range {
                 self.fees[1] += fee;
                 self.quote += add;
                 self.base -= deduct.min(self.base);
-                self.reprice(&context.tick, &context.fee_amm());
+                self.reprice(&context.tick, &context.fee_range());
                 format!(
                     "{}:{}:{}:{deduct}:{add}::{fee}",
                     self.id(),
@@ -276,7 +276,7 @@ impl Range {
                 self.fees[0] += fee;
                 self.quote -= deduct.min(self.quote);
                 self.base += add;
-                self.reprice(&context.tick, &context.fee_amm());
+                self.reprice(&context.tick, &context.fee_range());
                 format!(
                     "{}:{}:{}:{deduct}:{add}:{fee}:",
                     self.id(),
@@ -287,11 +287,11 @@ impl Range {
         }
     }
 
-    pub fn reprice(&mut self, tick: &Tick, fee_amm: &Decimal) {
+    pub fn reprice(&mut self, tick: &Tick, fee_range: &Decimal) {
         let scl = Scl::new(self.high, self.low, self.skew);
         self.price = scl.price(self.base, self.quote);
-        self.bid = scl.bid(self.price, self.spread.add(fee_amm), tick);
-        self.ask = scl.ask(self.price, self.spread.add(fee_amm), tick);
+        self.bid = scl.bid(self.price, self.spread.add(fee_range), tick);
+        self.ask = scl.ask(self.price, self.spread.add(fee_range), tick);
     }
 
     pub fn collect(&mut self, denoms: &Denoms) -> Option<NativeBalance> {

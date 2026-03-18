@@ -19,15 +19,17 @@ pub enum QueryMsg {
     #[returns(OrderResponse)]
     Order((String, Side, Price)),
 
-    /// Paginate user orders. Upper limit of 30 per page
+    /// Paginate orders using cursor-based pagination.
+    /// When owner is None, all orders are returned
     #[returns(OrdersResponse)]
     Orders {
-        owner: String,
+        owner: Option<String>,
         /// When Side is provided, orders are sorted by price
         /// N.B: This sorts on the underlying Price key, not the effective execution price,
         /// so Oracle and Fixed prices will be grouped
         side: Option<Side>,
-        offset: Option<u8>,
+        /// Cursor from the last item of the previous page: (owner, side, price)
+        start_after: Option<(String, Side, Price)>,
         limit: Option<u8>,
     },
 
@@ -44,7 +46,7 @@ pub enum QueryMsg {
     #[returns(BookResponse)]
     Book {
         limit: Option<u8>,
-        offset: Option<u8>,
+        offset: Option<u32>,
     },
 }
 
@@ -71,8 +73,8 @@ pub struct ConfigResponse {
     /// See [InstantiateMsg::fee_maker]
     pub fee_maker: Decimal,
 
-    /// See [InstantiateMsg::fee_amm]
-    pub fee_amm: Decimal,
+    /// See [InstantiateMsg::fee_range]
+    pub fee_range: Decimal,
 
     /// See [InstantiateMsg::fee_address]
     pub fee_address: String,

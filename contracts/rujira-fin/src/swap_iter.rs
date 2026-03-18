@@ -55,15 +55,11 @@ pub fn create_context(config: &Config) -> RootContext {
     (
         (
             (Default::default(), Default::default()),
-            MarketMakerContext::new(
-                config.fee_address.clone(),
-                config.fee_amm,
-                config.denoms.clone(),
-            ),
+            MarketMakerContext::new(),
         ),
         RangeContext::new(
             config.fee_address.clone(),
-            config.fee_amm,
+            config.fee_range,
             config.denoms.clone(),
             config.tick.clone(),
         ),

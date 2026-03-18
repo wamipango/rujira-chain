@@ -56,7 +56,7 @@ pub fn execute_range(
                     Range::new(
                         deps.storage,
                         &config.tick,
-                        &config.fee_amm,
+                        &config.fee_range,
                         sender,
                         range_config,
                         (base, quote),
@@ -65,7 +65,7 @@ pub fn execute_range(
                 None => Range::new(
                     deps.storage,
                     &config.tick,
-                    &config.fee_amm,
+                    &config.fee_range,
                     sender,
                     range_config,
                     (base, quote),
@@ -124,7 +124,7 @@ pub fn execute_range(
             ensure!(sender == range.owner, ContractError::Unauthorized {});
 
             range.deposit(base_dec, quote_dec);
-            range.reprice(&config.tick, &config.fee_amm);
+            range.reprice(&config.tick, &config.fee_range);
             range.save(deps.storage)?;
             Ok(Response::default().add_event(event_deposit_range(&range, base, quote)))
         }
@@ -138,7 +138,7 @@ pub fn execute_range(
             );
 
             let payout = range.withdraw(&config.denoms, amount);
-            range.reprice(&config.tick, &config.fee_amm);
+            range.reprice(&config.tick, &config.fee_range);
             range.save(deps.storage)?;
             let event = event_withdraw_range(&range, amount, &config.denoms, payout.as_ref());
             match payout {

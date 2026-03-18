@@ -23,10 +23,10 @@ pub struct RangeContext {
 }
 
 impl RangeContext {
-    pub fn new(fee_addr: Addr, fee_amm: Decimal, denoms: Denoms, tick: Tick) -> Self {
+    pub fn new(fee_addr: Addr, fee_range: Decimal, denoms: Denoms, tick: Tick) -> Self {
         Self {
             ranges: BTreeMap::default(),
-            fee_config: (fee_addr, fee_amm),
+            fee_config: (fee_addr, fee_range),
             denoms,
             tick,
             fees: NativeBalance::default(),
@@ -34,7 +34,7 @@ impl RangeContext {
         }
     }
 
-    pub fn fee_amm(&self) -> Decimal {
+    pub fn fee_range(&self) -> Decimal {
         self.fee_config.1
     }
 

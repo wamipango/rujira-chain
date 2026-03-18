@@ -1,5 +1,3 @@
-use std::cmp::min;
-
 use crate::{error::ContractError, pool::Pool};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, StdResult, Storage, Timestamp, Uint128};
@@ -7,7 +5,6 @@ use cw_storage_plus::Map;
 use rujira_rs::bid_pool;
 
 pub const ORDERS: Map<(Addr, u8), (Timestamp, Uint128, bid_pool::Bid)> = Map::new("orders");
-const MAX_LIMIT: u8 = 31;
 const DEFAULT_LIMIT: u8 = 10;
 
 #[cw_serde]
@@ -38,7 +35,7 @@ impl Order {
         offset: Option<u8>,
         limit: Option<u8>,
     ) -> StdResult<Vec<(u8, Self)>> {
-        let limit = min(limit.unwrap_or(DEFAULT_LIMIT), MAX_LIMIT) as usize;
+        let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
         let offset = offset.unwrap_or(0) as usize;
         ORDERS
             .prefix(owner.clone())

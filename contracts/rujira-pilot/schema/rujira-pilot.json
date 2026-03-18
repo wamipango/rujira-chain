@@ -9,8 +9,8 @@
     "required": [
       "denoms",
       "fee_address",
-      "fee_amm",
       "fee_maker",
+      "fee_range",
       "fee_taker",
       "market_makers",
       "range_delta",
@@ -29,16 +29,16 @@
         "description": "The destination address for fees collected",
         "type": "string"
       },
-      "fee_amm": {
-        "description": "The fee charged on trades executed via MarketMakers or Range's",
+      "fee_maker": {
+        "description": "The fee charged on withdrawals from filled limit orders",
         "allOf": [
           {
             "$ref": "#/definitions/Decimal"
           }
         ]
       },
-      "fee_maker": {
-        "description": "The fee charged on withdrawals from filled limit orders",
+      "fee_range": {
+        "description": "The fee charged on trades executed via Range liquidity providers",
         "allOf": [
           {
             "$ref": "#/definitions/Decimal"
@@ -812,7 +812,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Paginate user orders. Upper limit of 30 per page",
+        "description": "Paginate orders using cursor-based pagination. When owner is None, all orders are returned",
         "type": "object",
         "required": [
           "orders"
@@ -820,9 +820,6 @@
         "properties": {
           "orders": {
             "type": "object",
-            "required": [
-              "owner"
-            ],
             "properties": {
               "limit": {
                 "type": [
@@ -832,16 +829,11 @@
                 "format": "uint8",
                 "minimum": 0.0
               },
-              "offset": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "format": "uint8",
-                "minimum": 0.0
-              },
               "owner": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "side": {
                 "description": "When Side is provided, orders are sorted by price N.B: This sorts on the underlying Price key, not the effective execution price, so Oracle and Fixed prices will be grouped",
@@ -853,6 +845,26 @@
                     "type": "null"
                   }
                 ]
+              },
+              "start_after": {
+                "description": "Cursor from the last item of the previous page: (owner, side, price)",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/definitions/Side"
+                  },
+                  {
+                    "$ref": "#/definitions/Price"
+                  }
+                ],
+                "maxItems": 3,
+                "minItems": 3
               }
             },
             "additionalProperties": false
@@ -933,7 +945,7 @@
                   "integer",
                   "null"
                 ],
-                "format": "uint8",
+                "format": "uint32",
                 "minimum": 0.0
               }
             },
@@ -1061,7 +1073,7 @@
               "null"
             ]
           },
-          "fee_amm": {
+          "fee_maker": {
             "anyOf": [
               {
                 "$ref": "#/definitions/Decimal"
@@ -1071,7 +1083,7 @@
               }
             ]
           },
-          "fee_maker": {
+          "fee_range": {
             "anyOf": [
               {
                 "$ref": "#/definitions/Decimal"
@@ -1250,8 +1262,8 @@
       "required": [
         "denoms",
         "fee_address",
-        "fee_amm",
         "fee_maker",
+        "fee_range",
         "fee_taker",
         "market_makers",
         "range_delta",
@@ -1270,16 +1282,16 @@
           "description": "See [InstantiateMsg::fee_address]",
           "type": "string"
         },
-        "fee_amm": {
-          "description": "See [InstantiateMsg::fee_amm]",
+        "fee_maker": {
+          "description": "See [InstantiateMsg::fee_maker]",
           "allOf": [
             {
               "$ref": "#/definitions/Decimal"
             }
           ]
         },
-        "fee_maker": {
-          "description": "See [InstantiateMsg::fee_maker]",
+        "fee_range": {
+          "description": "See [InstantiateMsg::fee_range]",
           "allOf": [
             {
               "$ref": "#/definitions/Decimal"

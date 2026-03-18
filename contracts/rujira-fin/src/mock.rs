@@ -90,7 +90,7 @@ impl Fin {
         &self,
         app: &RujiraApp,
         limit: Option<u8>,
-        offset: Option<u8>,
+        offset: Option<u32>,
     ) -> anyhow::Result<BookResponse> {
         Ok(app
             .wrap()
@@ -115,17 +115,17 @@ impl Fin {
     pub fn query_orders(
         &self,
         app: &RujiraApp,
-        owner: &str,
+        owner: Option<&str>,
         side: Option<Side>,
         limit: Option<u8>,
-        offset: Option<u8>,
+        start_after: Option<(String, Side, Price)>,
     ) -> anyhow::Result<rujira_rs::fin::OrdersResponse> {
         Ok(app.wrap().query_wasm_smart(
             self.0.clone(),
             &QueryMsg::Orders {
-                owner: owner.to_string(),
+                owner: owner.map(|o| o.to_string()),
                 side,
-                offset,
+                start_after,
                 limit,
             },
         )?)
@@ -204,7 +204,7 @@ impl Fin {
         market_makers: &[Addr],
         denoms: Denoms,
         oracles: Option<OraclePair>,
-        fee_amm: Decimal,
+        fee_range: Decimal,
     ) -> Self {
         let fin_code = Box::new(ContractWrapper::new(execute, instantiate, query).with_sudo(sudo));
         let fin_code_id = app.store_code(fin_code);
@@ -220,7 +220,7 @@ impl Fin {
                     tick: Tick::new(8),
                     fee_taker: Decimal::permille(15), // 1.5%
                     fee_maker: Decimal::permille(30), // 3.0%
-                    fee_amm,
+                    fee_range,
                     fee_address: fees.to_string(),
                     range_delta: Decimal::permille(50),
                 },
