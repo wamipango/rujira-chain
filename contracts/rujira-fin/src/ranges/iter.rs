@@ -93,12 +93,12 @@ impl<'a> RangeOfferIter<'a> {
         }
     }
 
-    fn build_offer(&self, start: &Decimal) -> Option<RangeOffer> {
+    fn build_offer(&mut self, start: &Decimal) -> Option<RangeOffer> {
         let mut offer = RangeOffer::new(&self.side, start, &self.previous?);
         if self.ranges.is_empty() && self.next.is_none() {
             return None;
         }
-        for r in self.ranges.values().flatten() {
+        for r in self.ranges.values_mut().flatten() {
             offer.insert_range(r);
         }
         Some(offer)

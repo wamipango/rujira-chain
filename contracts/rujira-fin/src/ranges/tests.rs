@@ -344,6 +344,8 @@ fn range_offer_swap_partial_fill() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
+                    base_allocated: Decimal::zero(),
+                    quote_allocated: Decimal::zero(),
                 },
                 Decimal::from_str("400").unwrap(),
             ),
@@ -362,6 +364,8 @@ fn range_offer_swap_partial_fill() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
+                    base_allocated: Decimal::zero(),
+                    quote_allocated: Decimal::zero(),
                 },
                 Decimal::from_str("200").unwrap(),
             ),
@@ -415,6 +419,8 @@ fn range_offer_swap_overfill() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
+                    base_allocated: Decimal::zero(),
+                    quote_allocated: Decimal::zero(),
                 },
                 Decimal::from_str("400").unwrap(),
             ),
@@ -433,6 +439,8 @@ fn range_offer_swap_overfill() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
+                    base_allocated: Decimal::zero(),
+                    quote_allocated: Decimal::zero(),
                 },
                 Decimal::from_str("200").unwrap(),
             ),
@@ -481,6 +489,8 @@ fn range_offer_swap_partial_fill_base() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
+                    base_allocated: Decimal::zero(),
+                    quote_allocated: Decimal::zero(),
                 },
                 Decimal::from_str("200").unwrap(),
             ),
@@ -499,6 +509,8 @@ fn range_offer_swap_partial_fill_base() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
+                    base_allocated: Decimal::zero(),
+                    quote_allocated: Decimal::zero(),
                 },
                 Decimal::from_str("100").unwrap(),
             ),
@@ -554,6 +566,8 @@ fn range_offer_swap_overfill_base() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
+                    base_allocated: Decimal::zero(),
+                    quote_allocated: Decimal::zero(),
                 },
                 Decimal::from_str("200").unwrap(),
             ),
@@ -572,6 +586,8 @@ fn range_offer_swap_overfill_base() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
+                    base_allocated: Decimal::zero(),
+                    quote_allocated: Decimal::zero(),
                 },
                 Decimal::from_str("100").unwrap(),
             ),
@@ -757,6 +773,8 @@ fn range_swap_allocates_fees() {
         price: Decimal::from_str("2").unwrap(),
         ask: Decimal::from_str("2").unwrap(),
         bid: Decimal::from_str("2").unwrap(),
+        base_allocated: Decimal::zero(),
+        quote_allocated: Decimal::zero(),
     };
 
     let mut ctx = RangeContext::new(
@@ -828,6 +846,8 @@ fn test_range_commit_fee() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
+                    base_allocated: Decimal::zero(),
+                    quote_allocated: Decimal::zero(),
                 },
                 Decimal::from_str("400").unwrap(),
             ),
@@ -846,6 +866,8 @@ fn test_range_commit_fee() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
+                    base_allocated: Decimal::zero(),
+                    quote_allocated: Decimal::zero(),
                 },
                 Decimal::from_str("200").unwrap(),
             ),
@@ -1547,6 +1569,80 @@ fn scl_swap_via_iterator() {
     assert!(updated_range.base < initial_base);
     assert!(updated_range.quote > initial_quote);
     assert!(updated_range.price > initial_price);
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+    #[test]
+    fn no_over_bidding_per_range_both_sides(
+        low in 1_000u64..100_000u64,
+        width in 1u64..50_000u64,
+        base in 1u128..10_000_000u128,
+        quote in 1u128..10_000_000u128,
+        spread_permille in 1u64..900u64,
+        skew_milli in -5_000i64..5_001i64,
+        delta_permille in 1u64..200u64,
+    ) {
+        let mut deps = mock_dependencies();
+        let tick = Tick::new(8);
+        let owner = Addr::unchecked("owner");
+
+        let high = low + width;
+        let abs = skew_milli.unsigned_abs();
+        let skew_str = format!(
+            "{}{}.{:03}",
+            if skew_milli < 0 { "-" } else { "" },
+            abs / 1000,
+            abs % 1000
+        );
+        let skew = SignedDecimal::from_str(&skew_str).unwrap();
+
+        let range = Range::new(
+            deps.as_mut().storage,
+            &tick,
+            &Decimal::zero(),
+            owner,
+            RangeConfig {
+                high: Decimal::from_atomics(high as u128, 0).unwrap(),
+                low: Decimal::from_atomics(low as u128, 0).unwrap(),
+                skew,
+                spread: Decimal::permille(spread_permille),
+                fee: Decimal::zero(),
+            },
+            (
+                Decimal::from_atomics(base, 0).unwrap(),
+                Decimal::from_atomics(quote, 0).unwrap(),
+            ),
+        )
+        .unwrap();
+        range.save(deps.as_mut().storage).unwrap();
+
+        let delta = Decimal::permille(delta_permille);
+        let offers_base: Vec<RangeOffer> =
+            RangeOfferIter::new(deps.as_ref().storage, &Side::Base, &delta).collect();
+        let offers_quote: Vec<RangeOffer> =
+            RangeOfferIter::new(deps.as_ref().storage, &Side::Quote, &delta).collect();
+
+        let total_base: Decimal = offers_base
+            .iter()
+            .flat_map(|o| o.ranges.iter().map(|(_r, amount)| *amount))
+            .sum();
+        let total_quote: Decimal = offers_quote
+            .iter()
+            .flat_map(|o| o.ranges.iter().map(|(_r, amount)| *amount))
+            .sum();
+
+        prop_assert!(
+            total_base <= range.base,
+            "base over-offer: total={total_base}, cap={}",
+            range.base
+        );
+        prop_assert!(
+            total_quote <= range.quote,
+            "quote over-offer: total={total_quote}, cap={}",
+            range.quote
+        );
+    }
 }
 
 #[test]

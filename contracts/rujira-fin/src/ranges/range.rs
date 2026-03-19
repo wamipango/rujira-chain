@@ -58,6 +58,16 @@ pub struct Range {
     pub bid: Decimal,
     /// (base, quote) Claimable fees collected by the range
     pub fees: [Decimal; 2],
+
+    /// Running total of base allocated during offer construction
+    #[serde(skip)]
+    #[serde(default)]
+    pub(crate) base_allocated: Decimal,
+
+    /// Running total of quote allocated during offer construction
+    #[serde(skip)]
+    #[serde(default)]
+    pub(crate) quote_allocated: Decimal,
 }
 
 pub struct Indexes<'a> {
@@ -180,6 +190,8 @@ impl Range {
             price,
             bid: scl.bid(price, spread.add(fee_range), tick),
             ask: scl.ask(price, spread.add(fee_range), tick),
+            base_allocated: Decimal::zero(),
+            quote_allocated: Decimal::zero(),
         })
     }
 
@@ -358,9 +370,23 @@ impl Range {
 
     /// Compute amount of tokens available in a price slice [p_start, p_end]
     /// Uses skewed distribution when skew is non-zero
-    pub fn amount_in_slice(&self, side: &Side, p_start: Decimal, p_end: Decimal) -> Decimal {
+    pub fn amount_in_slice(&mut self, side: &Side, p_start: Decimal, p_end: Decimal) -> Decimal {
         let scl = Scl::new(self.high, self.low, self.skew);
-        scl.amount_in_slice(side, self.base, self.quote, self.price, p_start, p_end)
+        let amount = scl.amount_in_slice(side, self.base, self.quote, self.price, p_start, p_end);
+        match side {
+            Side::Base => {
+                let remaining = self.base.saturating_sub(self.base_allocated);
+                let used = amount.min(remaining);
+                self.base_allocated += used;
+                used
+            }
+            Side::Quote => {
+                let remaining = self.quote.saturating_sub(self.quote_allocated);
+                let used = amount.min(remaining);
+                self.quote_allocated += used;
+                used
+            }
+        }
     }
 
     pub fn mid_price(storage: &dyn Storage) -> StdResult<Option<Decimal>> {

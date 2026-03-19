@@ -30,7 +30,7 @@ impl RangeOffer {
         }
     }
 
-    pub fn insert_range(&mut self, range: &Range) {
+    pub fn insert_range(&mut self, range: &mut Range) {
         // Use skew-aware amount calculation
         let amount = range.amount_in_slice(&self.side, self.start, self.end);
 
