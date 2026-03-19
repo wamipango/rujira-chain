@@ -132,7 +132,7 @@ impl QuoteState {
             output: Uint128::zero(),
             size: route.size(bps),
             borrow_limit: borrow_limit.min(available),
-            fee: config.reserve_fee,
+            fee: config.reserve_fee + config.fee.0,
             step_ratio: config.stream_step_ratio,
         })
     }

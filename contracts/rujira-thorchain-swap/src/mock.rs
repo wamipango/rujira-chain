@@ -135,6 +135,7 @@ impl ThorchainSwap {
                     max_borrow_ratio: Decimal::one(),
                     reserve_fee: Decimal::from_ratio(1u128, 5000u128),
                     stream_step_ratio: Decimal::one(),
+                    fee: (Decimal::zero(), owner.to_string()),
                 },
                 &[],
                 "thorchain-swap",

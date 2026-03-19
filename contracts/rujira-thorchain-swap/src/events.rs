@@ -4,7 +4,8 @@ pub fn event_swap(
     to: &String,
     amount: &Coin,
     min_return: &Coin,
-    fee: &Coin,
+    reserve_fee: &Coin,
+    amm_fee: &Coin,
     returned: &Coin,
     memo: &String,
 ) -> Event {
@@ -12,7 +13,8 @@ pub fn event_swap(
         .add_attribute("to", to)
         .add_attribute("amount", amount.to_string())
         .add_attribute("min_return", min_return.to_string())
-        .add_attribute("fee", fee.to_string())
+        .add_attribute("reserve_fee", reserve_fee.to_string())
+        .add_attribute("amm_fee", amm_fee.to_string())
         .add_attribute("returned", returned.to_string())
         .add_attribute("memo", memo)
 }

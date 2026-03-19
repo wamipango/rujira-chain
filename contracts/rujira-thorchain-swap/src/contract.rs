@@ -3,8 +3,8 @@ use std::cmp::min;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, ensure, ensure_eq, to_json_binary, Addr, BankMsg, Binary, Coin, Deps, DepsMut, Empty,
-    Env, MessageInfo, Order, Response, StdResult, Uint128, WasmMsg,
+    coin, ensure, ensure_eq, to_json_binary, Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut,
+    Empty, Env, MessageInfo, Order, Response, StdResult, Uint128, WasmMsg,
 };
 use cw2::{ensure_from_older_version, set_contract_version};
 use cw_storage_plus::Map;
@@ -34,7 +34,7 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::from(msg);
+    let config = Config::new(msg, deps.api)?;
     config.validate()?;
     config.save(deps.storage)?;
     Ok(Response::default())
@@ -80,11 +80,17 @@ pub fn execute(
                         &funds,
                         &min_return,
                         &coin(0u128, min_return.denom.clone()),
+                        &coin(0u128, min_return.denom.clone()),
                         &coin(min_return.amount.u128(), min_return.denom.clone()),
                         &format!("%%skipped%%:{} < 100", min_return.amount),
                     ))
                     .add_messages(execute_repayments(deps.as_ref(), env, Some(funds))?)
-                    .add_message(vault.borrow_msg(min_return.amount, to.clone(), callback)?));
+                    .add_message(vault.borrow_msg(
+                        min_return.amount,
+                        to.clone(),
+                        callback,
+                        (coin(0u128, min_return.denom.clone()), config.fee.1.clone()),
+                    )?));
             }
             let quote = SwapQuoteQuery {
                 from_asset,
@@ -120,33 +126,53 @@ pub fn execute(
             );
             let signer = deps.api.addr_canonicalize(env.contract.address.as_str())?;
             let swap_msg = quote.to_msg(signer);
-            let fee = returned.mul_ceil(config.reserve_fee);
-            let net_return = returned.checked_sub(fee).unwrap_or_default();
+            // returned ≈ net_return + reserve_fee + amm_fee  (from THORChain quote)
+            // reserve_fee stays unborrowed → accrues as vault surplus for repayment
+            // borrow = returned - reserve_fee = net_return + amm_fee
+            // callback splits borrowed funds: net_return → user, amm_fee → fee_address
+            let reserve_fee = returned.mul_ceil(config.reserve_fee);
+            let amm = returned.mul_ceil(config.fee.0);
+            let net_return = returned.saturating_sub(reserve_fee + amm);
+            let amm_fee = (
+                coin(amm.u128(), min_return.denom.clone()),
+                config.fee.1.clone(),
+            );
+            let borrow_amount = returned.saturating_sub(reserve_fee);
             Ok(Response::default()
                 .add_event(event_swap(
                     &to,
                     &funds,
                     &min_return,
-                    &coin(fee.u128(), min_return.denom.clone()),
+                    &coin(reserve_fee.u128(), min_return.denom.clone()),
+                    &amm_fee.0,
                     &coin(net_return.u128(), min_return.denom.clone()),
                     &memo,
                 ))
                 .add_messages(execute_repayments(deps.as_ref(), env, Some(funds))?)
-                .add_message(vault.borrow_msg(net_return, to.clone(), callback)?)
+                .add_message(vault.borrow_msg(borrow_amount, to.clone(), callback, amm_fee)?)
                 .add_message(swap_msg))
         }
         ExecuteMsg::Callback(msg) => {
-            let funds = one_coin(&info)?;
+            let mut funds = one_coin(&info)?;
             let data: Callback = msg.deserialize_callback()?;
             let vault = VAULTS.load(deps.storage, funds.denom.clone())?;
             ensure_eq!(info.sender, vault.addr(), ContractError::Unauthorized {});
+            let (fee, fee_addr) = data.fee;
+            let mut res = Response::default();
+            if !fee.amount.is_zero() {
+                funds.amount = funds.amount.saturating_sub(fee.amount);
+                res = res.add_message(BankMsg::Send {
+                    to_address: fee_addr.to_string(),
+                    amount: vec![fee],
+                });
+            }
             match data.callback {
-                Some(cb) => Ok(Response::default().add_message(cb.to_message(
+                Some(cb) => Ok(res.add_message(cb.to_message(
                     &deps.api.addr_validate(&data.to)?,
                     Empty {},
                     vec![funds],
                 )?)),
-                None => Ok(Response::default().add_message(BankMsg::Send {
+                None => Ok(res.add_message(BankMsg::Send {
                     to_address: data.to,
                     amount: vec![funds],
                 })),
@@ -197,7 +223,7 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
     let mut config = Config::load(deps.storage)?;
     match msg {
         SudoMsg::SetConfig(update) => {
-            config.update(&update);
+            config.update(&update, deps.api)?;
             config.validate()?;
             config.save(deps.storage)?;
             Ok(Response::default())
@@ -262,9 +288,18 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     }
 }
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
-    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+pub fn migrate(
+    deps: DepsMut,
+    _env: Env,
+    msg: (Decimal, String),
+) -> Result<Response, ContractError> {
     ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    let mut config = Config::load(deps.storage)?;
+    let addr = deps.api.addr_validate(&msg.1)?;
+    config.fee = (msg.0, addr);
+    config.validate()?;
+    config.save(deps.storage)?;
     Ok(Response::default())
 }
 
@@ -290,12 +325,13 @@ mod tests {
         let code_id = app.store_code(code);
         app.instantiate_contract(
             code_id,
-            owner,
+            owner.clone(),
             &InstantiateMsg {
                 max_stream_length: 1u32,
                 max_borrow_ratio: Decimal::one(),
                 reserve_fee: Decimal::from_ratio(10u128, 500u128),
                 stream_step_ratio: Decimal::one(),
+                fee: (Decimal::zero(), owner.to_string()),
             },
             &[],
             "template",

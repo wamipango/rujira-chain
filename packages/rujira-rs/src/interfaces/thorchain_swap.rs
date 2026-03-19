@@ -15,6 +15,8 @@ pub struct InstantiateMsg {
     pub reserve_fee: Decimal,
     /// The maximum percentage of a pool's depth that can be borrowed
     pub max_borrow_ratio: Decimal,
+    /// AMM fee rate and destination address
+    pub fee: (Decimal, String),
 }
 
 #[cw_serde]
@@ -23,6 +25,8 @@ pub struct Callback {
     pub to: String,
     /// Original callback requested with Swap
     pub callback: Option<CallbackData>,
+    /// AMM fee (amount, destination)
+    pub fee: (Coin, Addr),
 }
 
 #[cw_serde]
@@ -54,6 +58,7 @@ pub struct ConfigUpdate {
     pub stream_step_ratio: Option<Decimal>,
     pub max_borrow_ratio: Option<Decimal>,
     pub reserve_fee: Option<Decimal>,
+    pub fee: Option<(Decimal, String)>,
 }
 
 #[cw_serde]
@@ -78,6 +83,7 @@ pub struct ConfigResponse {
     pub stream_step_ratio: Decimal,
     pub max_borrow_ratio: Decimal,
     pub reserve_fee: Decimal,
+    pub fee: (Decimal, Addr),
 }
 
 #[cw_serde]
@@ -111,13 +117,14 @@ impl Vault {
         amount: Uint128,
         to: String,
         callback: Option<CallbackData>,
+        fee: (Coin, Addr),
     ) -> StdResult<WasmMsg> {
         Ok(WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_json_binary(&ghost::vault::ExecuteMsg::Market(
                 ghost::common::MarketMsg::Borrow {
                     amount,
-                    callback: Some(to_json_binary(&Callback { to, callback })?.into()),
+                    callback: Some(to_json_binary(&Callback { to, callback, fee })?.into()),
                     delegate: None,
                 },
             ))?,
