@@ -54,12 +54,13 @@ pub enum ContractError {
 
     #[error("InsufficientFunds")]
     InsufficientFunds {},
-    #[error("InsufficientReturn asked {asked} quoted {quoted} liquidity {liquidity} outbound {outbound}")]
+    #[error("InsufficientReturn asked {asked} quoted {quoted} liquidity {liquidity} outbound {outbound} fee {fee}")]
     InsufficientReturn {
         quoted: Uint128,
         asked: Uint128,
         liquidity: Uint128,
         outbound: Uint128,
+        fee: Uint128,
     },
 
     #[error("Invalid Route")]

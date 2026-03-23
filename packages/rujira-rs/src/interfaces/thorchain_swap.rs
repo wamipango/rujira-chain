@@ -1,7 +1,7 @@
-use crate::{bow, ghost, CallbackData, CallbackMsg};
+use crate::{bow, ghost, CallbackData};
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{
-    to_json_binary, Addr, Coin, Decimal, QuerierWrapper, StdResult, Uint128, WasmMsg,
+    to_json_binary, Addr, Coin, CosmosMsg, Decimal, QuerierWrapper, StdResult, Uint128, WasmMsg,
 };
 
 #[cw_serde]
@@ -20,16 +20,6 @@ pub struct InstantiateMsg {
 }
 
 #[cw_serde]
-pub struct Callback {
-    /// Destination
-    pub to: String,
-    /// Original callback requested with Swap
-    pub callback: Option<CallbackData>,
-    /// AMM fee (amount, destination)
-    pub fee: (Coin, Addr),
-}
-
-#[cw_serde]
 pub enum ExecuteMsg {
     /// Executes a market trade based on current order book.
     Swap {
@@ -40,9 +30,6 @@ pub enum ExecuteMsg {
 
     /// Only executes the loan repayment function
     Repay {},
-
-    /// Called when a market returns funds
-    Callback(CallbackMsg),
 }
 
 #[cw_serde]
@@ -50,6 +37,7 @@ pub enum SudoMsg {
     SetConfig(ConfigUpdate),
     SetMarket { addr: String, enabled: bool },
     SetVault { denom: String, vault: Option<Vault> },
+    Execute(CosmosMsg),
 }
 
 #[cw_serde]
@@ -112,19 +100,13 @@ impl From<Addr> for Vault {
 }
 
 impl Vault {
-    pub fn borrow_msg(
-        &self,
-        amount: Uint128,
-        to: String,
-        callback: Option<CallbackData>,
-        fee: (Coin, Addr),
-    ) -> StdResult<WasmMsg> {
+    pub fn borrow_msg(&self, amount: Uint128) -> StdResult<WasmMsg> {
         Ok(WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_json_binary(&ghost::vault::ExecuteMsg::Market(
                 ghost::common::MarketMsg::Borrow {
                     amount,
-                    callback: Some(to_json_binary(&Callback { to, callback, fee })?.into()),
+                    callback: None,
                     delegate: None,
                 },
             ))?,

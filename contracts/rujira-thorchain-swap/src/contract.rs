@@ -1,18 +1,19 @@
 use std::cmp::min;
+use std::ops::{Add, Sub};
 
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, ensure, ensure_eq, to_json_binary, Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut,
-    Empty, Env, MessageInfo, Order, Response, StdResult, Uint128, WasmMsg,
+    coin, coins, ensure, to_json_binary, Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env,
+    MessageInfo, Order, Response, StdResult, Uint128, WasmMsg,
 };
 use cw2::{ensure_from_older_version, set_contract_version};
 use cw_storage_plus::Map;
 use cw_utils::one_coin;
 use rujira_rs::query::SwapQuoteQuery;
 use rujira_rs::thorchain_swap::{
-    Callback, ConfigResponse, ExecuteMsg, InstantiateMsg, MarketsResponse, QueryMsg, SudoMsg,
-    Vault, VaultResponse, VaultsResponse,
+    ConfigResponse, ExecuteMsg, InstantiateMsg, MarketsResponse, QueryMsg, SudoMsg, Vault,
+    VaultResponse, VaultsResponse,
 };
 use rujira_rs::Asset;
 
@@ -51,11 +52,7 @@ pub fn execute(
         ExecuteMsg::Repay {} => {
             Ok(Response::default().add_messages(execute_repayments(deps.as_ref(), env, None)?))
         }
-        ExecuteMsg::Swap {
-            min_return,
-            to,
-            callback,
-        } => {
+        ExecuteMsg::Swap { min_return, to, .. } => {
             let funds = one_coin(&info)?;
             ensure!(
                 MARKETS
@@ -70,14 +67,20 @@ pub fn execute(
             let to = to.unwrap_or(info.sender.to_string());
             let vault = VAULTS.load(deps.storage, min_return.denom.clone())?;
 
+            // We just always send min_return back to fin, as all accounting logic there expects this to be the case
+            let send_msg = BankMsg::Send {
+                to_address: to.clone(),
+                amount: vec![min_return.clone()],
+            };
+
             // For very small return amounts, skip quote verification as it fails
             // on zero emit asset.
             // The reserve_fee should cover this edge case as well.
             if min_return.amount < Uint128::new(10) {
                 return Ok(Response::default()
                     .add_event(event_swap(
-                        &to,
                         &funds,
+                        &coin(0u128, min_return.denom.clone()),
                         &min_return,
                         &coin(0u128, min_return.denom.clone()),
                         &coin(0u128, min_return.denom.clone()),
@@ -85,12 +88,8 @@ pub fn execute(
                         &format!("%%skipped%%:{} < 100", min_return.amount),
                     ))
                     .add_messages(execute_repayments(deps.as_ref(), env, Some(funds))?)
-                    .add_message(vault.borrow_msg(
-                        min_return.amount,
-                        to.clone(),
-                        callback,
-                        (coin(0u128, min_return.denom.clone()), config.fee.1.clone()),
-                    )?));
+                    .add_message(vault.borrow_msg(min_return.amount)?)
+                    .add_message(send_msg));
             }
             let quote = SwapQuoteQuery {
                 from_asset,
@@ -108,75 +107,54 @@ pub fn execute(
             let liquidity = quote.fees.as_ref().map(|f| f.liquidity).unwrap_or_default();
             // Include the outbound fee in the return calculations. Until this is set to 0 in thornode, the `reserve_fee` must cover it
             let returned = quote.expected_amount_out + outbound;
-            let memo = quote.memo.clone();
-
+            let reserve_fee = returned.mul_ceil(config.reserve_fee);
+            let amm_fee = returned.mul_ceil(config.fee.0);
+            // Ensure that the request has correctly built-in amm fee
+            let required = returned.sub(amm_fee);
             // N.B. we can't check including the reserve_fee. The base layer swap simulation executes the msg as though it were
             // in the end block, and as such is subject to ordering amongst other swaps in the swap queue, eg streaming swaps,
             // which will cause deviation from the "pure" CLP quote that is computed by this contract
             // Therefore we must assume that the contract's quoting is correct for pool state, and the reserve_fee must also
             // cover this simulation variance as well as actual execution variance
             ensure!(
-                returned >= min_return.amount,
+                required >= min_return.amount,
                 ContractError::InsufficientReturn {
                     quoted: quote.expected_amount_out,
                     asked: min_return.amount,
                     liquidity,
                     outbound,
+                    fee: amm_fee
                 }
             );
+
+            let memo = quote.memo.clone();
             let signer = deps.api.addr_canonicalize(env.contract.address.as_str())?;
             let swap_msg = quote.to_msg(signer);
-            // returned ≈ net_return + reserve_fee + amm_fee  (from THORChain quote)
-            // reserve_fee stays unborrowed → accrues as vault surplus for repayment
-            // borrow = returned - reserve_fee = net_return + amm_fee
-            // callback splits borrowed funds: net_return → user, amm_fee → fee_address
-            let reserve_fee = returned.mul_ceil(config.reserve_fee);
-            let amm = returned.mul_ceil(config.fee.0);
-            let net_return = returned.saturating_sub(reserve_fee + amm);
-            let amm_fee = (
-                coin(amm.u128(), min_return.denom.clone()),
-                config.fee.1.clone(),
-            );
-            let borrow_amount = returned.saturating_sub(reserve_fee);
+            let fee_msg = if amm_fee.is_zero() {
+                vec![]
+            } else {
+                vec![BankMsg::Send {
+                    to_address: config.fee.1.to_string(),
+                    amount: coins(amm_fee.u128(), min_return.denom.clone()),
+                }]
+            };
+            dbg!(&amm_fee);
             Ok(Response::default()
                 .add_event(event_swap(
-                    &to,
                     &funds,
+                    &coin(returned.u128(), min_return.denom.clone()),
                     &min_return,
                     &coin(reserve_fee.u128(), min_return.denom.clone()),
-                    &amm_fee.0,
-                    &coin(net_return.u128(), min_return.denom.clone()),
+                    &coin(amm_fee.u128(), min_return.denom.clone()),
+                    &min_return,
                     &memo,
                 ))
                 .add_messages(execute_repayments(deps.as_ref(), env, Some(funds))?)
-                .add_message(vault.borrow_msg(borrow_amount, to.clone(), callback, amm_fee)?)
-                .add_message(swap_msg))
-        }
-        ExecuteMsg::Callback(msg) => {
-            let mut funds = one_coin(&info)?;
-            let data: Callback = msg.deserialize_callback()?;
-            let vault = VAULTS.load(deps.storage, funds.denom.clone())?;
-            ensure_eq!(info.sender, vault.addr(), ContractError::Unauthorized {});
-            let (fee, fee_addr) = data.fee;
-            let mut res = Response::default();
-            if !fee.amount.is_zero() {
-                funds.amount = funds.amount.saturating_sub(fee.amount);
-                res = res.add_message(BankMsg::Send {
-                    to_address: fee_addr.to_string(),
-                    amount: vec![fee],
-                });
-            }
-            match data.callback {
-                Some(cb) => Ok(res.add_message(cb.to_message(
-                    &deps.api.addr_validate(&data.to)?,
-                    Empty {},
-                    vec![funds],
-                )?)),
-                None => Ok(res.add_message(BankMsg::Send {
-                    to_address: data.to,
-                    amount: vec![funds],
-                })),
-            }
+                // Borrow everything that we need to send. We'll repay any excess in the next execution
+                .add_message(vault.borrow_msg(min_return.amount.add(amm_fee))?)
+                .add_message(swap_msg)
+                .add_message(send_msg)
+                .add_messages(fee_msg))
         }
     }
 }
@@ -240,6 +218,7 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             }
             Ok(Response::default())
         }
+        SudoMsg::Execute(cosmos_msg) => Ok(Response::default().add_message(cosmos_msg)),
     }
 }
 
@@ -331,7 +310,7 @@ mod tests {
                 max_borrow_ratio: Decimal::one(),
                 reserve_fee: Decimal::from_ratio(10u128, 500u128),
                 stream_step_ratio: Decimal::one(),
-                fee: (Decimal::zero(), owner.to_string()),
+                fee: (Decimal::permille(15), owner.to_string()),
             },
             &[],
             "template",
@@ -361,9 +340,9 @@ mod tests {
 
         assert_eq!(
             quote_1.price,
-            Decimal::from_str("0.000058384829789226").unwrap()
+            Decimal::from_str("0.000057508882768629").unwrap()
         );
-        assert_eq!(quote_1.size, Uint128::from(68451955u128));
+        assert_eq!(quote_1.size, Uint128::from(67424971u128));
 
         let quote_2: QuoteResponse = app
             .wrap()
@@ -380,10 +359,10 @@ mod tests {
 
         assert_eq!(
             quote_2.price,
-            Decimal::from_str("0.000058151872868767").unwrap()
+            Decimal::from_str("0.000057279420308594").unwrap()
         );
 
-        assert_eq!(quote_2.size, Uint128::from(68178830u128));
+        assert_eq!(quote_2.size, Uint128::from(67155943u128));
 
         assert!(quote_2.price < quote_1.price);
 
@@ -403,10 +382,11 @@ mod tests {
 
         assert_eq!(
             quote_1.price,
-            Decimal::from_str("17052.703394166808800955").unwrap()
+            Decimal::from_str("16796.86167491045539826").unwrap()
         );
-        // The vault is only funded with 1000000000, so the offer should be clamped, less 0.2% fee
-        assert_eq!(quote_1.size, Uint128::from(999800000u128));
+        // The vault is only funded with 1000000000, so the offer should be clamped,
+        // less reserve + amm fee from setup (0.02% + 1.5% = 1.52%)
+        assert_eq!(quote_1.size, Uint128::from(984800000u128));
         // assert_eq!(quote.size, Uint128::from(136658118u128));
 
         // Out of borrowable funds, no more quotes
@@ -438,9 +418,9 @@ mod tests {
 
         assert_eq!(
             quote_1.price,
-            Decimal::from_str("0.000011886568780303").unwrap()
+            Decimal::from_str("0.000011708234911896").unwrap()
         );
-        assert_eq!(quote_1.size, Uint128::from(12705082u128));
+        assert_eq!(quote_1.size, Uint128::from(12514468u128));
 
         let quote_2: QuoteResponse = app
             .wrap()
@@ -457,10 +437,10 @@ mod tests {
 
         assert_eq!(
             quote_2.price,
-            Decimal::from_str("0.000011830388381886").unwrap()
+            Decimal::from_str("0.000011652897467382").unwrap()
         );
 
-        assert_eq!(quote_2.size, Uint128::from(12645033u128));
+        assert_eq!(quote_2.size, Uint128::from(12455320u128));
 
         assert!(quote_2.price < quote_1.price);
     }
