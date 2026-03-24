@@ -4,7 +4,7 @@ use std::ops::{Add, Sub};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, ensure, to_json_binary, Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env,
+    coin, coins, ensure, to_json_binary, Addr, BankMsg, Binary, Coin, Deps, DepsMut, Env,
     MessageInfo, Order, Response, StdResult, Uint128, WasmMsg,
 };
 use cw2::{ensure_from_older_version, set_contract_version};
@@ -267,18 +267,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     }
 }
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(
-    deps: DepsMut,
-    _env: Env,
-    msg: (Decimal, String),
-) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let mut config = Config::load(deps.storage)?;
-    let addr = deps.api.addr_validate(&msg.1)?;
-    config.fee = (msg.0, addr);
-    config.validate()?;
-    config.save(deps.storage)?;
     Ok(Response::default())
 }
 
