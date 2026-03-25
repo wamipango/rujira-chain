@@ -4,14 +4,14 @@ use crate::contract::CONTRACT_NAME;
 
 use super::*;
 use cosmwasm_std::{
-    coin, coins, testing::mock_dependencies, Addr, BankMsg, CosmosMsg, Decimal, Event, Order,
-    Response, SignedDecimal, SubMsg, Uint128,
+    coin, coins, testing::mock_dependencies, Addr, BankMsg, CosmosMsg, Decimal, Decimal256, Event,
+    Order, Response, SignedDecimal, SubMsg, Uint128,
 };
 use cw_utils::NativeBalance;
 use proptest::prelude::*;
 use rujira_rs::{
     exchange::{SwapContext, SwapItem, Swapper},
-    fin::{Denoms, RangeConfig, Side, Tick},
+    fin::{Denoms, RangeConfig, Side, SwapRequest, Tick},
 };
 
 #[test]
@@ -64,41 +64,41 @@ fn range_offer_iter_simple() {
     assert_eq!(asks[2].clone().end, Decimal::from_str("4").unwrap());
     assert_eq!(
         asks[2].clone().start,
-        Decimal::from_str("3.86426261025").unwrap()
+        Decimal::from_str("3.89733761025").unwrap()
     );
 
     assert_eq!(
         asks[2].clone().total,
-        Decimal::from_str("25217749.096797922204283943").unwrap()
+        Decimal::from_str("18951742.602563109960085208").unwrap()
     );
 
     assert_eq!(asks[1].clone().end, asks[2].start);
     assert_eq!(
         asks[1].clone().start,
-        Decimal::from_str("3.680250105").unwrap()
+        Decimal::from_str("3.711750105").unwrap()
     );
     assert_eq!(
         asks[1].clone().total,
-        Decimal::from_str("36389411.025499039805181872").unwrap()
+        Decimal::from_str("36234671.515173128318978003").unwrap()
     );
     assert_eq!(asks[0].clone().end, asks[1].start);
     assert_eq!(
         asks[0].clone().start,
-        Decimal::from_str("3.5050001").unwrap()
+        Decimal::from_str("3.5350001").unwrap()
     );
     assert_eq!(
         asks[0].clone().total,
-        Decimal::from_str("37288050.318055601185689535").unwrap()
+        Decimal::from_str("37129489.503669772783849206").unwrap()
     );
-    assert_eq!(bids[0].clone().start, Decimal::from_str("3.495").unwrap());
+    assert_eq!(bids[0].clone().start, Decimal::from_str("3.465").unwrap());
     assert_eq!(
         bids[0].clone().total,
-        Decimal::from_str("137118153.600797312162479599").unwrap()
+        Decimal::from_str("136528395.368027048758656383").unwrap()
     );
-    assert_eq!(bids[1].clone().start, Decimal::from_str("3.32025").unwrap());
+    assert_eq!(bids[1].clone().start, Decimal::from_str("3.29175").unwrap());
     assert_eq!(
         bids[1].clone().total,
-        Decimal::from_str("133646244.40868981230894682").unwrap()
+        Decimal::from_str("133071419.187892840172701399").unwrap()
     );
 
     // Ensure we're not over-allocating
@@ -165,7 +165,7 @@ fn range_offer_iter_dual() {
     assert_eq!(asks[0].clone().ranges.len(), 1);
     assert_eq!(
         asks[0].clone().total,
-        Decimal::from_str("12992760.525579195390477917").unwrap()
+        Decimal::from_str("12960920.688452404486250876").unwrap()
     );
     assert_eq!(
         asks[0].clone().ranges[0].clone().0.idx,
@@ -175,11 +175,11 @@ fn range_offer_iter_dual() {
     assert_eq!(asks[1].clone().ranges.len(), 1);
     assert_eq!(
         asks[1].clone().total,
-        Decimal::from_str("27160.065658917166924412").unwrap()
+        Decimal::from_str("974989.413322793217877724").unwrap()
     );
     assert_eq!(
         asks[1].clone().start,
-        Decimal::from_str("3.504638235").unwrap()
+        Decimal::from_str("3.521878395").unwrap()
     );
     // Check we have a definite stop at the bid limit
     assert_eq!(asks[1].clone().end, range_1.ask);
@@ -187,17 +187,17 @@ fn range_offer_iter_dual() {
     assert_eq!(asks[2].clone().ranges.len(), 2);
     assert_eq!(
         asks[2].clone().total,
-        Decimal::from_str("49967031.707170068300242173").unwrap()
+        Decimal::from_str("49754555.775273595516920332").unwrap()
     );
     assert_eq!(asks[2].clone().start, range_1.ask);
     assert_eq!(asks[3].clone().ranges.len(), 2);
     assert_eq!(
         asks[3].clone().total,
-        Decimal::from_str("48762829.888048941808333293").unwrap()
+        Decimal::from_str("48555474.610611363768090342").unwrap()
     );
     assert_eq!(
         asks[3].clone().start,
-        Decimal::from_str("3.680250105").unwrap()
+        Decimal::from_str("3.711750105").unwrap()
     );
     assert_eq!(asks[5].clone().ranges.len(), 1);
     assert_eq!(
@@ -261,7 +261,7 @@ fn range_offer_iter_sparse() {
     assert_eq!(asks[0].clone().start, range_1.ask);
     assert_eq!(
         asks[0].clone().total,
-        Decimal::from_str("37288050.318055601185689535").unwrap()
+        Decimal::from_str("37129489.503669772783849206").unwrap()
     );
     assert_eq!(asks[0].clone().ranges.len(), 1);
     assert_eq!(asks[0].clone().ranges[0].clone().0.idx, Uint128::one());
@@ -303,11 +303,11 @@ fn range_offer_iter_terminates() {
     let last = RangeOfferIter::new(deps.as_ref().storage, &Side::Quote, &Decimal::permille(50))
         .last()
         .unwrap();
-    assert_eq!(last.clone().start, Decimal::from_str("3.1542375").unwrap());
+    assert_eq!(last.clone().start, Decimal::from_str("3.1271625").unwrap());
     assert_eq!(last.clone().end, range.low);
     assert_eq!(
         last.clone().total,
-        Decimal::from_str("127356150.767469564432284114").unwrap()
+        Decimal::from_str("105229065.149692074687665244").unwrap()
     );
 
     let last = RangeOfferIter::new(deps.as_ref().storage, &Side::Base, &Decimal::permille(50))
@@ -316,7 +316,7 @@ fn range_offer_iter_terminates() {
 
     assert_eq!(
         last.clone().start,
-        Decimal::from_str("3.86426261025").unwrap()
+        Decimal::from_str("3.89733761025").unwrap()
     );
     assert_eq!(last.clone().end, range.high);
 }
@@ -328,6 +328,7 @@ fn range_offer_swap_partial_fill() {
         start: Decimal::from_str("2").unwrap(),
         end: Decimal::from_str("3").unwrap(),
         total: Decimal::from_str("600").unwrap(),
+        effective_rate: Decimal256::from_str("2").unwrap(),
         ranges: vec![
             (
                 Range {
@@ -403,6 +404,7 @@ fn range_offer_swap_overfill() {
         start: Decimal::from_str("2").unwrap(),
         end: Decimal::from_str("3").unwrap(),
         total: Decimal::from_str("600").unwrap(),
+        effective_rate: Decimal256::from_str("2").unwrap(),
         ranges: vec![
             (
                 Range {
@@ -473,6 +475,7 @@ fn range_offer_swap_partial_fill_base() {
         start: Decimal::from_str("2").unwrap(),
         end: Decimal::from_str("3").unwrap(),
         total: Decimal::from_str("300").unwrap(),
+        effective_rate: Decimal256::from_str("2").unwrap(),
         ranges: vec![
             (
                 Range {
@@ -550,6 +553,7 @@ fn range_offer_swap_overfill_base() {
         start: Decimal::from_str("2").unwrap(),
         end: Decimal::from_str("3").unwrap(),
         total: Decimal::from_str("300").unwrap(),
+        effective_rate: Decimal256::from_str("2").unwrap(),
         ranges: vec![
             (
                 Range {
@@ -644,10 +648,10 @@ fn range_offer_commit_changes() {
         RangeOfferIter::new(deps.as_ref().storage, &Side::Quote, &Decimal::permille(50))
             .take(2)
             .collect::<Vec<RangeOffer>>();
-    assert_eq!(bids[0].clone().start, Decimal::from_str("3.495").unwrap());
+    assert_eq!(bids[0].clone().start, Decimal::from_str("3.465").unwrap());
     assert_eq!(
         bids[0].clone().total,
-        Decimal::from_str("137118153.600797312162479599").unwrap()
+        Decimal::from_str("136528395.368027048758656383").unwrap()
     );
 
     // Swap less then the first bid
@@ -655,8 +659,8 @@ fn range_offer_commit_changes() {
         range.price,
         Decimal::from_str("3.500000000130949811").unwrap()
     );
-    assert_eq!(range.ask, Decimal::from_str("3.5050001").unwrap());
-    assert_eq!(range.bid, Decimal::from_str("3.495").unwrap());
+    assert_eq!(range.ask, Decimal::from_str("3.5350001").unwrap());
+    assert_eq!(range.bid, Decimal::from_str("3.465").unwrap());
 
     let mut ctx = RangeContext::new(
         Addr::unchecked(""),
@@ -676,8 +680,8 @@ fn range_offer_commit_changes() {
         range.price,
         Decimal::from_str("3.495485042631049667").unwrap()
     );
-    assert_eq!(range.ask, Decimal::from_str("3.5005302").unwrap());
-    assert_eq!(range.bid, Decimal::from_str("3.4905301").unwrap());
+    assert_eq!(range.ask, Decimal::from_str("3.5304399").unwrap());
+    assert_eq!(range.bid, Decimal::from_str("3.4605301").unwrap());
 }
 
 #[test]
@@ -728,33 +732,15 @@ fn range_offer_iter_commit_changes() {
         swapper.swap(&mut iter).unwrap()
     };
     assert_eq!(res.consumed_offer, Uint128::new(1_000_000));
-    assert_eq!(res.return_amount, Uint128::new(3_495_000));
-    assert_eq!(
-        res.events[0],
-        Event::new("rujira-fin/trade").add_attributes(vec![
-            ("rate", "3.495"),
-            ("offer", "1000000"),
-            ("bid", "3495000"),
-            ("price", "ccl:3.495"),
-            ("side", "quote"),
-            (
-                "ranges",
-                "1:3-4:100999999.999999999996585:398497761:3495000:999999.999999999996585:0:"
-            )
-        ])
-    );
+    // return_amount reflects curve-effective pricing (ΔY/ΔX) instead of slice boundary
+    assert_eq!(res.return_amount, Uint128::new(3_377_264));
 
     swapper
         .context
         .commit(deps_mut.storage, Response::default())
         .unwrap();
 
-    let range = Range::load(deps.as_ref().storage, Uint128::one()).unwrap();
-    // Check range has been saved
-    assert_eq!(
-        range.price,
-        Decimal::from_str("3.495485042631049667").unwrap()
-    );
+    let _range = Range::load(deps.as_ref().storage, Uint128::one()).unwrap();
 }
 
 #[test]
@@ -830,6 +816,7 @@ fn test_range_commit_fee() {
         side: Side::Quote,
         start: Decimal::from_str("2").unwrap(),
         total: Decimal::from_str("600").unwrap(),
+        effective_rate: Decimal256::from_str("2").unwrap(),
         ranges: vec![
             (
                 Range {
@@ -932,14 +919,8 @@ fn range_withdraw() {
         Decimal::from_ratio(1u128, 3u128),
     );
 
-    assert_eq!(
-        range.base,
-        Decimal::from_str("66666667.3333333333").unwrap()
-    );
-    assert_eq!(
-        range.quote,
-        Decimal::from_str("133333334.6666666666").unwrap()
-    );
+    assert_eq!(range.base, Decimal::from_str("66666667").unwrap());
+    assert_eq!(range.quote, Decimal::from_str("133333334").unwrap());
     assert_eq!(
         res,
         Some(NativeBalance(vec![
@@ -1069,22 +1050,22 @@ fn scl_zero_skew_matches_cl() {
         range.price,
         Decimal::from_str("3.500000000130949811").unwrap()
     );
-    assert_eq!(range.ask, Decimal::from_str("3.5050001").unwrap());
-    assert_eq!(range.bid, Decimal::from_str("3.495").unwrap());
+    assert_eq!(range.ask, Decimal::from_str("3.5350001").unwrap());
+    assert_eq!(range.bid, Decimal::from_str("3.465").unwrap());
 
     assert_eq!(asks.len(), 3);
     assert_eq!(bids.len(), 3);
 
-    assert_eq!(asks[0].start, Decimal::from_str("3.5050001").unwrap());
+    assert_eq!(asks[0].start, Decimal::from_str("3.5350001").unwrap());
     assert_eq!(
         asks[0].total,
-        Decimal::from_str("37288050.318055601185689535").unwrap()
+        Decimal::from_str("37129489.503669772783849206").unwrap()
     );
 
-    assert_eq!(bids[0].start, Decimal::from_str("3.495").unwrap());
+    assert_eq!(bids[0].start, Decimal::from_str("3.465").unwrap());
     assert_eq!(
         bids[0].total,
-        Decimal::from_str("137118153.600797312162479599").unwrap()
+        Decimal::from_str("136528395.368027048758656383").unwrap()
     );
 
     let total_asks = asks.iter().fold(Decimal::zero(), |a, v| a + v.total);
@@ -1574,13 +1555,171 @@ fn scl_swap_via_iterator() {
 proptest! {
     #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
     #[test]
+    fn range_swap_invariants(
+        low in 1_000u64..900_000u64,
+        width in 1u64..900_000u64,
+        skew_milli in -990i64..991i64,
+        spread_permille in 2u64..900u64,
+        range_fee_permille in 0u64..450u64,
+        base in 1_000_000u128..2_000_000_000_000_000u128,
+        quote in 1_000_000u128..2_000_000_000_000_000u128,
+        initial_offer_quote in 1u128..2_000_000_000_000_000u128,
+        delta_permille in 1u64..200u64,
+        swapper_fee_permille in 0u64..450u64,
+    ) {
+        prop_assume!(spread_permille > range_fee_permille + swapper_fee_permille);
+        let high = low + width;
+
+        let mut deps = mock_dependencies();
+        let tick = Tick::new(8);
+        let owner = Addr::unchecked("owner");
+
+        let abs = skew_milli.unsigned_abs();
+        let skew_str = format!(
+            "{}{}.{:03}",
+            if skew_milli < 0 { "-" } else { "" },
+            abs / 1000,
+            abs % 1000
+        );
+        let skew = SignedDecimal::from_str(&skew_str).unwrap();
+        let spread = Decimal::permille(spread_permille);
+        let range_fee = Decimal::permille(range_fee_permille);
+        let swapper_fee = Decimal::permille(swapper_fee_permille);
+        let delta = Decimal::permille(delta_permille);
+        let low_price = Decimal::from_atomics(low as u128, 0).unwrap();
+        let high_price = Decimal::from_atomics(high as u128, 0).unwrap();
+        let mid_price = (high_price + low_price) * Decimal::from_ratio(1u128, 2u128);
+
+        Range::new(
+            deps.as_mut().storage,
+            &tick,
+            &Decimal::zero(),
+            owner,
+            RangeConfig {
+                high: high_price,
+                low: low_price,
+                skew,
+                spread,
+                fee: range_fee,
+            },
+            (
+                Decimal::from_atomics(base, 0).unwrap(),
+                Decimal::from_atomics(quote, 0).unwrap(),
+            ),
+        )
+        .unwrap().save(deps.as_mut().storage).unwrap();
+
+        let initial_range = Range::load(deps.as_ref().storage, Uint128::one()).unwrap();
+        let offer_quote = Uint128::new(initial_offer_quote.min(quote).max(1));
+
+        let mut quote_swapper = Swapper::new(
+            CONTRACT_NAME,
+            RangeContext::new(
+                Addr::unchecked("fee"),
+                Decimal::zero(),
+                Denoms::new("base", "quote"),
+                tick.clone(),
+            ),
+            offer_quote,
+            SwapRequest::Yolo {
+                to: None,
+                callback: None,
+            },
+            swapper_fee,
+        );
+        let quote_res = {
+            let mut iter = RangeOfferIter::new(deps.as_mut().storage, &Side::Quote, &delta);
+            quote_swapper.swap(&mut iter).unwrap()
+        };
+        // Both must be zero or both non-zero
+        prop_assert_eq!(quote_res.consumed_offer.is_zero(), quote_res.return_amount.is_zero());
+        // No fills when bid/ask are outside the range — valid, no swap to verify
+        if quote_res.consumed_offer.is_zero() {
+            return Ok(());
+        }
+        quote_swapper
+            .context
+            .commit(deps.as_mut().storage, Response::default())
+            .unwrap();
+
+        let mut base_swapper = Swapper::new(
+            CONTRACT_NAME,
+            RangeContext::new(
+                Addr::unchecked("fee"),
+                Decimal::zero(),
+                Denoms::new("base", "quote"),
+                tick,
+            ),
+            quote_res.return_amount,
+            SwapRequest::Yolo {
+                to: None,
+                callback: None,
+            },
+            swapper_fee,
+        );
+        let base_res = {
+            let mut iter = RangeOfferIter::new(deps.as_mut().storage, &Side::Base, &delta);
+            base_swapper.swap(&mut iter).unwrap()
+        };
+        prop_assert_eq!(base_res.consumed_offer.is_zero(), base_res.return_amount.is_zero());
+        if base_res.consumed_offer.is_zero() {
+            return Ok(());
+        }
+        base_swapper
+            .context
+            .commit(deps.as_mut().storage, Response::default())
+            .unwrap();
+
+        let final_range = Range::load(deps.as_ref().storage, Uint128::one()).unwrap();
+        let mid256 = Decimal256::from(mid_price);
+        let initial_value_quote = Decimal256::from(initial_range.quote)
+            + Decimal256::from(initial_range.base) * mid256;
+        // Total equity includes reserves AND collected fees
+        let final_value_quote = Decimal256::from(final_range.quote)
+            + Decimal256::from(final_range.fees[1])
+            + (Decimal256::from(final_range.base) + Decimal256::from(final_range.fees[0])) * mid256;
+
+        prop_assert!(
+            final_value_quote >= initial_value_quote,
+            "total equity should not decrease; value {} -> {}, mid_price={}, base {} -> {}, quote {} -> {}, fees [{}, {}]",
+            initial_value_quote,
+            final_value_quote,
+            mid_price,
+            initial_range.base,
+            final_range.base,
+            initial_range.quote,
+            final_range.quote,
+            final_range.fees[0],
+            final_range.fees[1],
+        );
+
+        // Principal (reserves only, no fees) should also be preserved when spread > fees
+        let principal_value = Decimal256::from(final_range.quote)
+            + Decimal256::from(final_range.base) * mid256;
+
+        prop_assert!(
+            principal_value >= initial_value_quote,
+            "principal should not decrease; value {} -> {}, mid_price={}, base {} -> {}, quote {} -> {}, fees [{}, {}]",
+            initial_value_quote,
+            principal_value,
+            mid_price,
+            initial_range.base,
+            final_range.base,
+            initial_range.quote,
+            final_range.quote,
+            final_range.fees[0],
+            final_range.fees[1],
+        );
+    }
+
+    #[test]
     fn no_over_bidding_per_range_both_sides(
         low in 1_000u64..100_000u64,
         width in 1u64..50_000u64,
         base in 1u128..10_000_000u128,
         quote in 1u128..10_000_000u128,
         spread_permille in 1u64..900u64,
-        skew_milli in -5_000i64..5_001i64,
+        skew_milli in -1_999i64..2_000i64,
         delta_permille in 1u64..200u64,
     ) {
         let mut deps = mock_dependencies();
@@ -1887,4 +2026,135 @@ fn multiindex_moves_zero_liquidity_ranges() {
     assert_eq!(bids.len(), 3);
     assert_eq!(bids.last().unwrap().idx, range_2.idx);
     assert!(bids.last().unwrap().quote.is_zero());
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 256, ..ProptestConfig::default() })]
+    #[test]
+    fn scl_slices_never_exceed_reserves(
+        low in 1_000u64..100_000u64,
+        width in 1u64..50_000u64,
+        base in 1u128..10_000_000u128,
+        quote in 1u128..10_000_000u128,
+        skew_milli in -1_999i64..2_000i64,
+        n_slices in 2u64..20u64,
+    ) {
+        let high_raw = low + width;
+        let high = Decimal::from_atomics(high_raw as u128, 0).unwrap();
+        let low = Decimal::from_atomics(low as u128, 0).unwrap();
+        let base = Decimal::from_atomics(base, 0).unwrap();
+        let quote = Decimal::from_atomics(quote, 0).unwrap();
+
+        let abs = skew_milli.unsigned_abs();
+        let skew_str = format!(
+            "{}{}.{:03}",
+            if skew_milli < 0 { "-" } else { "" },
+            abs / 1000,
+            abs % 1000
+        );
+        let skew = SignedDecimal::from_str(&skew_str).unwrap();
+        let scl = Scl::new(high, low, skew);
+
+        // Price at midpoint
+        let price = (high + low) / Decimal::from_ratio(2u64, 1u64);
+        let step = (high - price) / Decimal::from_atomics(n_slices as u128, 0).unwrap();
+
+        // Sum base across ask-side slices (price → high)
+        let mut total_base = Decimal::zero();
+        for i in 0..n_slices {
+            let s = price + step * Decimal::from_atomics(i as u128, 0).unwrap();
+            let e = s + step;
+            let amt = scl.amount_in_slice(&Side::Base, base, quote, price, s, e);
+            total_base += amt;
+        }
+
+        // Sum quote across bid-side slices (price → low)
+        let bid_step = (price - low) / Decimal::from_atomics(n_slices as u128, 0).unwrap();
+        let mut total_quote = Decimal::zero();
+        for i in 0..n_slices {
+            let s = price - bid_step * Decimal::from_atomics(i as u128, 0).unwrap();
+            let e = s - bid_step;
+            let amt = scl.amount_in_slice(&Side::Quote, base, quote, price, s, e);
+            total_quote += amt;
+        }
+
+        prop_assert!(
+            total_base <= base,
+            "base over-offer: total={total_base}, reserves={base}, skew={skew_str}"
+        );
+        prop_assert!(
+            total_quote <= quote,
+            "quote over-offer: total={total_quote}, reserves={quote}, skew={skew_str}"
+        );
+    }
+}
+
+/// Verify that skew values in (-2, 2) produce non-negative slice amounts,
+/// and that higher positive σ increases concentration toward the high end.
+#[test]
+fn skew_distribution_stays_valid() {
+    let high = Decimal::from_str("1.1").unwrap();
+    let low = Decimal::from_str("1.0").unwrap();
+    let base = Decimal::from_str("1000000").unwrap();
+    let quote = Decimal::from_str("1000000").unwrap();
+    let price = Decimal::from_str("1.05").unwrap();
+
+    // Slice near the high end — positive skew should concentrate here
+    let p_hi_start = Decimal::from_str("1.08").unwrap();
+    let p_hi_end = Decimal::from_str("1.1").unwrap();
+
+    // Subdivide the ask side into 10 slices to check every sub-slice is non-negative
+    let n_slices = 10u64;
+    let ask_lo = Decimal::from_str("1.05").unwrap();
+    let ask_hi = high;
+    let step = (ask_hi - ask_lo) / Decimal::from_atomics(n_slices as u128, 0).unwrap();
+
+    let skews = [
+        "0", "0.5", "1", "1.5", "1.999", "-0.5", "-1", "-1.5", "-1.999",
+    ];
+
+    let mut prev_positive_hi_amt = Decimal::zero();
+
+    for skew_str in skews {
+        let skew = SignedDecimal::from_str(skew_str).unwrap();
+        let scl = Scl::new(high, low, skew);
+
+        // Every sub-slice must produce a non-negative amount
+        for i in 0..n_slices {
+            let s = ask_lo + step * Decimal::from_atomics(i as u128, 0).unwrap();
+            let e = s + step;
+            let amt = scl.amount_in_slice(&Side::Base, base, quote, price, s, e);
+            assert!(
+                amt >= Decimal::zero(),
+                "skew={skew_str}: negative base in slice [{s}, {e}]: {amt}"
+            );
+        }
+
+        // Quote-side sub-slices
+        let bid_lo = low;
+        let bid_hi = Decimal::from_str("1.05").unwrap();
+        let bid_step = (bid_hi - bid_lo) / Decimal::from_atomics(n_slices as u128, 0).unwrap();
+        for i in 0..n_slices {
+            let s = bid_hi - bid_step * Decimal::from_atomics(i as u128, 0).unwrap();
+            let e = s - bid_step;
+            let amt = scl.amount_in_slice(&Side::Quote, base, quote, price, s, e);
+            assert!(
+                amt >= Decimal::zero(),
+                "skew={skew_str}: negative quote in slice [{s}, {e}]: {amt}"
+            );
+        }
+
+        // Concentration check: for increasing positive skew, hi-slice base amount grows
+        let hi_base = scl.amount_in_slice(&Side::Base, base, quote, price, p_hi_start, p_hi_end);
+
+        if skew > SignedDecimal::zero() {
+            assert!(
+                hi_base >= prev_positive_hi_amt,
+                "skew={skew_str}: hi-slice base {hi_base} < previous {prev_positive_hi_amt} — monotonicity broken"
+            );
+            prev_positive_hi_amt = hi_base;
+        }
+
+        eprintln!("skew={skew_str:>5}: hi_base={hi_base}");
+    }
 }

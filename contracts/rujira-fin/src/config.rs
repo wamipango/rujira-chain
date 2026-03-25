@@ -92,39 +92,6 @@ impl Config {
     }
 }
 
-pub fn migrate(storage: &mut dyn Storage) -> StdResult<()> {
-    #[cw_serde]
-    struct OldConfig {
-        pub denoms: Denoms,
-        pub oracles: Option<OraclePair>,
-        pub market_makers: MarketMakers,
-        #[serde(default)]
-        pub range_delta: Decimal,
-        pub tick: Tick,
-        pub fee_maker: Decimal,
-        pub fee_taker: Decimal,
-        #[serde(default)]
-        pub fee_amm: Decimal,
-        pub fee_address: Addr,
-    }
-
-    let old: OldConfig = Item::new("config").load(storage)?;
-    CONFIG.save(
-        storage,
-        &Config {
-            denoms: old.denoms,
-            oracles: old.oracles,
-            market_makers: old.market_makers,
-            range_delta: old.range_delta,
-            tick: old.tick,
-            fee_maker: old.fee_maker,
-            fee_taker: old.fee_taker,
-            fee_range: old.fee_amm,
-            fee_address: old.fee_address,
-        },
-    )
-}
-
 impl From<Config> for ConfigResponse {
     fn from(value: Config) -> Self {
         Self {

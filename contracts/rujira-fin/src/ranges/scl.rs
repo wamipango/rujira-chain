@@ -1,6 +1,6 @@
 //! Skewed Concentrated Liquidity (SCL)
 //!
-//! Extends the XY=K concentrated liquidity model with a skew parameter σ ∈ [-1, 1]
+//! Extends the XY=K concentrated liquidity model with a skew parameter σ ∈ (-2, 2)
 //! that modifies liquidity distribution across the price range.
 //!
 //! Weight function: w(p) = 1 + σ·(p - p_m)/Δp
@@ -42,7 +42,7 @@ impl Scl {
         let p_m = Decimal256::from((high + low) / Decimal::from_ratio(2u64, 1u64));
         let delta_p = Decimal256::from(high - low);
 
-        // β = σ / Δp
+        // β = σ / Δp  (σ constrained to (-2, 2) at validation)
         let beta = if delta_p.is_zero() {
             SignedDecimal256::zero()
         } else {
@@ -137,16 +137,14 @@ impl Scl {
         Decimal::try_from(s * s).unwrap_or(Decimal::zero())
     }
 
-    /// Compute ask price with spread, truncated to tick
+    /// Compute ask price with spread, truncated to tick.
     pub fn ask(&self, price: Decimal, spread: Decimal, tick: &Tick) -> Decimal {
-        let high = Decimal::try_from(self.s_b * self.s_b).unwrap_or(Decimal::MAX);
-        tick.truncate_ceil(&(price + (high - price) * spread))
+        tick.truncate_ceil(&(price + price * spread))
     }
 
-    /// Compute bid price with spread, truncated to tick
+    /// Compute bid price with spread, truncated to tick.
     pub fn bid(&self, price: Decimal, spread: Decimal, tick: &Tick) -> Decimal {
-        let low = Decimal::try_from(self.s_a * self.s_a).unwrap_or(Decimal::zero());
-        tick.truncate_floor(&(price - (price - low) * spread))
+        tick.truncate_floor(&price.saturating_sub(price * spread))
     }
 
     /// Compute the quote/base balance ratio (Y(s)/X(s)) at a given price.
@@ -160,6 +158,26 @@ impl Scl {
         }
 
         (self.y_at(s) / x_s).to_decimal()
+    }
+
+    /// Compute the curve-effective price (ΔY/ΔX) for a price slice [p_start, p_end].
+    /// L₀ cancels out, so this depends only on curve shape.
+    pub fn effective_price(&self, p_start: Decimal, p_end: Decimal) -> Option<Decimal256> {
+        let s_start = Decimal256::from(p_start).sqrt().max(self.s_a).min(self.s_b);
+        let s_end = Decimal256::from(p_end).sqrt().max(self.s_a).min(self.s_b);
+
+        if s_start == s_end {
+            return None;
+        }
+
+        let dy = self.y_at(s_end) - self.y_at(s_start);
+        let dx = self.x_at(s_start) - self.x_at(s_end);
+
+        if dx.is_zero() {
+            return None;
+        }
+
+        (dy / dx).to_decimal256()
     }
 
     /// Compute amount of tokens available in a price slice [p_start, p_end]

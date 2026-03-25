@@ -12,7 +12,7 @@ pub enum RangeError {
     #[error("Range fee must be < spread")]
     InvalidFee {},
 
-    #[error("Skew must be between -1 and 1")]
+    #[error("Skew must be in (-2, 2) exclusive")]
     InvalidSkew {},
 
     #[error("Range fee must be 0 when spread is 0")]

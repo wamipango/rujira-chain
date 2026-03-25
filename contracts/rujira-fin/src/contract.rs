@@ -1,4 +1,4 @@
-use crate::config::{self, Config, CONFIG};
+use crate::config::{Config, CONFIG};
 use crate::error::ContractError;
 use crate::order_pool::execute::execute_order;
 use crate::order_pool::{query as order_query, OrderManager};
@@ -302,7 +302,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    config::migrate(deps.storage)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     Ok(Response::default())
 }

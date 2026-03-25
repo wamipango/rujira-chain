@@ -23,8 +23,8 @@ impl<'a> RangeOfferIter<'a> {
     fn filter(side: Side) -> impl Fn(StdResult<(u128, Range)>) -> Option<Range> {
         move |res| match res {
             Ok((_, range)) => match side {
-                Side::Base => !range.base.is_zero(),
-                Side::Quote => !range.quote.is_zero(),
+                Side::Base => !range.base.is_zero() && range.ask < range.high,
+                Side::Quote => !range.quote.is_zero() && range.bid > range.low,
             }
             .then_some(range),
             Err(_) => None,

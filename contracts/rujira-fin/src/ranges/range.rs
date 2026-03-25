@@ -38,7 +38,7 @@ pub struct Range {
     pub high: Decimal,
     /// Lowest price of the Range
     pub low: Decimal,
-    /// Skew in [-1, 1]:
+    /// Skew in (-2, 2):
     ///  0   => uniform across the range half
     ///  >0  => weight towards the spread edge (bid/ask)
     ///  <0  => weight towards the limit edge (high/low)
@@ -197,6 +197,11 @@ impl Range {
 
     pub fn validate(&self, tick: &Tick) -> Result<(), RangeError> {
         ensure!(self.high > self.low, RangeError::InvalidBounds {});
+        let two = SignedDecimal::from_atomics(2i128, 0).unwrap();
+        ensure!(
+            self.skew > -two && self.skew < two,
+            RangeError::InvalidSkew {}
+        );
         ensure!(self.spread < Decimal::one(), RangeError::InvalidSpread {});
         if self.spread.is_zero() {
             ensure!(self.fee.is_zero(), RangeError::InvalidFeeWithZeroSpread {});
@@ -322,18 +327,15 @@ impl Range {
     }
 
     pub fn withdraw(&mut self, denoms: &Denoms, amount: Decimal) -> Option<NativeBalance> {
-        let (base_int, base_rem) = split_floor(self.base * amount);
-        let (quote_int, quote_rem) = split_floor(self.quote * amount);
+        let base = (self.base * amount).floor();
+        let quote = (self.quote * amount).floor();
 
-        let base_dec = Decimal::from_atomics(base_int, 0).unwrap();
-        let quote_dec = Decimal::from_atomics(quote_int, 0).unwrap();
-
-        self.base = self.base - base_dec + base_rem;
-        self.quote = self.quote - quote_dec + quote_rem;
+        self.base -= base;
+        self.quote -= quote;
 
         let mut payout = NativeBalance(vec![
-            coin(base_int.u128(), denoms.base()),
-            coin(quote_int.u128(), denoms.quote()),
+            coin(base.to_uint_floor().u128(), denoms.base()),
+            coin(quote.to_uint_floor().u128(), denoms.quote()),
         ]);
         payout.normalize();
         if payout.is_empty() {
@@ -394,16 +396,18 @@ impl Range {
             .idx
             .asks
             .range(storage, None, None, Order::Ascending)
-            .next();
+            .filter_map(|r| r.ok())
+            .find(|r| !r.1.base.is_zero() && r.1.ask != Decimal::MAX);
 
         let bid = Self::map()
             .idx
             .bids
             .range(storage, None, None, Order::Descending)
-            .next();
+            .filter_map(|r| r.ok())
+            .find(|r| !r.1.quote.is_zero() && !r.1.bid.is_zero());
 
         match (ask, bid) {
-            (Some(Ok((_, ask))), Some(Ok((_, bid)))) => Ok(Some(
+            (Some((_, ask)), Some((_, bid))) => Ok(Some(
                 (ask.ask + bid.bid) / Decimal::one().add(Decimal::one()),
             )),
             _ => Ok(None),

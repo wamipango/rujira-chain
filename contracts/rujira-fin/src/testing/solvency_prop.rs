@@ -335,10 +335,12 @@ fn apply_action(app: &mut RujiraApp, fin: &Fin, bow: &Bow, users: &[Addr], actio
             let fee = Decimal::permille(
                 ((*spread_permille as u64) * (*fee_share_percent as u64) / 100).max(1),
             );
-            let abs = skew_milli.unsigned_abs();
+            // Clamp to (-2, 2) exclusive: map i16 range to -1999..1999 milli
+            let clamped = (*skew_milli).clamp(-1999, 1999);
+            let abs = clamped.unsigned_abs();
             let skew_str = format!(
                 "{}{}.{:03}",
-                if *skew_milli < 0 { "-" } else { "" },
+                if clamped < 0 { "-" } else { "" },
                 abs / 1000,
                 abs % 1000
             );
@@ -509,8 +511,12 @@ fn check_solvency(
     let ranges = query_all_ranges(app, fin);
     let orders = query_all_orders(app, fin);
 
-    let mut owed_base = ranges.iter().fold(Decimal::zero(), |acc, r| acc + r.base);
-    let mut owed_quote = ranges.iter().fold(Decimal::zero(), |acc, r| acc + r.quote);
+    let mut owed_base = ranges
+        .iter()
+        .fold(Decimal::zero(), |acc, r| acc + r.base + r.fees[0]);
+    let mut owed_quote = ranges
+        .iter()
+        .fold(Decimal::zero(), |acc, r| acc + r.quote + r.fees[1]);
 
     for order in orders {
         let remaining = Decimal::from_atomics(order.remaining, 0).unwrap();

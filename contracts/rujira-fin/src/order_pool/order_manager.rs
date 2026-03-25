@@ -161,11 +161,11 @@ impl OrderManager {
             self.receive += coin(swap.return_amount.u128(), self.config.denoms.ask(side));
             self.fees += coin(swap.fee_amount.u128(), self.config.denoms.ask(side));
 
-            let consumed_offer = coin(swap.consumed_offer.u128(), self.config.denoms.bid(side));
-            self.receive = if self.receive.has(&coin(0, consumed_offer.denom.clone())) {
-                (self.receive.clone() - consumed_offer)?
-            } else {
-                self.receive.clone()
+            if !swap.consumed_offer.is_zero() {
+                self.receive = self.receive.clone().sub(coin(
+                    swap.consumed_offer.u128(),
+                    self.config.denoms.bid(side),
+                ))?
             };
 
             // Allocate order size as received amount

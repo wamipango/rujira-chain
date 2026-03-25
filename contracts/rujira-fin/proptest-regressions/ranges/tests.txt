@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 72de62e8e0e098746a01cb2b4b61321f64e4f2a33ac13a3da7f8e3833f9c278e # shrinks to range_inputs = [(190118, 190119, 51, 52289, 582)]
 cc 7d62455f164c86c3ac13a415bcd9507ead6002c1c9dd83f90c89553d42dc7007 # shrinks to low = 1000, width = 99, base = 137, quote = 1, spread_permille = 1, skew_milli = 3892, delta_permille = 1
+cc bc336e98f5507960d8594bc587889925964d8d9c35e048e642551572ddd2ffa6 # shrinks to low = 201391, width = 696777, skew_milli = 0, spread_permille = 428, range_fee_permille = 0, base = 1000000, quote = 604745139775377, initial_offer_quote = 604745139775377, delta_permille = 1, swapper_fee_permille = 0
