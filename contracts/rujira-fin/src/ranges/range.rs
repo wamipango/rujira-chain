@@ -390,27 +390,4 @@ impl Range {
             }
         }
     }
-
-    pub fn mid_price(storage: &dyn Storage) -> StdResult<Option<Decimal>> {
-        let ask = Self::map()
-            .idx
-            .asks
-            .range(storage, None, None, Order::Ascending)
-            .filter_map(|r| r.ok())
-            .find(|r| !r.1.base.is_zero() && r.1.ask != Decimal::MAX);
-
-        let bid = Self::map()
-            .idx
-            .bids
-            .range(storage, None, None, Order::Descending)
-            .filter_map(|r| r.ok())
-            .find(|r| !r.1.quote.is_zero() && !r.1.bid.is_zero());
-
-        match (ask, bid) {
-            (Some((_, ask)), Some((_, bid))) => Ok(Some(
-                (ask.ask + bid.bid) / Decimal::one().add(Decimal::one()),
-            )),
-            _ => Ok(None),
-        }
-    }
 }

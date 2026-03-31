@@ -1,3 +1,6 @@
+use std::ops::{Add, Div};
+
+use cosmwasm_std::Decimal;
 use cosmwasm_std::{QuerierWrapper, Storage};
 use itertools::{EitherOrBoth, Itertools};
 use rujira_rs::{exchange::SwapItem, fin::Side, Premiumable};
@@ -48,6 +51,20 @@ impl<'a> SwapIter<'a> {
                     Side::Quote => y.rate().cmp(&x.rate()),
                 },
             )
+    }
+
+    pub fn mid_price(
+        &self,
+        storage: &'a dyn Storage,
+        oracle: &'a impl Premiumable,
+    ) -> Option<Decimal> {
+        Some(
+            self.iter(storage, &Side::Base, oracle)
+                .next()?
+                .rate()
+                .add(self.iter(storage, &Side::Quote, oracle).next()?.rate())
+                .div(Decimal::one().add(Decimal::one())),
+        )
     }
 }
 

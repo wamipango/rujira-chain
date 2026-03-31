@@ -22,6 +22,7 @@ pub fn execute_range(
     info: MessageInfo,
     sender: Addr,
     msg: RangeMsg,
+    mid_price: Option<Decimal>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
@@ -39,7 +40,7 @@ pub fn execute_range(
             let base = Decimal::from_atomics(base, 0)?;
             let quote = Decimal::from_atomics(quote, 0)?;
             let mut response = Response::default();
-            let range = match Range::mid_price(deps.storage)? {
+            let range = match mid_price {
                 Some(price) => {
                     let ((base, quote), (ref_base, ref_quote)) =
                         Range::balance(&range_config, price, base, quote);

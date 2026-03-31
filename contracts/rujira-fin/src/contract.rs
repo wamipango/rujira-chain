@@ -182,7 +182,10 @@ pub fn execute(
                 env.contract.address,
                 ContractError::Unauthorized {}
             );
-            execute_range(deps, env, info, sender, msg)
+            let swap_iter = SwapIter::new(deps.querier, &config);
+            let price = swap_iter.mid_price(deps.storage, &oracle);
+
+            execute_range(deps, env, info, sender, msg, price)
         }
     }
 }

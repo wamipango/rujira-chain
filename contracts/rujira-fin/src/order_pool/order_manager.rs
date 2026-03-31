@@ -261,6 +261,8 @@ mod tests {
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
         let mut e = OrderManager::new(&config, info.sender, env.block.time, funds);
 
+        assert_eq!(swap_iter.mid_price(mut_deps.storage, &oracle), None);
+
         let res = e
             .execute_orders(
                 mut_deps.storage,
@@ -274,6 +276,7 @@ mod tests {
             )
             .unwrap();
 
+        assert_eq!(swap_iter.mid_price(mut_deps.storage, &oracle), None);
         assert_eq!(res.withdraw, NativeBalance::default());
         let event = res.response.events[0].clone();
         assert_eq!(event.ty, "rujira-fin/order.create");
@@ -313,6 +316,8 @@ mod tests {
 
         let mut e = OrderManager::new(&config, info.sender, env.block.time, funds);
 
+        assert_eq!(swap_iter.mid_price(mut_deps.storage, &oracle), None);
+
         let res = e
             .execute_orders(
                 mut_deps.storage,
@@ -338,6 +343,10 @@ mod tests {
                 &oracle,
             )
             .unwrap();
+        assert_eq!(
+            swap_iter.mid_price(mut_deps.storage, &oracle),
+            Some(Decimal::from_str("1.005").unwrap())
+        );
         let returned = NativeBalance(vec![coin(7500, "ruji"), coin(7000, "usdc")]);
         assert_eq!(res.withdraw, returned);
         let event = res.response.events[0].clone();
@@ -421,6 +430,8 @@ mod tests {
             &oracle,
         )
         .unwrap_err();
+
+        assert_eq!(swap_iter.mid_price(mut_deps.storage, &oracle), None);
     }
 
     #[test]
@@ -450,6 +461,8 @@ mod tests {
 
         let mut e = OrderManager::new(&config, info.sender.clone(), env.block.time, funds);
 
+        assert_eq!(swap_iter.mid_price(mut_deps.storage, &oracle), None);
+
         // Same as above
         e.execute_orders(
             mut_deps.storage,
@@ -475,6 +488,11 @@ mod tests {
             &oracle,
         )
         .unwrap();
+
+        assert_eq!(
+            swap_iter.mid_price(mut_deps.storage, &oracle),
+            Some(Decimal::from_str("1.005").unwrap())
+        );
 
         let mut e = OrderManager::new(
             &config,
@@ -582,6 +600,10 @@ mod tests {
             )
             .unwrap();
 
+        assert_eq!(
+            swap_iter.mid_price(mut_deps.storage, &oracle),
+            Some(Decimal::from_str("1.005").unwrap())
+        );
         let returned = NativeBalance::default();
         assert_eq!(res.withdraw, returned);
         assert_eq!(res.response.events.len(), 2);
@@ -632,6 +654,8 @@ mod tests {
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
         let mut e = OrderManager::new(&config, info.sender, env.block.time, funds);
 
+        assert_eq!(swap_iter.mid_price(mut_deps.storage, &oracle), None);
+
         e.execute_orders(
             mut_deps.storage,
             &swap_iter,
@@ -643,5 +667,7 @@ mod tests {
             &oracle,
         )
         .unwrap_err();
+
+        assert_eq!(swap_iter.mid_price(mut_deps.storage, &oracle), None);
     }
 }
