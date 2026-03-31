@@ -46,8 +46,8 @@ impl RangeOffer {
                 self.effective_rate = (old_total * self.effective_rate
                     + Decimal256::from(amount) * eff_price)
                     / Decimal256::from(self.total);
+                self.ranges.push((range.clone(), amount));
             }
-            self.ranges.push((range.clone(), amount));
         }
     }
 }
