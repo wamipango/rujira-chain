@@ -75,11 +75,6 @@ pub enum ExecuteMsg {
 #[cw_serde]
 #[serde(untagged)]
 pub enum SwapRequest {
-    /// YOLO swap for whatever you can get
-    Yolo {
-        to: Option<String>,
-        callback: Option<CallbackData>,
-    },
     /// Return at least `min_return` or fail
     Min {
         min_return: Uint128,
@@ -97,6 +92,11 @@ pub enum SwapRequest {
         /// The Limit price.
         /// N.B. this is quoted in the `ask` token. I.e a buy will be a "normal" price, a sell will be 1/"normal" price;
         price: Decimal,
+        to: Option<String>,
+        callback: Option<CallbackData>,
+    },
+    /// YOLO swap for whatever you can get
+    Yolo {
         to: Option<String>,
         callback: Option<CallbackData>,
     },

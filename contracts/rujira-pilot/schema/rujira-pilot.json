@@ -633,29 +633,6 @@
       "SwapRequest": {
         "anyOf": [
           {
-            "description": "YOLO swap for whatever you can get",
-            "type": "object",
-            "properties": {
-              "callback": {
-                "anyOf": [
-                  {
-                    "$ref": "#/definitions/CallbackData"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "to": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "additionalProperties": false
-          },
-          {
             "description": "Return at least `min_return` or fail",
             "type": "object",
             "required": [
@@ -735,6 +712,29 @@
                 "allOf": [
                   {
                     "$ref": "#/definitions/Decimal"
+                  }
+                ]
+              },
+              "to": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "description": "YOLO swap for whatever you can get",
+            "type": "object",
+            "properties": {
+              "callback": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/CallbackData"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
