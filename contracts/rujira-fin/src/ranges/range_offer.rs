@@ -1,4 +1,9 @@
-use std::ops::{Div, Mul};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    ops::{Div, Mul},
+    rc::Rc,
+};
 
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Attribute, Decimal, Decimal256, Uint128};
@@ -8,6 +13,39 @@ use rujira_rs::{
 };
 
 use super::{Range, RangeContext, Scl};
+
+/// Carries post-swap range state back to `RangeOfferIter`.
+///
+/// `RangeOfferIter` builds each tier from cloned in-memory `Range`s. Those clones
+/// cannot be mutated eagerly during offer construction, because a caller may only
+/// partially consume the offer, and the real state transition must remain tied to
+/// `RangeOffer::swap()`.
+///
+/// At the same time, the iterator must see repriced reserves before it constructs
+/// the next tier in the same multi-tier swap. Without that feedback path, later
+/// tiers would be quoted from stale reserves and diverge from the result of
+/// executing the same swap tier-by-tier with commits in between.
+///
+/// `RangeUpdates` is the minimal bridge for that: `RangeOffer::swap()` records the
+/// executed `Range` state here, and `RangeOfferIter` applies those updates just
+/// before building the next offer.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct RangeUpdates(Rc<RefCell<BTreeMap<Uint128, Range>>>);
+
+impl RangeUpdates {
+    pub(crate) fn record(&self, range: Range) {
+        self.0.borrow_mut().insert(range.idx, range);
+    }
+
+    pub(crate) fn apply<'a>(&self, ranges: impl Iterator<Item = &'a mut Range>) {
+        let updates = self.0.take();
+        for range in ranges {
+            if let Some(fresh) = updates.get(&range.idx) {
+                *range = fresh.clone();
+            }
+        }
+    }
+}
 
 #[cw_serde]
 pub struct RangeOffer {
@@ -19,6 +57,8 @@ pub struct RangeOffer {
     pub effective_rate: Decimal256,
     /// A vec of the (range, amount)'s contributing to this offer
     pub ranges: Vec<(Range, Decimal)>,
+    #[serde(skip)]
+    pub(crate) updates: RangeUpdates,
 }
 
 impl RangeOffer {
@@ -30,10 +70,11 @@ impl RangeOffer {
             total: Default::default(),
             effective_rate: Decimal256::from(*start),
             ranges: Default::default(),
+            updates: Default::default(),
         }
     }
 
-    pub fn insert_range(&mut self, range: &mut Range) {
+    pub fn insert_range(&mut self, range: &Range) {
         // Use skew-aware amount calculation
         let amount = range.amount_in_slice(&self.side, self.start, self.end);
 
@@ -74,18 +115,21 @@ impl SwapItem for RangeOffer {
         let rate_inv256 = Decimal256::one() / rate256;
         let offer256 = Decimal256::from(offer_dec);
 
-        // The amount of the bids in the RangeOffer consumed by this swap
+        // Both bids_used and offer_used are floored to match the integer
+        // amounts actually transferred. Fractional dust stays in the range's
+        // balance (for bids) or unowned in the contract (for offer).
         let bids_used = Decimal::try_from(match self.side {
             Side::Base => offer256 * rate_inv256,
             Side::Quote => offer256 * rate256,
         })?
-        .min(self.total);
+        .min(self.total)
+        .floor();
 
-        // Convert the consumed bids back to the offer consumed
         let offer_used = Decimal::try_from(match self.side {
             Side::Base => Decimal256::from(bids_used) * rate256,
             Side::Quote => Decimal256::from(bids_used) * rate_inv256,
-        })?;
+        })?
+        .floor();
         let mut remaining_bids_used = bids_used;
         let mut remaining_offer_used = offer_used;
         let len = self.ranges.len();
@@ -108,7 +152,8 @@ impl SwapItem for RangeOffer {
             self.ranges[i].1 -= deduct.min(*v);
             let mut ctx_r = context.ranges.remove(&r.idx).unwrap_or_else(|| r.clone());
             used.push(ctx_r.swap(context, &self.side, add, deduct));
-            context.ranges.insert(ctx_r.idx, ctx_r);
+            context.ranges.insert(ctx_r.idx, ctx_r.clone());
+            self.updates.record(ctx_r);
         }
         self.total -= bids_used;
         Ok((

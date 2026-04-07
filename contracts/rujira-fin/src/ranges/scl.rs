@@ -139,12 +139,14 @@ impl Scl {
 
     /// Compute ask price with spread, truncated to tick.
     pub fn ask(&self, price: Decimal, spread: Decimal, tick: &Tick) -> Decimal {
-        tick.truncate_ceil(&(price + price * spread))
+        let half = spread / (Decimal::one() + Decimal::one());
+        tick.truncate_ceil(&(price + price * half))
     }
 
     /// Compute bid price with spread, truncated to tick.
     pub fn bid(&self, price: Decimal, spread: Decimal, tick: &Tick) -> Decimal {
-        tick.truncate_floor(&price.saturating_sub(price * spread))
+        let half = spread / (Decimal::one() + Decimal::one());
+        tick.truncate_floor(&price.saturating_sub(price * half))
     }
 
     /// Compute the quote/base balance ratio (Y(s)/X(s)) at a given price.

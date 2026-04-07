@@ -45,7 +45,12 @@ impl<'a> SwapIter<'a> {
                 },
             )
             .merge_join_by(
-                RangeOfferIter::new(storage, side, &self.config.range_delta),
+                RangeOfferIter::new(
+                    storage,
+                    side,
+                    &self.config.range_delta,
+                    &self.config.range_min,
+                ),
                 move |x, y| match side {
                     Side::Base => x.rate().cmp(&y.rate()),
                     Side::Quote => y.rate().cmp(&x.rate()),

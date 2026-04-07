@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, ops::Add};
 use cosmwasm_std::{Decimal, Fraction, Order, StdResult, Storage, Uint128};
 use rujira_rs::fin::Side;
 
-use super::{Range, RangeOffer};
+use super::{range_offer::RangeUpdates, Range, RangeOffer};
 
 pub struct RangeOfferIter<'a> {
     /// The default step between prices
@@ -15,23 +15,30 @@ pub struct RangeOfferIter<'a> {
     side: Side,
     /// a Map of active ranges, grouped and keyed by the price at which they go out of range for easy rejection
     ranges: BTreeMap<u128, Vec<Range>>,
+    updates: RangeUpdates,
     /// Base Range iter
     iter: Box<dyn Iterator<Item = Range> + 'a>,
 }
 
 impl<'a> RangeOfferIter<'a> {
-    fn filter(side: Side) -> impl Fn(StdResult<(u128, Range)>) -> Option<Range> {
+    fn filter(side: Side, min: Decimal) -> impl Fn(StdResult<(u128, Range)>) -> Option<Range> {
         move |res| match res {
             Ok((_, range)) => match side {
-                Side::Base => !range.base.is_zero() && range.ask < range.high,
-                Side::Quote => !range.quote.is_zero() && range.bid > range.low,
+                Side::Base => range.base >= min && range.ask < range.high,
+                Side::Quote => range.quote >= min && range.bid > range.low,
             }
             .then_some(range),
             Err(_) => None,
         }
     }
 
-    pub fn new(storage: &'a dyn Storage, side: &Side, delta: &Decimal) -> Self {
+    pub fn new(
+        storage: &'a dyn Storage,
+        side: &Side,
+        delta: &Decimal,
+        range_min: &Decimal,
+    ) -> Self {
+        let min = *range_min;
         let base_iter = match side {
             Side::Base => Range::map()
                 .idx
@@ -42,11 +49,12 @@ impl<'a> RangeOfferIter<'a> {
                 .bids
                 .range(storage, None, None, Order::Descending),
         }
-        .filter_map(Self::filter(side.clone()));
+        .filter_map(Self::filter(side.clone(), min));
 
         Self {
             side: side.clone(),
             ranges: BTreeMap::new(),
+            updates: Default::default(),
             delta: *delta,
             iter: Box::new(base_iter),
             next: None,
@@ -94,13 +102,15 @@ impl<'a> RangeOfferIter<'a> {
     }
 
     fn build_offer(&mut self, start: &Decimal) -> Option<RangeOffer> {
+        self.updates.apply(self.ranges.values_mut().flatten());
         let mut offer = RangeOffer::new(&self.side, start, &self.previous?);
         if self.ranges.is_empty() && self.next.is_none() {
             return None;
         }
-        for r in self.ranges.values_mut().flatten() {
+        for r in self.ranges.values().flatten() {
             offer.insert_range(r);
         }
+        offer.updates = self.updates.clone();
         Some(offer)
     }
 

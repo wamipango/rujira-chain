@@ -223,6 +223,7 @@ impl Fin {
                     fee_range,
                     fee_address: fees.to_string(),
                     range_delta: Decimal::permille(50),
+                    range_min: Decimal::one(),
                 },
                 &[],
                 "fin",

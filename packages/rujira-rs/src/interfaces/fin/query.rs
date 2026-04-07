@@ -67,6 +67,9 @@ pub struct ConfigResponse {
     /// See [InstantiateMsg::range_delta]
     pub range_delta: Decimal,
 
+    /// See [InstantiateMsg::range_min]
+    pub range_min: Decimal,
+
     /// See [InstantiateMsg::fee_taker]    
     pub fee_taker: Decimal,
 

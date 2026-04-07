@@ -14,6 +14,7 @@
       "fee_taker",
       "market_makers",
       "range_delta",
+      "range_min",
       "tick"
     ],
     "properties": {
@@ -72,6 +73,14 @@
       },
       "range_delta": {
         "description": "The price delta used to calculate the tick size for Range order book population",
+        "allOf": [
+          {
+            "$ref": "#/definitions/Decimal"
+          }
+        ]
+      },
+      "range_min": {
+        "description": "Minimum base/quote reserve for a Range to be included in order book iteration",
         "allOf": [
           {
             "$ref": "#/definitions/Decimal"
@@ -1131,6 +1140,16 @@
                 "type": "null"
               }
             ]
+          },
+          "range_min": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -1267,6 +1286,7 @@
         "fee_taker",
         "market_makers",
         "range_delta",
+        "range_min",
         "tick"
       ],
       "properties": {
@@ -1326,6 +1346,14 @@
         },
         "range_delta": {
           "description": "See [InstantiateMsg::range_delta]",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Decimal"
+            }
+          ]
+        },
+        "range_min": {
+          "description": "See [InstantiateMsg::range_min]",
           "allOf": [
             {
               "$ref": "#/definitions/Decimal"

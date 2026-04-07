@@ -257,6 +257,7 @@ mod tests {
             fee_range: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
             range_delta: Decimal::permille(50),
+            range_min: Decimal::one(),
         };
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
         let mut e = OrderManager::new(&config, info.sender, env.block.time, funds);
@@ -311,6 +312,7 @@ mod tests {
             fee_range: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
             range_delta: Decimal::permille(50),
+            range_min: Decimal::one(),
         };
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
 
@@ -414,6 +416,7 @@ mod tests {
             fee_range: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
             range_delta: Decimal::permille(50),
+            range_min: Decimal::one(),
         };
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
 
@@ -456,6 +459,7 @@ mod tests {
             fee_range: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
             range_delta: Decimal::permille(50),
+            range_min: Decimal::one(),
         };
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
 
@@ -650,6 +654,7 @@ mod tests {
             fee_range: Decimal::permille(5),
             fee_address: Addr::unchecked(""),
             range_delta: Decimal::permille(50),
+            range_min: Decimal::one(),
         };
         let swap_iter = SwapIter::new(mut_deps.querier, &config);
         let mut e = OrderManager::new(&config, info.sender, env.block.time, funds);

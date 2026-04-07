@@ -98,6 +98,7 @@ fn brune_fin_staking_e2e() {
             oracles: None,
             fee_range: None,
             range_delta: None,
+            range_min: None,
         }),
     )
     .unwrap();

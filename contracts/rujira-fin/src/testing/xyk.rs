@@ -68,6 +68,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
                 fee_range: Decimal::permille(0),
                 fee_address: fees.to_string(),
                 range_delta: Decimal::permille(50),
+                range_min: Decimal::one(),
             },
             &[],
             "fin",

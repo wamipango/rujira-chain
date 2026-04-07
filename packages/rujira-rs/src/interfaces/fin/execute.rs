@@ -24,6 +24,9 @@ pub struct InstantiateMsg {
     /// The price delta used to calculate the tick size for Range order book population
     pub range_delta: Decimal,
 
+    /// Minimum base/quote reserve for a Range to be included in order book iteration
+    pub range_min: Decimal,
+
     /// The fee charged on swaps, and instantly filled limit orders
     pub fee_taker: Decimal,
 

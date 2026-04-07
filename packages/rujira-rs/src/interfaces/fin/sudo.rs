@@ -19,6 +19,7 @@ pub struct ConfigUpdate {
     pub fee_maker: Option<Decimal>,
     pub fee_range: Option<Decimal>,
     pub range_delta: Option<Decimal>,
+    pub range_min: Option<Decimal>,
     pub fee_address: Option<String>,
     pub oracles: Option<OracleUpdate>,
 }

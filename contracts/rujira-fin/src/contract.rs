@@ -418,6 +418,7 @@ mod tests {
                     fee_range: Decimal::zero(),
                     fee_address: app.api().addr_make("fee").to_string(),
                     range_delta: Decimal::permille(50),
+                    range_min: Decimal::one(),
                 },
                 &[],
                 "template",
@@ -526,6 +527,7 @@ mod tests {
                 fee_range: Decimal::zero(),
                 fee_address: app.api().addr_make("fee").to_string(),
                 range_delta: Decimal::permille(50),
+                range_min: Decimal::one(),
             },
             &[],
             "template",
@@ -812,6 +814,7 @@ mod tests {
                 ))),
                 fee_range: Some(Decimal::from_ratio(3u128, 100u128)),
                 range_delta: Some(Decimal::from_ratio(4u128, 100u128)),
+                range_min: None,
             }),
         )
         .unwrap();

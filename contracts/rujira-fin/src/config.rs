@@ -17,6 +17,8 @@ pub struct Config {
     pub market_makers: MarketMakers,
     #[serde(default)]
     pub range_delta: Decimal,
+    #[serde(default)]
+    pub range_min: Decimal,
     pub tick: Tick,
     pub fee_maker: Decimal,
     pub fee_taker: Decimal,
@@ -36,6 +38,7 @@ impl Config {
             fee_maker: value.fee_maker,
             fee_range: value.fee_range,
             range_delta: value.range_delta,
+            range_min: value.range_min,
             fee_address: api.addr_validate(value.fee_address.as_str())?,
         })
     }
@@ -78,6 +81,9 @@ impl Config {
         if let Some(range_delta) = update.range_delta {
             self.range_delta = range_delta;
         }
+        if let Some(range_min) = update.range_min {
+            self.range_min = range_min;
+        }
 
         if let Some(fee_address) = &update.fee_address {
             self.fee_address = api.addr_validate(fee_address)?;
@@ -108,6 +114,7 @@ impl From<Config> for ConfigResponse {
             fee_taker: value.fee_taker,
             fee_range: value.fee_range,
             range_delta: value.range_delta,
+            range_min: value.range_min,
             fee_address: value.fee_address.to_string(),
         }
     }
