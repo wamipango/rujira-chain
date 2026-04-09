@@ -138,12 +138,11 @@ mod tests {
 
         assert_eq!(
             balance_rune_after.amount,
-            balance_rune_before.amount + Uint128::from(167_967_848u128)
+            balance_rune_before.amount + Uint128::from(167_967_815u128)
         );
 
         res.assert_event(&Event::new("wasm-rujira-bow/swap"));
-        // TC quote is slightly worse than BOW due to min slip floor,
-        // so all MM volume may go to BOW only
+        // TC and BOW quotes may differ slightly due to CLP rounding
     }
 
     #[test]

@@ -11,6 +11,21 @@ use rujira_rs::{
 };
 
 use crate::{config::Config, route::Route, ContractError};
+
+pub fn build_route(
+    q: QuerierWrapper,
+    offer_denom: &String,
+    ask_denom: &String,
+) -> Result<Route, ContractError> {
+    match (Step::load(q, offer_denom)?, Step::load(q, ask_denom)?) {
+        (Step::Pool { asset: a, rune: r }, Step::Rune {}) => Ok(Route::AR { a, r }),
+        (Step::Rune {}, Step::Pool { asset: b, rune: r }) => Ok(Route::RB { r, b }),
+        (Step::Pool { asset: a, rune: r1 }, Step::Pool { asset: b, rune: r2 }) => {
+            Ok(Route::ARB { a, r1, r2, b })
+        }
+        (Step::Rune {}, Step::Rune {}) => Err(ContractError::InvalidRoute {}),
+    }
+}
 #[cw_serde]
 pub struct QuoteState {
     route: Route,
@@ -24,9 +39,6 @@ pub struct QuoteState {
     step_ratio: Decimal,
     borrow_limit: Uint128,
     fee: Decimal,
-    /// Thorchain SECUREDASSETSLIPMINBPS mimir value
-    #[serde(default)]
-    min_slip_bps: u32,
 }
 
 #[cw_serde]
@@ -62,7 +74,7 @@ impl QuoteState {
             return Ok(None);
         }
 
-        let total_output = self.route.swap(self.input + input, self.min_slip_bps);
+        let total_output = self.route.swap(self.input + input);
         let step_output = total_output.checked_sub(self.output).unwrap_or_default();
         if step_output.is_zero() {
             return Ok(None);
@@ -111,14 +123,7 @@ impl QuoteState {
         config: &Config,
         borrow_limit: Uint128,
     ) -> Result<Self, ContractError> {
-        let route = match (Step::load(q, offer_denom)?, Step::load(q, ask_denom)?) {
-            (Step::Pool { asset: a, rune: r }, Step::Rune {}) => Route::AR { a, r },
-            (Step::Rune {}, Step::Pool { asset: b, rune: r }) => Route::RB { r, b },
-            (Step::Pool { asset: a, rune: r1 }, Step::Pool { asset: b, rune: r2 }) => {
-                Route::ARB { a, r1, r2, b }
-            }
-            (Step::Rune {}, Step::Rune {}) => return Err(ContractError::InvalidRoute {}),
-        };
+        let route = build_route(q, offer_denom, ask_denom)?;
 
         let available = route.return_balance().mul_floor(config.max_borrow_ratio);
         let min_slip_bps = QueryMimirWithKeyResponse::get(
@@ -137,7 +142,6 @@ impl QuoteState {
             borrow_limit: borrow_limit.min(available),
             fee: config.reserve_fee + config.fee.0,
             step_ratio: config.stream_step_ratio,
-            min_slip_bps: bps,
         })
     }
 }

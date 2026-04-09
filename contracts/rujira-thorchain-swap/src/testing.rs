@@ -28,7 +28,7 @@ fn complete_swap() {
             owner.clone(),
             contract.clone(),
             &ExecuteMsg::Swap {
-                min_return: coin(1000000, "rune"),
+                min_return: coin(900000, "rune"),
                 to: None,
                 callback: None,
             },
@@ -39,29 +39,29 @@ fn complete_swap() {
     res.assert_event(
         &Event::new("wasm-rujira-thorchain-swap/swap").add_attributes(vec![
             ("amount", "58btc-btc"),
-            ("quote_return", "448173434rune"),
-            ("min_return", "1000000rune"),
-            ("reserve_fee", "89635rune"),
-            ("amm_fee", "6722602rune"),
-            ("returned", "1000000rune"),
+            ("quote_return", "991226rune"),
+            ("min_return", "900000rune"),
+            ("reserve_fee", "199rune"),
+            ("amm_fee", "14869rune"),
+            ("returned", "900000rune"),
             ("memo", "dummy"),
         ]),
     );
 
     res.assert_event(
         &Event::new("wasm-rujira-ghost-vault/borrow")
-            .add_attributes(vec![("borrower", contract.as_str()), ("amount", "7722602")]),
+            .add_attributes(vec![("borrower", contract.as_str()), ("amount", "914869")]),
     );
 
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", owner.as_str()),
         ("sender", contract.as_str()),
-        ("amount", "1000000rune"),
+        ("amount", "900000rune"),
     ]));
 
     // Simulate the endblock execution
 
-    app.send_tokens(owner.clone(), contract.clone(), &coins(7722602, "rune"))
+    app.send_tokens(owner.clone(), contract.clone(), &coins(914869, "rune"))
         .unwrap();
 
     let res = app
@@ -70,7 +70,7 @@ fn complete_swap() {
 
     res.assert_event(
         &Event::new("wasm-rujira-ghost-vault/repay")
-            .add_attributes(vec![("borrower", contract.as_str()), ("amount", "7722602")]),
+            .add_attributes(vec![("borrower", contract.as_str()), ("amount", "914869")]),
     );
 }
 

@@ -20,7 +20,7 @@ use rujira_rs::Asset;
 use crate::config::Config;
 use crate::error::ContractError;
 use crate::events::event_swap;
-use crate::quote::QuoteState;
+use crate::quote::{build_route, QuoteState};
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -91,6 +91,23 @@ pub fn execute(
                     .add_message(vault.borrow_msg(min_return.amount)?)
                     .add_message(send_msg));
             }
+            // CLP verification — same formula used for quoting
+            let route = build_route(deps.querier, &funds.denom, &min_return.denom)?;
+            let clp_return = route.swap(funds.amount);
+            let reserve_fee = clp_return.mul_ceil(config.reserve_fee);
+            let amm_fee = clp_return.mul_ceil(config.fee.0);
+            let required = clp_return.sub(amm_fee);
+            ensure!(
+                required >= min_return.amount,
+                ContractError::InsufficientReturn {
+                    quoted: clp_return,
+                    asked: min_return.amount,
+                    liquidity: Uint128::zero(),
+                    outbound: Uint128::zero(),
+                    fee: amm_fee
+                }
+            );
+
             let quote = SwapQuoteQuery {
                 from_asset,
                 to_asset,
@@ -103,30 +120,6 @@ pub fn execute(
             }
             .quote(deps.querier)?;
 
-            let outbound = quote.fees.as_ref().map(|f| f.outbound).unwrap_or_default();
-            let liquidity = quote.fees.as_ref().map(|f| f.liquidity).unwrap_or_default();
-            // Include the outbound fee in the return calculations. Until this is set to 0 in thornode, the `reserve_fee` must cover it
-            let returned = quote.expected_amount_out + outbound;
-            let reserve_fee = returned.mul_ceil(config.reserve_fee);
-            let amm_fee = returned.mul_ceil(config.fee.0);
-            // Ensure that the request has correctly built-in amm fee
-            let required = returned.sub(amm_fee);
-            // N.B. we can't check including the reserve_fee. The base layer swap simulation executes the msg as though it were
-            // in the end block, and as such is subject to ordering amongst other swaps in the swap queue, eg streaming swaps,
-            // which will cause deviation from the "pure" CLP quote that is computed by this contract
-            // Therefore we must assume that the contract's quoting is correct for pool state, and the reserve_fee must also
-            // cover this simulation variance as well as actual execution variance
-            ensure!(
-                required >= min_return.amount,
-                ContractError::InsufficientReturn {
-                    quoted: quote.expected_amount_out,
-                    asked: min_return.amount,
-                    liquidity,
-                    outbound,
-                    fee: amm_fee
-                }
-            );
-
             let memo = quote.memo.clone();
             let signer = deps.api.addr_canonicalize(env.contract.address.as_str())?;
             let swap_msg = quote.to_msg(signer);
@@ -138,11 +131,10 @@ pub fn execute(
                     amount: coins(amm_fee.u128(), min_return.denom.clone()),
                 }]
             };
-            dbg!(&amm_fee);
             Ok(Response::default()
                 .add_event(event_swap(
                     &funds,
-                    &coin(returned.u128(), min_return.denom.clone()),
+                    &coin(clp_return.u128(), min_return.denom.clone()),
                     &min_return,
                     &coin(reserve_fee.u128(), min_return.denom.clone()),
                     &coin(amm_fee.u128(), min_return.denom.clone()),
@@ -335,9 +327,9 @@ mod tests {
 
         assert_eq!(
             quote_1.price,
-            Decimal::from_str("0.000057508824769286").unwrap()
+            Decimal::from_str("0.000057508882768629").unwrap()
         );
-        assert_eq!(quote_1.size, Uint128::from(67424903u128));
+        assert_eq!(quote_1.size, Uint128::from(67424971u128));
 
         let quote_2: QuoteResponse = app
             .wrap()
@@ -354,10 +346,10 @@ mod tests {
 
         assert_eq!(
             quote_2.price,
-            Decimal::from_str("0.000057279478307937").unwrap()
+            Decimal::from_str("0.000057279420308594").unwrap()
         );
 
-        assert_eq!(quote_2.size, Uint128::from(67156011u128));
+        assert_eq!(quote_2.size, Uint128::from(67155943u128));
 
         assert!(quote_2.price < quote_1.price);
 
@@ -413,9 +405,9 @@ mod tests {
 
         assert_eq!(
             quote_1.price,
-            Decimal::from_str("0.000011698682681753").unwrap()
+            Decimal::from_str("0.000011708234911896").unwrap()
         );
-        assert_eq!(quote_1.size, Uint128::from(12504258u128));
+        assert_eq!(quote_1.size, Uint128::from(12514468u128));
 
         let quote_2: QuoteResponse = app
             .wrap()
@@ -432,10 +424,10 @@ mod tests {
 
         assert_eq!(
             quote_2.price,
-            Decimal::from_str("0.000011647719990241").unwrap()
+            Decimal::from_str("0.000011652897467382").unwrap()
         );
 
-        assert_eq!(quote_2.size, Uint128::from(12449786u128));
+        assert_eq!(quote_2.size, Uint128::from(12455320u128));
 
         assert!(quote_2.price < quote_1.price);
     }
