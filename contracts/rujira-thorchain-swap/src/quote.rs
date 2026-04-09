@@ -24,6 +24,9 @@ pub struct QuoteState {
     step_ratio: Decimal,
     borrow_limit: Uint128,
     fee: Decimal,
+    /// Thorchain SECUREDASSETSLIPMINBPS mimir value
+    #[serde(default)]
+    min_slip_bps: u32,
 }
 
 #[cw_serde]
@@ -59,7 +62,7 @@ impl QuoteState {
             return Ok(None);
         }
 
-        let total_output = self.route.swap(self.input + input);
+        let total_output = self.route.swap(self.input + input, self.min_slip_bps);
         let step_output = total_output.checked_sub(self.output).unwrap_or_default();
         if step_output.is_zero() {
             return Ok(None);
@@ -134,6 +137,7 @@ impl QuoteState {
             borrow_limit: borrow_limit.min(available),
             fee: config.reserve_fee + config.fee.0,
             step_ratio: config.stream_step_ratio,
+            min_slip_bps: bps,
         })
     }
 }

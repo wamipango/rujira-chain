@@ -335,9 +335,9 @@ mod tests {
 
         assert_eq!(
             quote_1.price,
-            Decimal::from_str("0.000057508882768629").unwrap()
+            Decimal::from_str("0.000057508824769286").unwrap()
         );
-        assert_eq!(quote_1.size, Uint128::from(67424971u128));
+        assert_eq!(quote_1.size, Uint128::from(67424903u128));
 
         let quote_2: QuoteResponse = app
             .wrap()
@@ -354,10 +354,10 @@ mod tests {
 
         assert_eq!(
             quote_2.price,
-            Decimal::from_str("0.000057279420308594").unwrap()
+            Decimal::from_str("0.000057279478307937").unwrap()
         );
 
-        assert_eq!(quote_2.size, Uint128::from(67155943u128));
+        assert_eq!(quote_2.size, Uint128::from(67156011u128));
 
         assert!(quote_2.price < quote_1.price);
 
@@ -413,9 +413,9 @@ mod tests {
 
         assert_eq!(
             quote_1.price,
-            Decimal::from_str("0.000011708234911896").unwrap()
+            Decimal::from_str("0.000011698682681753").unwrap()
         );
-        assert_eq!(quote_1.size, Uint128::from(12514468u128));
+        assert_eq!(quote_1.size, Uint128::from(12504258u128));
 
         let quote_2: QuoteResponse = app
             .wrap()
@@ -432,10 +432,10 @@ mod tests {
 
         assert_eq!(
             quote_2.price,
-            Decimal::from_str("0.000011652897467382").unwrap()
+            Decimal::from_str("0.000011647719990241").unwrap()
         );
 
-        assert_eq!(quote_2.size, Uint128::from(12455320u128));
+        assert_eq!(quote_2.size, Uint128::from(12449786u128));
 
         assert!(quote_2.price < quote_1.price);
     }
