@@ -95,7 +95,10 @@ pub fn execute(
             let route = build_route(deps.querier, &funds.denom, &min_return.denom)?;
             let clp_return = route.swap(funds.amount);
             let reserve_fee = clp_return.mul_ceil(config.reserve_fee);
-            let amm_fee = clp_return.mul_ceil(config.fee.0);
+            // Floor, not ceil: the quote prices fees against a large size_q
+            // where mul_ceil ≈ smooth rate, but clp_return here can be tiny,
+            // where mul_ceil is a lumpy step that overcharges per-unit.
+            let amm_fee = clp_return.mul_floor(config.fee.0);
             let required = clp_return.sub(amm_fee);
             ensure!(
                 required >= min_return.amount,
@@ -274,6 +277,7 @@ mod tests {
 
     use std::str::FromStr;
 
+    use crate::quote::build_route;
     use crate::testing::setup;
 
     use super::*;
@@ -430,5 +434,39 @@ mod tests {
         assert_eq!(quote_2.size, Uint128::from(12455320u128));
 
         assert!(quote_2.price < quote_1.price);
+    }
+
+    /// Regression: a small offer whose CLP return lands in the range
+    /// where mul_ceil(clp, amm_rate) rounds up to a per-unit fee well
+    /// above amm_rate, producing "InsufficientReturn asked N quoted N fee 1".
+    #[test]
+    fn small_swap_rounding_error() {
+        let mut app = mock_rujira_app();
+        let owner = app.api().addr_make("owner");
+        let contract = setup(&mut app, &owner);
+        app.wasm_sudo(
+            contract.clone(),
+            &SudoMsg::SetMarket {
+                addr: owner.to_string(),
+                enabled: true,
+            },
+        )
+        .unwrap();
+
+        let route = build_route(app.wrap(), &"rune".to_string(), &"btc-btc".to_string()).unwrap();
+        let offer_amount = 500_000u128;
+        let clp_return = route.swap(Uint128::new(offer_amount));
+
+        app.execute_contract(
+            owner.clone(),
+            contract.clone(),
+            &ExecuteMsg::Swap {
+                min_return: coin(clp_return.u128(), "btc-btc"),
+                to: None,
+                callback: None,
+            },
+            &coins(offer_amount, "rune"),
+        )
+        .unwrap();
     }
 }

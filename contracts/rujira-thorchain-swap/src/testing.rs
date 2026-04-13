@@ -42,7 +42,7 @@ fn complete_swap() {
             ("quote_return", "991226rune"),
             ("min_return", "900000rune"),
             ("reserve_fee", "199rune"),
-            ("amm_fee", "14869rune"),
+            ("amm_fee", "14868rune"),
             ("returned", "900000rune"),
             ("memo", "dummy"),
         ]),
@@ -50,7 +50,7 @@ fn complete_swap() {
 
     res.assert_event(
         &Event::new("wasm-rujira-ghost-vault/borrow")
-            .add_attributes(vec![("borrower", contract.as_str()), ("amount", "914869")]),
+            .add_attributes(vec![("borrower", contract.as_str()), ("amount", "914868")]),
     );
 
     res.assert_event(&Event::new("transfer").add_attributes(vec![
@@ -61,7 +61,7 @@ fn complete_swap() {
 
     // Simulate the endblock execution
 
-    app.send_tokens(owner.clone(), contract.clone(), &coins(914869, "rune"))
+    app.send_tokens(owner.clone(), contract.clone(), &coins(914868, "rune"))
         .unwrap();
 
     let res = app
@@ -70,7 +70,7 @@ fn complete_swap() {
 
     res.assert_event(
         &Event::new("wasm-rujira-ghost-vault/repay")
-            .add_attributes(vec![("borrower", contract.as_str()), ("amount", "914869")]),
+            .add_attributes(vec![("borrower", contract.as_str()), ("amount", "914868")]),
     );
 }
 
