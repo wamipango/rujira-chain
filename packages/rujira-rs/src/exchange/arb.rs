@@ -94,6 +94,10 @@ where
         ];
         match (b.1.checked_sub(a.0), a.1.checked_sub(b.0)) {
             (Ok(a), Ok(b)) => {
+                if a.is_zero() && b.is_zero() {
+                    return Ok(None);
+                }
+
                 *context = next_context;
                 events.push(event(prefix, a, b));
                 Ok(Some((a, b, events)))

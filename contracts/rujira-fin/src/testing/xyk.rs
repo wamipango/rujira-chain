@@ -449,7 +449,7 @@ fn combined_book() {
 
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "99700.598"),
-        ("offer", "20521"),
+        ("offer", "20522"),
         ("bid", "2046005991"),
         ("price", "fixed:99700.598"),
         ("price", "cosmwasm1uzyszmsnca8euusre35wuqj4el3hyj8jty84kwln7du5stwwxyns2z5hxp:99700.598951048951048951"),
@@ -458,15 +458,15 @@ fn combined_book() {
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "99600"),
         ("price", "fixed:99600"),
-        ("offer", "502"),
+        ("offer", "503"),
         ("bid", "50000000"),
         ("side", "quote"),
     ]));
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "99501.496"),
         ("price", "cosmwasm1uzyszmsnca8euusre35wuqj4el3hyj8jty84kwln7du5stwwxyns2z5hxp:99501.496506986027944111"),
-        ("offer", "3977"),
-        ("bid", "395717451"),
+        ("offer", "3975"),
+        ("bid", "395518448"),
         ("side", "quote"),
     ]));
 

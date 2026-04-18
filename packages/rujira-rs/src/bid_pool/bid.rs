@@ -1,7 +1,7 @@
 use super::{error::BidPoolError, pool::Pool, sum_snapshot::SumSnapshotKey};
 use crate::decimal_scaled::DecimalScaled;
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Uint256;
+use cosmwasm_std::{Decimal256, Uint256};
 
 #[cw_serde]
 pub struct Bid {
@@ -45,13 +45,17 @@ impl Bid {
     ) -> Result<Uint256, BidPoolError> {
         let withdraw_amount: Uint256 = assert_withdraw_amount(amount, self.amount)?;
         self.amount -= withdraw_amount;
-        pool.total = pool.total.checked_sub(withdraw_amount)?;
+        pool.total = pool
+            .total
+            .checked_sub(Decimal256::from_ratio(withdraw_amount, Uint256::one()))?;
         Ok(withdraw_amount)
     }
 
     pub fn increase(&mut self, pool: &mut Pool, amount: Uint256) -> Result<Uint256, BidPoolError> {
         self.amount += amount;
-        pool.total = pool.total.checked_add(amount)?;
+        pool.total = pool
+            .total
+            .checked_add(Decimal256::from_ratio(amount, Uint256::one()))?;
         Ok(amount)
     }
 

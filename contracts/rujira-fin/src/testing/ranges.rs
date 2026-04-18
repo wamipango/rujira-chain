@@ -340,9 +340,6 @@ fn test_range_positive_skew() {
         Decimal::permille(0),
     );
 
-    // Create range with skew=+1: concentrates liquidity toward the spread edge (near current price)
-    // With positive skew, more liquidity is placed near the current price (bid/ask),
-    // and less near the range limits (high/low bounds)
     fin.create_range(
         &mut app,
         &user_a,
@@ -355,8 +352,6 @@ fn test_range_positive_skew() {
     .unwrap();
 
     let mut book = fin.query_book(&app, None, None).unwrap();
-    // Positive skew: base (ask) amounts are larger near the current price and decrease toward high
-    // Quote (bid) amounts are larger near the current price and decrease toward low
     assert_book(
         &mut book,
         vec![
@@ -417,9 +412,6 @@ fn test_range_negative_skew() {
         Decimal::permille(0),
     );
 
-    // Create range with skew=-1: concentrates liquidity toward the limit edges (high/low bounds)
-    // With negative skew, more liquidity is placed near the range limits (high/low),
-    // and less near the current price (bid/ask)
     fin.create_range(
         &mut app,
         &user_a,
@@ -432,8 +424,6 @@ fn test_range_negative_skew() {
     .unwrap();
 
     let mut book = fin.query_book(&app, None, None).unwrap();
-    // Negative skew: base (ask) amounts increase away from current price toward high
-    // Quote (bid) amounts are relatively flat, slightly increasing toward low
     assert_book(
         &mut book,
         vec![

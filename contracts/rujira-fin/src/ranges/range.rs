@@ -38,10 +38,8 @@ pub struct Range {
     pub high: Decimal,
     /// Lowest price of the Range
     pub low: Decimal,
-    /// Skew in (-2, 2):
-    ///  0   => uniform across the range half
-    ///  >0  => weight towards the spread edge (bid/ask)
-    ///  <0  => weight towards the limit edge (high/low)
+    /// Skew in (-2, 2) for the current linear, non-symmetric distribution.
+    /// Avoid using `skew` for now until the symmetric quadratic formula has been added.
     pub skew: SignedDecimal,
     pub spread: Decimal,
     /// Fee collected from the returned tokens. Should be less than spread otherwise the Range will consume itself
@@ -366,7 +364,6 @@ impl Range {
     }
 
     /// Compute amount of tokens available in a price slice [p_start, p_end]
-    /// Uses skewed distribution when skew is non-zero
     pub fn amount_in_slice(&self, side: &Side, p_start: Decimal, p_end: Decimal) -> Decimal {
         let scl = Scl::new(self.high, self.low, self.skew);
         let amount = scl.amount_in_slice(side, self.base, self.quote, self.price, p_start, p_end);

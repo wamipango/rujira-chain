@@ -62,15 +62,18 @@ impl SwapItem for MarketMakerOffer {
         };
 
         // Commit to context
-        context.insert(&self.contract, &self.denoms, &self.side, offer, ask);
-
-        Ok((
-            offer,
-            ask,
-            vec![
-                Attribute::new("price", format!("{}:{rate}", self.contract)),
-                Attribute::new("side", self.side.to_string()),
-            ],
-        ))
+        if !offer.is_zero() && !ask.is_zero() {
+            context.insert(&self.contract, &self.denoms, &self.side, offer, ask);
+            Ok((
+                offer,
+                ask,
+                vec![
+                    Attribute::new("price", format!("{}:{rate}", self.contract)),
+                    Attribute::new("side", self.side.to_string()),
+                ],
+            ))
+        } else {
+            Ok((Uint128::zero(), Uint128::zero(), vec![]))
+        }
     }
 }

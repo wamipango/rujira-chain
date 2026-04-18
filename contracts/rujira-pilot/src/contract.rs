@@ -447,24 +447,24 @@ mod tests {
             )
             .unwrap();
         res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
-            ("offer", "11"),
+            ("offer", "12"),
             ("bid", "1000000"),
             ("rate", "90000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
-            ("offer", "147"),
+            ("offer", "148"),
             ("bid", "12500000"),
             ("rate", "85000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
-            ("offer", "142"),
-            ("bid", "11360000"),
+            ("offer", "140"),
+            ("bid", "11200000"),
             ("rate", "80000"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "24860000eth-usdc"),
+            ("amount", "24700000eth-usdc"),
         ]));
 
         let res = app
@@ -481,14 +481,14 @@ mod tests {
             .unwrap();
         // Check that any unused funds are returned
         res.assert_event(&Event::new("wasm-rujira-pilot/trade").add_attributes(vec![
-            ("offer", "495"),
-            ("bid", "39640000"),
+            ("offer", "498"),
+            ("bid", "39800000"),
             ("rate", "80000"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "505btc-btc,39640000eth-usdc"),
+            ("amount", "502btc-btc,39800000eth-usdc"),
         ]));
     }
 }

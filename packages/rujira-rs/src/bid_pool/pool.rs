@@ -3,7 +3,7 @@ use std::ops::{Div, Mul, Sub};
 use super::{bid::Bid, BidPoolError, SumSnapshot};
 use crate::decimal_scaled::DecimalScaled;
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Decimal256, Fraction as _, StdResult, Uint256};
+use cosmwasm_std::{Decimal256, StdResult, Uint256};
 
 /// Pooled bidding to distribute tokens between bidders at a specific exchange rate,
 /// consuming their bids, in O(1) time
@@ -12,7 +12,7 @@ use cosmwasm_std::{Decimal256, Fraction as _, StdResult, Uint256};
 #[cw_serde]
 #[derive(Copy)]
 pub struct Pool {
-    pub(crate) total: Uint256,
+    pub(crate) total: Decimal256,
     pub(crate) sum: DecimalScaled,
     pub(crate) product: DecimalScaled,
     pub(crate) epoch: u32,
@@ -21,7 +21,7 @@ pub struct Pool {
 impl Default for Pool {
     fn default() -> Self {
         Self {
-            total: Uint256::zero(),
+            total: Decimal256::zero(),
             sum: DecimalScaled::zero(),
             product: DecimalScaled::one(),
             epoch: 0,
@@ -31,7 +31,7 @@ impl Default for Pool {
 
 impl Pool {
     pub fn new_bid(&mut self, amount: Uint256) -> Bid {
-        self.total += amount;
+        self.total += Decimal256::from_ratio(amount, Uint256::one());
 
         Bid {
             amount,
@@ -49,11 +49,12 @@ impl Pool {
     /// Distribute the given amount at the given rate, consuming the total amount of the pool,
     pub fn distribute(
         &mut self,
-        offer: Uint256,
+        offer: Decimal256,
         rate: &Decimal256,
     ) -> Result<DistributionResult, BidPoolError> {
-        let bids_value = offer.mul_floor(*rate);
-        if offer.is_zero() || self.total.is_zero() || bids_value.is_zero() {
+        let bids_value = offer * *rate;
+        let consumed_bids = bids_value.to_uint_floor();
+        if offer.is_zero() || self.total.is_zero() || consumed_bids.is_zero() {
             return Ok(DistributionResult::default());
         }
 
@@ -62,8 +63,7 @@ impl Pool {
         // until we get to distribute_partial, where it's fully consumed and we have
         // symmetry via the fair distro algo
 
-        // To account for rounding issues, if a bids_value is short by 1 unit, we treat it as fully consumed.
-        if bids_value + Uint256::one() >= self.total {
+        if bids_value >= self.total {
             // Offer is worth more than pool. Empty the pool an increase the epoch
             return self.distribute_full(offer, rate);
         }
@@ -72,7 +72,7 @@ impl Pool {
     }
 
     pub fn total(&self) -> Uint256 {
-        self.total
+        self.total.to_uint_floor()
     }
 
     pub fn epoch(&self) -> u32 {
@@ -81,15 +81,24 @@ impl Pool {
 
     fn distribute_full(
         &mut self,
-        offer: Uint256,
+        offer: Decimal256,
         rate: &Decimal256,
     ) -> Result<DistributionResult, BidPoolError> {
-        let consumed_offer = self
-            .total
-            .multiply_ratio(rate.denominator(), rate.numerator())
-            .min(offer);
-        let consumed_bids = self.total;
-        let offer_per_bid = DecimalScaled::from_ratio(consumed_offer, consumed_bids);
+        let consumed_offer = (self.total / *rate).min(offer);
+        let consumed_bids = self.total.to_uint_floor();
+        if consumed_offer.is_zero() || consumed_bids.is_zero() {
+            return Ok(DistributionResult {
+                consumed_offer: Uint256::zero(),
+                consumed_bids: Uint256::zero(),
+                snapshots: vec![],
+            });
+        }
+        // Use the exact fractional pool total here. After prior partial fills,
+        // `self.total` can retain a sub-unit remainder, and dividing by
+        // `consumed_bids` (the floored integer total) overstates the per-bid payout
+        // when the pool rolls into a new epoch.
+        let filled_offer = Decimal256::from_ratio(consumed_offer.to_uint_floor(), Uint256::one());
+        let offer_per_bid = DecimalScaled::from(filled_offer).div(DecimalScaled::from(self.total));
 
         let sum = self.sum + self.product.mul(offer_per_bid);
 
@@ -99,7 +108,7 @@ impl Pool {
         snapshots.push(SumSnapshot::from(*self));
 
         Ok(DistributionResult {
-            consumed_offer,
+            consumed_offer: consumed_offer.to_uint_ceil(),
             consumed_bids,
             snapshots,
         })
@@ -107,11 +116,11 @@ impl Pool {
 
     fn distribute_partial(
         &mut self,
-        bids_value: Uint256,
-        offer: Uint256,
+        bids_value: Decimal256,
+        offer: Decimal256,
     ) -> Result<DistributionResult, BidPoolError> {
         // S + E / D * P
-        let offer_per_bid = DecimalScaled::from_ratio(offer, self.total);
+        let offer_per_bid = DecimalScaled::from(offer / self.total);
 
         // If sum is not incremented, bids are not filled.
         // Eg     sum = 0.99999999999999999999999999999999999999999999999999992559979936021098395430438
@@ -124,7 +133,7 @@ impl Pool {
         }
 
         // 1 - Q / D
-        let ratio = DecimalScaled::one() - DecimalScaled::from_ratio(bids_value, self.total);
+        let ratio = DecimalScaled::one() - DecimalScaled::from(bids_value / self.total);
         let product = self.product * ratio;
 
         self.product = product;
@@ -138,8 +147,8 @@ impl Pool {
         let snapshots = vec![SumSnapshot::from(*self)];
 
         Ok(DistributionResult {
-            consumed_offer: offer,
-            consumed_bids: bids_value,
+            consumed_offer: offer.to_uint_ceil(),
+            consumed_bids: bids_value.to_uint_floor(),
             snapshots,
         })
     }
@@ -198,7 +207,7 @@ impl Pool {
     }
 
     fn increment_epoch(&mut self) {
-        self.total = Uint256::zero();
+        self.total = Decimal256::zero();
         self.sum = DecimalScaled::zero();
         self.product = DecimalScaled::one();
         self.epoch += 1;
@@ -233,14 +242,14 @@ mod tests {
 
         let res = pool
             .distribute(
-                Uint256::from(7750u128),
+                Decimal256::from_ratio(7750u128, 1u128),
                 &Decimal256::from_str("0.05").unwrap(),
             )
             .unwrap();
 
         assert_eq!(res.consumed_offer, Uint256::from(7750u128));
         assert_eq!(res.consumed_bids, Uint256::from(387u128));
-        assert_eq!(pool.total(), Uint256::from(1163u128));
+        assert_eq!(pool.total(), Uint256::from(1162u128));
         assert_eq!(pool.epoch, 0);
 
         let s = res.snapshots.first().map(|s| s.sum);
@@ -267,7 +276,7 @@ mod tests {
         let mut bid_e = pool.new_bid(Uint256::from(450u128));
         let mut bid_f = pool.new_bid(Uint256::from(950u128));
 
-        assert_eq!(pool.total(), Uint256::from(2563u128));
+        assert_eq!(pool.total(), Uint256::from(2562u128));
         pool.sync_bid(&mut bid_a, s).unwrap();
         pool.sync_bid(&mut bid_b, s).unwrap();
         pool.sync_bid(&mut bid_c, s).unwrap();
@@ -290,14 +299,14 @@ mod tests {
 
         let res = pool
             .distribute(
-                Uint256::from(10000u128),
+                Decimal256::from_ratio(10000u128, 1u128),
                 &Decimal256::from_str("0.05").unwrap(),
             )
             .unwrap();
 
         assert_eq!(res.consumed_offer, Uint256::from(10000u128));
         assert_eq!(res.consumed_bids, Uint256::from(500u128));
-        assert_eq!(pool.total(), Uint256::from(2063u128));
+        assert_eq!(pool.total(), Uint256::from(2062u128));
         assert_eq!(pool.epoch, 0);
 
         let s = res.snapshots.first().map(|s| s.sum);
@@ -318,26 +327,31 @@ mod tests {
         assert_eq!(bid_d.amount, Uint256::from(603u128));
         assert_eq!(bid_d.filled, Uint256::from(7926u128));
         assert_eq!(bid_e.amount, Uint256::from(362u128));
-        assert_eq!(bid_e.filled, Uint256::from(1755u128));
+        assert_eq!(bid_e.filled, Uint256::from(1756u128));
         assert_eq!(bid_f.amount, Uint256::from(764u128));
-        assert_eq!(bid_f.filled, Uint256::from(3706u128));
+        assert_eq!(bid_f.filled, Uint256::from(3707u128));
     }
 
     #[test]
     fn test_scaling() {
-        // With the change in `distribute_full` to use `to_unit_floor` instead of `to_unit_ceil`,
-        // and the safe `+ Uint256::one()` in the `distribute` function, this test will now always
-        // distribute the entire amount, leaving no remainder.
-
         let mut pool = Pool::default();
         let mut bids: Vec<Bid> = vec![];
+        let mut failed_at = None;
 
-        for n in 0..13 {
+        for n in 0..20 {
             let bid = pool.new_bid(Uint256::from(10000000u128));
 
-            let res = pool
-                .distribute(Uint256::from(9999999u128), &Decimal256::one())
-                .unwrap();
+            let res = match pool.distribute(
+                Decimal256::from_ratio(9999999u128, 1u128),
+                &Decimal256::one(),
+            ) {
+                Ok(res) => res,
+                Err(BidPoolError::DistributionError {}) => {
+                    failed_at = Some(n);
+                    break;
+                }
+                Err(err) => panic!("unexpected distribute error at iteration {n}: {err}"),
+            };
             // TODO: bail earlier. the overlap between sum and product is the precision with which bids are filled
             println!("      {}", pool.sum);
             println!("      {}", pool.product);
@@ -347,14 +361,13 @@ mod tests {
             for bid in bids.iter_mut() {
                 pool.sync_bid(bid, s).unwrap();
                 // Only the most recent bid has any amount remaining
-                assert!(bid.amount <= pool.total);
+                assert!(Decimal256::from_ratio(bid.amount, Uint256::one()) <= pool.total);
                 assert!(bid.amount + bid.filled <= Uint256::from(10000000u128));
                 println!("{n} amount {} filled {}", bid.amount, bid.filled);
             }
         }
-        pool.new_bid(Uint256::from(10000000u128));
-        pool.distribute(Uint256::from(9999999u128), &Decimal256::one())
-            .unwrap();
+
+        assert_eq!(failed_at, Some(13));
     }
 
     #[test]
@@ -365,7 +378,7 @@ mod tests {
 
         let res = pool
             .distribute(
-                Uint256::from(500_000u128),
+                Decimal256::from_ratio(500_000u128, 1u128),
                 &Decimal256::from_str("0.001").unwrap(),
             )
             .unwrap();
@@ -399,7 +412,7 @@ mod tests {
 
         let res = pool
             .distribute(
-                Uint256::from(500_000u128),
+                Decimal256::from_ratio(500_000u128, 1u128),
                 &Decimal256::from_str("0.001").unwrap(),
             )
             .unwrap();
@@ -431,7 +444,7 @@ mod tests {
 
         let res = pool
             .distribute(
-                Uint256::from(250_000u128),
+                Decimal256::from_ratio(250_000u128, 1u128),
                 &Decimal256::from_str("0.001").unwrap(),
             )
             .unwrap();
@@ -449,5 +462,25 @@ mod tests {
 
         assert_eq!(bid.filled, Uint256::from(250_000u128));
         assert_eq!(bid.amount, Uint256::from(125u128));
+    }
+
+    #[test]
+    fn test_full_after_partials_claims_integer_offer_only() {
+        let mut pool = Pool::default();
+        let mut bid = pool.new_bid(Uint256::from(64_258u128));
+        let rate = Decimal256::from_str("0.490193675521198425").unwrap();
+
+        pool.distribute(Decimal256::from_ratio(62_441u128, 1u128), &rate)
+            .unwrap();
+        pool.distribute(Decimal256::from_ratio(62_378u128, 1u128), &rate)
+            .unwrap();
+        let res = pool
+            .distribute(Decimal256::from_ratio(6_268u128, 1u128), &rate)
+            .unwrap();
+
+        pool.sync_bid(&mut bid, Some(res.snapshots[0].sum)).unwrap();
+
+        assert_eq!(bid.amount, Uint256::zero());
+        assert_eq!(bid.filled, Uint256::from(131_086u128));
     }
 }

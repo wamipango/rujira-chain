@@ -1,12 +1,14 @@
-//! Skewed Concentrated Liquidity (SCL)
+//! Linear skew concentrated liquidity (SCL)
 //!
 //! Extends the XY=K concentrated liquidity model with a skew parameter σ ∈ (-2, 2)
-//! that modifies liquidity distribution across the price range.
+//! that applies a linear, non-symmetric redistribution across the price range.
+//!
+//! Avoid using `skew` for now until the symmetric quadratic formula has been added.
 //!
 //! Weight function: w(p) = 1 + σ·(p - p_m)/Δp
 //!
-//! - σ > 0: concentrate liquidity toward spread edge (bid/ask)
-//! - σ < 0: concentrate liquidity toward limit edge (high/low)
+//! - σ > 0: linearly tilts weight toward higher prices
+//! - σ < 0: linearly tilts weight toward lower prices
 //! - σ = 0: uniform distribution (reduces to standard CL)
 //!
 //! Reserve equations:
@@ -22,7 +24,7 @@ use cosmwasm_std::{Decimal, Decimal256, SignedDecimal};
 use rujira_rs::fin::{Side, Tick};
 use rujira_rs::SignedDecimal256;
 
-/// Skewed Concentrated Liquidity calculator
+/// Linear skew concentrated liquidity calculator
 pub struct Scl {
     /// sqrt(low)
     s_a: Decimal256,
@@ -35,7 +37,8 @@ pub struct Scl {
 }
 
 impl Scl {
-    /// Create a new SCL calculator from range bounds and skew
+    /// Create a new linear SCL calculator from range bounds and skew.
+    /// Avoid using `skew` for now until the symmetric quadratic formula has been added.
     pub fn new(high: Decimal, low: Decimal, skew: SignedDecimal) -> Self {
         let s_a = Decimal256::from(low).sqrt();
         let s_b = Decimal256::from(high).sqrt();

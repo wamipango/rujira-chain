@@ -49,10 +49,12 @@ pub fn execute_range(
                         coin(split_floor(ref_quote).0.u128(), config.denoms.quote()),
                     ]);
                     refund.normalize();
-                    response = response.add_message(BankMsg::Send {
-                        to_address: sender.to_string(),
-                        amount: refund.into_vec(),
-                    });
+                    if !refund.is_empty() {
+                        response = response.add_message(BankMsg::Send {
+                            to_address: sender.to_string(),
+                            amount: refund.into_vec(),
+                        })
+                    };
 
                     Range::new(
                         deps.storage,

@@ -1470,7 +1470,6 @@ fn scl_skew_changes_distribution() {
         .remove(deps.as_mut().storage, range_uniform.idx.u128())
         .unwrap();
 
-    // Positive skew
     let range_positive = Range::new(
         deps.as_mut().storage,
         &tick,
@@ -1495,7 +1494,6 @@ fn scl_skew_changes_distribution() {
         .remove(deps.as_mut().storage, range_positive.idx.u128())
         .unwrap();
 
-    // Negative skew
     let range_negative = Range::new(
         deps.as_mut().storage,
         &tick,
@@ -2152,7 +2150,6 @@ fn scl_price_stays_in_bounds() {
     let high = Decimal::from_str("4").unwrap();
     let low = Decimal::from_str("3").unwrap();
 
-    // High positive skew, mostly quote
     let scl = Scl::new(high, low, SignedDecimal::from_str("0.9").unwrap());
     let price = scl.price(
         Decimal::from_str("100").unwrap(),
@@ -2161,7 +2158,6 @@ fn scl_price_stays_in_bounds() {
     assert!(price >= low);
     assert!(price <= high);
 
-    // High negative skew, mostly quote
     let scl = Scl::new(high, low, SignedDecimal::from_str("-0.9").unwrap());
     let price = scl.price(
         Decimal::from_str("100").unwrap(),
@@ -2179,7 +2175,6 @@ fn scl_price_stays_in_bounds() {
     assert!(price >= low);
     assert!(price <= high);
 
-    // Extreme positive skew
     let scl = Scl::new(high, low, SignedDecimal::from_str("0.99").unwrap());
     let price = scl.price(
         Decimal::from_str("500000").unwrap(),
@@ -2188,7 +2183,6 @@ fn scl_price_stays_in_bounds() {
     assert!(price >= low);
     assert!(price <= high);
 
-    // Extreme negative skew
     let scl = Scl::new(high, low, SignedDecimal::from_str("-0.99").unwrap());
     let price = scl.price(
         Decimal::from_str("500000").unwrap(),

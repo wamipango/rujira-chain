@@ -75,7 +75,6 @@ impl RangeOffer {
     }
 
     pub fn insert_range(&mut self, range: &Range) {
-        // Use skew-aware amount calculation
         let amount = range.amount_in_slice(&self.side, self.start, self.end);
 
         let scl = Scl::new(range.high, range.low, range.skew);

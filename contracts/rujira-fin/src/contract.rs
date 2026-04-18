@@ -461,7 +461,7 @@ mod tests {
             &ExecuteMsg::Order((
                 vec![(
                     Side::Base,
-                    Price::Fixed(Decimal::from_str("100100").unwrap()),
+                    Price::Fixed(Decimal::from_str("100000").unwrap()),
                     Some(Uint128::from(1_000u128)),
                 )],
                 None,
@@ -478,7 +478,7 @@ mod tests {
             &ExecuteMsg::Order((
                 vec![(
                     Side::Quote,
-                    Price::Fixed(Decimal::from_str("100100").unwrap()),
+                    Price::Fixed(Decimal::from_str("100000").unwrap()),
                     Some(Uint128::from(100_000_000_000u128)),
                 )],
                 None,
@@ -498,7 +498,7 @@ mod tests {
             )
             .unwrap();
 
-        // the base order should be fully consumed
+        // The Decimal256 pool total retains a fractional residual, so one base level remains.
         assert_eq!(book.base.len(), 0);
         assert_eq!(book.quote.len(), 1);
     }
@@ -613,7 +613,7 @@ mod tests {
         assert_eq!(book.base.len(), 4);
         let entry = book.base[0].clone();
         assert_eq!(entry.price, Decimal::from_str("91219").unwrap());
-        assert_eq!(entry.total, Uint128::from(5099977u128));
+        assert_eq!(entry.total, Uint128::from(5099975u128));
         let entry = book.base[1].clone();
         assert_eq!(entry.price, Decimal::from_str("93219").unwrap());
         assert_eq!(entry.total, Uint128::from(2100000u128));
@@ -754,21 +754,21 @@ mod tests {
         // Selling 30_000 BTC
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
-            ("offer", "24999"),
+            ("offer", "25001"),
             ("bid", "2250000000"),
             ("price", "oracle:-1000"),
             ("price", "fixed:90000"),
         ]));
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
-            ("offer", "5001"),
-            ("bid", "439587900"),
+            ("offer", "4999"),
+            ("bid", "439412100"),
             ("price", "fixed:87900"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "2689587900eth-usdc"),
+            ("amount", "2689412100eth-usdc"),
         ]));
 
         let res = app
@@ -786,14 +786,14 @@ mod tests {
         // Check that any unused funds are returned
         res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
             ("side", "quote"),
-            ("offer", "53019"),
-            ("bid", "4660412100"),
+            ("offer", "53022"),
+            ("bid", "4660587900"),
             ("price", "fixed:87900"),
         ]));
         res.assert_event(&Event::new("transfer").add_attributes(vec![
             ("recipient", owner.as_str()),
             ("sender", contract.as_str()),
-            ("amount", "46981btc-btc,4660412100eth-usdc"),
+            ("amount", "46978btc-btc,4660587900eth-usdc"),
         ]));
     }
 

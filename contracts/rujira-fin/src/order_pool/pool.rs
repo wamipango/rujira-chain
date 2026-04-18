@@ -201,9 +201,10 @@ impl SwapItem for Pool {
             Side::Base => self.rate.inv().unwrap(),
             Side::Quote => self.rate,
         };
-        let res = self
-            .pool
-            .distribute(offer.into(), &Decimal256::from(rate))?;
+        let res = self.pool.distribute(
+            Decimal256::from_ratio(offer, 1u128),
+            &Decimal256::from(rate),
+        )?;
         self.pending_sum_snapshots = res.snapshots;
         context.pools.push(self.clone());
 

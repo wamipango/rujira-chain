@@ -178,9 +178,10 @@ impl SwapItem for Pool {
         context: &mut Self::Context,
         offer: Uint128,
     ) -> Result<(Uint128, Uint128, Vec<Attribute>), SwapError> {
-        let res = self
-            .pool
-            .distribute(offer.into(), &Decimal256::from(self.rate))?;
+        let res = self.pool.distribute(
+            Decimal256::from_ratio(offer, 1u128),
+            &Decimal256::from(self.rate),
+        )?;
         for s in res.snapshots {
             context
                 .pending_sum_snapshots
