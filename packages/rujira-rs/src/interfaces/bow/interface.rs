@@ -9,6 +9,7 @@ use super::{strategy::Strategies, xyk::XykState, Xyk};
 pub struct InstantiateMsg {
     pub metadata: TokenMetadata,
     pub strategy: Strategies,
+    pub market: String,
 }
 
 #[cw_serde]
@@ -31,12 +32,15 @@ pub enum ExecuteMsg {
 
 #[cw_serde]
 pub enum SudoMsg {
+    SetMarket(String),
     SetStrategy(Strategies),
 }
 
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(cosmwasm_std::Addr)]
+    Market {},
     #[returns(StrategyResponse)]
     Strategy {},
     #[returns(QuoteResponse)]

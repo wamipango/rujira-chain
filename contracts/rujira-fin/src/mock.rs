@@ -5,8 +5,8 @@ use cw_multi_test::{ContractWrapper, Executor};
 
 use rujira_rs::{
     fin::{
-        BookResponse, Denoms, ExecuteMsg, InstantiateMsg, OrderResponse, Price, QueryMsg,
-        RangeConfig, RangeMsg, Side, SwapRequest, Tick,
+        BookResponse, ConfigUpdate, Denoms, ExecuteMsg, InstantiateMsg, OrderResponse, Price,
+        QueryMsg, RangeConfig, RangeMsg, Side, SudoMsg, SwapRequest, Tick,
     },
     OraclePair,
 };
@@ -232,6 +232,28 @@ impl Fin {
             .unwrap();
 
         Fin(fin_addr)
+    }
+
+    pub fn update_config(
+        &self,
+        app: &mut RujiraApp,
+        update: ConfigUpdate,
+    ) -> anyhow::Result<cw_multi_test::AppResponse> {
+        app.wasm_sudo(self.0.clone(), &SudoMsg::UpdateConfig(update))
+    }
+
+    pub fn update_market_makers(
+        &self,
+        app: &mut RujiraApp,
+        market_makerts: Vec<String>,
+    ) -> anyhow::Result<cw_multi_test::AppResponse> {
+        self.update_config(
+            app,
+            ConfigUpdate {
+                market_makers: Some(market_makerts),
+                ..Default::default()
+            },
+        )
     }
 }
 

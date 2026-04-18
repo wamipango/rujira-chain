@@ -1,10 +1,11 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    coin, coins, to_json_binary, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Empty, Env,
-    MessageInfo, Response,
+    coin, coins, ensure_eq, to_json_binary, Addr, BankMsg, Binary, CosmosMsg, Deps, DepsMut, Empty,
+    Env, MessageInfo, Response,
 };
 use cw2::{ensure_from_older_version, set_contract_version};
+use cw_storage_plus::Item;
 use cw_utils::{must_pay, one_coin, NativeBalance};
 use rujira_rs::bow::{
     ExecuteMsg, InstantiateMsg, QueryMsg, Strategies, Strategy, StrategyResponse, StrategyState,
@@ -19,6 +20,7 @@ use crate::events::{event_deposit, event_swap, event_withdraw};
 // version info for migration info
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+const MARKET: Item<Addr> = Item::new("market");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -31,6 +33,7 @@ pub fn instantiate(
     let config = Config::from(msg.clone());
     config.validate()?;
     config.save(deps.storage)?;
+    MARKET.save(deps.storage, &deps.api.addr_validate(&msg.market)?)?;
     Ok(Response::default().add_message(
         TokenFactory::new(&env, config.strategy.denom().as_str()).create_msg(msg.metadata),
     ))
@@ -52,6 +55,11 @@ pub fn execute(
             to,
             callback,
         } => {
+            ensure_eq!(
+                info.sender,
+                MARKET.load(deps.storage)?,
+                ContractError::Unauthorized {}
+            );
             let offer = one_coin(&info)?;
             let (fee, surplus) =
                 config
@@ -146,6 +154,10 @@ pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, Contract
             config.save(deps.storage)?;
             Ok(Response::default())
         }
+        SudoMsg::SetMarket(addr) => {
+            MARKET.save(deps.storage, &deps.api.addr_validate(&addr)?)?;
+            Ok(Response::default())
+        }
     }
 }
 
@@ -163,6 +175,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                 Ok(to_json_binary(&StrategyResponse::Xyk((strategy, state)))?)
             }
         },
+        QueryMsg::Market {} => Ok(to_json_binary(&MARKET.load(deps.storage)?)?),
     }
 }
 
@@ -194,7 +207,7 @@ mod tests {
         let code_id = app.store_code(code);
         app.instantiate_contract(
             code_id,
-            owner,
+            owner.clone(),
             &InstantiateMsg {
                 metadata: TokenMetadata {
                     description: "RUJI-USDC XYK Liquidity Pool Token".to_string(),
@@ -211,6 +224,7 @@ mod tests {
                     Uint128::from(Xyk::MIN_MIN_QUOTE),
                     Decimal::zero(),
                 )),
+                market: owner.to_string(),
             },
             &[],
             "template",
@@ -236,7 +250,7 @@ mod tests {
         let contract = app
             .instantiate_contract(
                 code_id,
-                owner,
+                owner.clone(),
                 &InstantiateMsg {
                     metadata: TokenMetadata {
                         description: "RUJI-USDC XYK Liquidity Pool Token".to_string(),
@@ -253,6 +267,7 @@ mod tests {
                         Uint128::from(Xyk::MIN_MIN_QUOTE),
                         Decimal::zero(),
                     )),
+                    market: owner.to_string(),
                 },
                 &[],
                 "template",
@@ -344,5 +359,74 @@ mod tests {
             &Event::new("burn")
                 .add_attributes(vec![("amount", "200"), ("denom", "x/bow-xyk-ruji-usdc")]),
         );
+    }
+
+    #[test]
+    fn swap() {
+        let mut app = mock_rujira_app();
+        let addr = app.api().addr_make("depositor");
+        app.init_modules(|router, _api, storage| {
+            router.bank.init_balance(
+                storage,
+                &addr,
+                vec![coin(1000000, "ruji"), coin(1000000, "usdc")],
+            )
+        })
+        .unwrap();
+        let owner = app.api().addr_make("owner");
+
+        let code = Box::new(ContractWrapper::new(execute, instantiate, query));
+        let code_id = app.store_code(code);
+        let contract = app
+            .instantiate_contract(
+                code_id,
+                owner.clone(),
+                &InstantiateMsg {
+                    metadata: TokenMetadata {
+                        description: "RUJI-USDC XYK Liquidity Pool Token".to_string(),
+                        display: "LP RUJI-USDC".to_string(),
+                        name: "LP RUJI-USDC".to_string(),
+                        symbol: "LP/RUJI-USDC".to_string(),
+                        uri: None,
+                        uri_hash: None,
+                    },
+                    strategy: Strategies::Xyk(Xyk::new(
+                        "ruji".to_string(),
+                        "usdc".to_string(),
+                        Decimal::permille(1u64),
+                        Uint128::from(Xyk::MIN_MIN_QUOTE),
+                        Decimal::zero(),
+                    )),
+                    market: owner.to_string(),
+                },
+                &[],
+                "template",
+                None,
+            )
+            .unwrap();
+
+        app.execute_contract(
+            addr.clone(),
+            contract.clone(),
+            &ExecuteMsg::Deposit {
+                min_return: None,
+                callback: None,
+            },
+            &[coin(10000, "ruji"), coin(10000, "usdc")],
+        )
+        .unwrap();
+
+        // A swap of A to A must fail
+        app.execute_contract(
+            addr.clone(),
+            contract.clone(),
+            &ExecuteMsg::Swap {
+                min_return: coin(900, "ruji"),
+                to: None,
+                callback: None,
+            },
+            &[coin(1000, "ruji")],
+        )
+        .unwrap_err();
     }
 }

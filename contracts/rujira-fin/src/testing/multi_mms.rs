@@ -8,7 +8,7 @@ mod tests {
     use rujira_bow::mock::Bow;
     use rujira_ghost_vault::mock::GhostVault;
     use rujira_rs::{
-        fin::{Denoms, ExecuteMsg, Price, Side, SwapRequest},
+        fin::{ConfigUpdate, Denoms, ExecuteMsg, Price, Side, SwapRequest},
         Layer1Asset, OraclePair,
     };
     use rujira_rs_testing::{mock_rujira_app, RujiraApp};
@@ -46,15 +46,12 @@ mod tests {
             .set_borrower(app, tc.addr().as_str(), Uint128::MAX)
             .unwrap();
 
-        // 3. Setup BOW contract
-        let bow = Bow::create(app, owner, "btc-btc", "rune", Uint128::from(10_000u128));
-
         // 4. Setup FIN market with both market makers
         let fin = Fin::create(
             app,
             owner,
             fees,
-            &[tc.addr().clone(), bow.addr().clone()],
+            &[],
             Denoms::new("rune", "btc-btc"),
             Some(OraclePair::new(
                 Layer1Asset::new("THOR", "RUNE"),
@@ -62,6 +59,24 @@ mod tests {
             )),
             Decimal::permille(0),
         );
+
+        // 3. Setup BOW contract
+        let bow = Bow::create(
+            app,
+            fin.addr(),
+            owner,
+            "btc-btc",
+            "rune",
+            Uint128::from(10_000u128),
+        );
+        fin.update_config(
+            app,
+            ConfigUpdate {
+                market_makers: Some(vec![tc.addr().to_string(), bow.addr().to_string()]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
 
         // Configure thorchain swap to allow fin to use it as a market maker
         tc.set_market(app, fin.addr().as_str(), true).unwrap();

@@ -160,6 +160,15 @@ impl Strategy<XykState> for Xyk {
         offer: Coin,
         ask: Coin,
     ) -> Result<(Coin, Coin), StrategyError> {
+        ensure!(
+            (offer.denom == self.x && ask.denom == self.y)
+                || (offer.denom == self.y && ask.denom == self.x),
+            StrategyError::InsufficientReturn {
+                expected: ask.clone(),
+                returned: coin(0, ask.denom),
+            }
+        );
+
         // The state passed here will be the result of load_state.
         // Orientate it for the quote
         if offer.denom == self.y {

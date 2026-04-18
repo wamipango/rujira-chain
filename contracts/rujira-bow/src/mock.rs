@@ -93,17 +93,21 @@ impl Bow {
     /// Setup a BOW contract with XYK strategy
     pub fn create(
         app: &mut RujiraApp,
+        fin: &Addr,
         owner: &Addr,
         base_denom: &str,
         quote_denom: &str,
         min_quote: Uint128,
     ) -> Self {
         let lp_denom = format!("{base_denom}-{quote_denom}");
-        let bow_code = Box::new(ContractWrapper::new(
-            crate::contract::execute,
-            crate::contract::instantiate,
-            crate::contract::query,
-        ));
+        let bow_code = Box::new(
+            ContractWrapper::new(
+                crate::contract::execute,
+                crate::contract::instantiate,
+                crate::contract::query,
+            )
+            .with_sudo(crate::contract::sudo),
+        );
         let bow_code_id = app.store_code(bow_code);
 
         let bow_addr = app
@@ -126,6 +130,7 @@ impl Bow {
                         min_quote,
                         Decimal::zero(),
                     )),
+                    market: fin.to_string(),
                 },
                 &[],
                 "bow",
@@ -145,7 +150,15 @@ mod tests {
     fn test_bow_setup() {
         let mut app = mock_rujira_app();
         let owner = app.api().addr_make("owner");
-        let bow = Bow::create(&mut app, &owner, "btc", "usdc", Uint128::from(1000u128));
+        let fin = app.api().addr_make("fin");
+        let bow = Bow::create(
+            &mut app,
+            &fin,
+            &owner,
+            "btc",
+            "usdc",
+            Uint128::from(1000u128),
+        );
 
         assert!(!bow.addr().as_str().is_empty());
     }

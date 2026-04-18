@@ -5,7 +5,7 @@ use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128};
 use cw_multi_test::{ContractWrapper, Executor};
 use rujira_bow::contract as bow_contract;
 use rujira_rs::{
-    bow::{self, Xyk},
+    bow::{self, SudoMsg, Xyk},
     fin::{
         BookItemResponse, BookResponse, Denoms, ExecuteMsg, InstantiateMsg, OrderResponse,
         OrdersResponse, Price, QueryMsg, Side, SwapRequest, Tick,
@@ -16,11 +16,14 @@ use rujira_rs_testing::{mock_rujira_app, RujiraApp};
 
 fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
     let fin_code = Box::new(ContractWrapper::new(execute, instantiate, query));
-    let bow_code = Box::new(ContractWrapper::new(
-        bow_contract::execute,
-        bow_contract::instantiate,
-        bow_contract::query,
-    ));
+    let bow_code = Box::new(
+        ContractWrapper::new(
+            bow_contract::execute,
+            bow_contract::instantiate,
+            bow_contract::query,
+        )
+        .with_sudo(bow_contract::sudo),
+    );
     let fin_code_id = app.store_code(fin_code);
     let bow_code_id = app.store_code(bow_code);
 
@@ -44,6 +47,7 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
                     Uint128::from(10_000u128),
                     Decimal::zero(),
                 )),
+                market: owner.to_string(),
             },
             &[],
             "bow",
@@ -74,6 +78,9 @@ fn setup(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> (Addr, Addr) {
             "fin",
             None,
         )
+        .unwrap();
+
+    app.wasm_sudo(bow.clone(), &SudoMsg::SetMarket(fin.to_string()))
         .unwrap();
     (fin, bow)
 }

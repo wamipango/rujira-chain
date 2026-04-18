@@ -29,47 +29,87 @@ struct Ctx {
 }
 
 fn setup(app: &mut RujiraApp, owner: &Addr) -> Ctx {
-    let bow_btc_usdc = Bow::create(app, owner, BTC, USDC, Uint128::from(1000u128));
-    let bow_btc_usdt = Bow::create(app, owner, BTC, USDT, Uint128::from(1000u128));
-    let bow_eth_usdc = Bow::create(app, owner, ETH, USDC, Uint128::from(1000u128));
-    let bow_eth_usdt = Bow::create(app, owner, ETH, USDT, Uint128::from(1000u128));
-
     let fin_btc_usdc = Fin::create(
         app,
         owner,
         owner,
-        &[bow_btc_usdc.addr().clone()],
+        &[],
         Denoms::new(BTC, USDC),
         None,
-        Decimal::permille(0),
+        Decimal::zero(),
     );
     let fin_btc_usdt = Fin::create(
         app,
         owner,
         owner,
-        &[bow_btc_usdt.addr().clone()],
+        &[],
         Denoms::new(BTC, USDT),
         None,
-        Decimal::permille(0),
+        Decimal::zero(),
     );
     let fin_eth_usdc = Fin::create(
         app,
         owner,
         owner,
-        &[bow_eth_usdc.addr().clone()],
+        &[],
         Denoms::new(ETH, USDC),
         None,
-        Decimal::permille(0),
+        Decimal::zero(),
     );
-    let _fin_eth_usdt = Fin::create(
+    let fin_eth_usdt = Fin::create(
         app,
         owner,
         owner,
-        &[bow_eth_usdt.addr().clone()],
+        &[],
         Denoms::new(ETH, USDT),
         None,
-        Decimal::permille(0),
+        Decimal::zero(),
     );
+
+    let bow_btc_usdc = Bow::create(
+        app,
+        fin_btc_usdc.addr(),
+        owner,
+        BTC,
+        USDC,
+        Uint128::from(1000u128),
+    );
+    fin_btc_usdc
+        .update_market_makers(app, vec![bow_btc_usdc.addr().to_string()])
+        .unwrap();
+    let bow_btc_usdt = Bow::create(
+        app,
+        fin_btc_usdt.addr(),
+        owner,
+        BTC,
+        USDT,
+        Uint128::from(1000u128),
+    );
+    fin_btc_usdt
+        .update_market_makers(app, vec![bow_btc_usdt.addr().to_string()])
+        .unwrap();
+    let bow_eth_usdc = Bow::create(
+        app,
+        fin_eth_usdc.addr(),
+        owner,
+        ETH,
+        USDC,
+        Uint128::from(1000u128),
+    );
+    fin_eth_usdc
+        .update_market_makers(app, vec![bow_eth_usdc.addr().to_string()])
+        .unwrap();
+    let bow_eth_usdt = Bow::create(
+        app,
+        fin_eth_usdt.addr(),
+        owner,
+        ETH,
+        USDT,
+        Uint128::from(1000u128),
+    );
+    fin_eth_usdt
+        .update_market_makers(app, vec![bow_eth_usdt.addr().to_string()])
+        .unwrap();
 
     // Deposit into BOW pools at current oracle prices
     app.init_modules(|router, _api, storage| {

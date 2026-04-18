@@ -50,6 +50,7 @@ fn mock_querier() -> MockQuerier {
                     ))
                 }
                 bow::QueryMsg::Strategy {} => todo!(),
+                bow::QueryMsg::Market {} => todo!(),
             }
         }
         _ => SystemResult::Err(SystemError::Unknown {}),

@@ -195,7 +195,23 @@ fn setup(initial_mm_base: u64, initial_mm_quote: u64) -> (RujiraApp, Fin, Bow, V
         }
     });
 
-    let bow = Bow::create(&mut app, &owner, BASE, QUOTE, Uint128::from(10_000u128));
+    let fin = Fin::create(
+        &mut app,
+        &owner,
+        &fees,
+        &[],
+        Denoms::new(BASE, QUOTE),
+        None,
+        Decimal::zero(),
+    );
+    let bow = Bow::create(
+        &mut app,
+        fin.addr(),
+        &owner,
+        BASE,
+        QUOTE,
+        Uint128::from(10_000u128),
+    );
     let _ = bow.deposit(
         &mut app,
         &owner,
@@ -205,16 +221,8 @@ fn setup(initial_mm_base: u64, initial_mm_quote: u64) -> (RujiraApp, Fin, Bow, V
         ],
         None,
     );
-
-    let fin = Fin::create(
-        &mut app,
-        &owner,
-        &fees,
-        &[bow.addr().clone()],
-        Denoms::new(BASE, QUOTE),
-        None,
-        Decimal::zero(),
-    );
+    fin.update_market_makers(&mut app, vec![bow.addr().to_string()])
+        .unwrap();
 
     (app, fin, bow, users)
 }

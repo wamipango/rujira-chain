@@ -54,7 +54,14 @@ fn account_lifecycle() {
     vault.deposit(&mut app, &owner, 2000, USDC).unwrap();
 
     borrow_usdc(&mut app, &credit, &account);
-    let bow = Bow::create(&mut app, &owner, BTC, USDC, Uint128::from(10000u128));
+    let bow = Bow::create(
+        &mut app,
+        &account.account,
+        &owner,
+        BTC,
+        USDC,
+        Uint128::from(10000u128),
+    );
     bow.deposit(
         &mut app,
         &owner,

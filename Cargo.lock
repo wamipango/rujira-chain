@@ -1132,7 +1132,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-bow"
-version = "1.1.0"
+version = "1.1.2"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",

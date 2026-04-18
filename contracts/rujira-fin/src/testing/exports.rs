@@ -4,6 +4,7 @@ mod tests {
     use cw_multi_test::Executor;
     use rujira_bow::mock::Bow;
     use rujira_rs::{
+        bow::SudoMsg as BowSudoMsg,
         fin::{
             BookResponse, ConfigUpdate, Denoms, ExecuteMsg, OracleUpdate, QueryMsg, SudoMsg,
             SwapRequest,
@@ -19,24 +20,25 @@ mod tests {
         let mut app = mock_rujira_app();
         let owner = app.api().addr_make("owner");
         let fees = app.api().addr_make("fees");
-        let bow = Bow::create(
-            &mut app,
-            &owner,
-            "btc-btc",
-            "eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-            Uint128::new(1000),
-        );
         let fin = Fin::create(
             &mut app,
             &owner,
             &fees,
-            &[bow.0.clone()],
+            &[],
             Denoms::new(
                 "btc-btc",
                 "eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             ),
             None,
             Decimal::zero(),
+        );
+        let bow = Bow::create(
+            &mut app,
+            fin.addr(),
+            &owner,
+            "btc-btc",
+            "eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            Uint128::new(1000),
         );
         load_contract_state(
             &mut app,
@@ -51,6 +53,11 @@ mod tests {
             bow.addr(),
             "rujira-bow-btc-btc-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48-xyk",
             25281348,
+        )
+        .unwrap();
+        app.wasm_sudo(
+            bow.0.clone(),
+            &BowSudoMsg::SetMarket(fin.addr().to_string()),
         )
         .unwrap();
         app.init_modules(|router, _, storage| {
