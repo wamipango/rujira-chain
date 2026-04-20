@@ -56,6 +56,7 @@ impl<'a> SwapIter<'a> {
                     Side::Quote => y.rate().cmp(&x.rate()),
                 },
             )
+            .filter(|x| !x.total().is_zero())
     }
 
     pub fn mid_price(
