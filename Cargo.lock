@@ -1188,7 +1188,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-fin"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",

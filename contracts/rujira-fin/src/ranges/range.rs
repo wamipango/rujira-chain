@@ -163,6 +163,8 @@ impl Range {
 
         let scl = Scl::new(high, low, skew);
         let price = scl.price(base, quote);
+        let two = Decimal::one() + Decimal::one();
+        let offset = spread / two + *fee_range;
 
         Ok(Self {
             idx,
@@ -176,8 +178,8 @@ impl Range {
             quote,
             fees: [Decimal::zero(), Decimal::zero()],
             price,
-            bid: scl.bid(price, spread.add(fee_range), tick),
-            ask: scl.ask(price, spread.add(fee_range), tick),
+            bid: scl.bid(price, offset, tick),
+            ask: scl.ask(price, offset, tick),
         })
     }
 
@@ -260,7 +262,8 @@ impl Range {
     ) -> String {
         let amm_fee = context.apply_fee(side, add);
         let add = add - amm_fee;
-        let fee = add * self.fee;
+        let two = Decimal::one() + Decimal::one();
+        let fee = add * self.fee / two;
         let add = add.saturating_sub(fee);
         match side {
             Side::Base => {
@@ -293,8 +296,10 @@ impl Range {
     pub fn reprice(&mut self, tick: &Tick, fee_range: &Decimal) {
         let scl = Scl::new(self.high, self.low, self.skew);
         self.price = scl.price(self.base, self.quote);
-        self.bid = scl.bid(self.price, self.spread.add(fee_range), tick);
-        self.ask = scl.ask(self.price, self.spread.add(fee_range), tick);
+        let two = Decimal::one() + Decimal::one();
+        let offset = self.spread / two + *fee_range;
+        self.bid = scl.bid(self.price, offset, tick);
+        self.ask = scl.ask(self.price, offset, tick);
     }
 
     pub fn collect(&mut self, denoms: &Denoms) -> Option<NativeBalance> {

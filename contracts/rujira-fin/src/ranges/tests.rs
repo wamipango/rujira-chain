@@ -956,11 +956,11 @@ fn range_swap_allocates_fees() {
         Decimal::from_str("100").unwrap(),
     );
 
-    assert_eq!(range.quote, Decimal::from_str("590").unwrap());
+    assert_eq!(range.quote, Decimal::from_str("595").unwrap());
     assert_eq!(range.base, Decimal::from_str("100").unwrap());
     assert_eq!(
         range.fees,
-        [Decimal::zero(), Decimal::from_str("10").unwrap()]
+        [Decimal::zero(), Decimal::from_str("5").unwrap()]
     );
 
     range.swap(
@@ -970,13 +970,13 @@ fn range_swap_allocates_fees() {
         Decimal::from_str("100").unwrap(),
     );
 
-    assert_eq!(range.quote, Decimal::from_str("490").unwrap());
-    assert_eq!(range.base, Decimal::from_str("147.5").unwrap());
+    assert_eq!(range.quote, Decimal::from_str("495").unwrap());
+    assert_eq!(range.base, Decimal::from_str("148.75").unwrap());
     assert_eq!(
         range.fees,
         [
-            Decimal::from_str("2.5").unwrap(),
-            Decimal::from_str("10").unwrap()
+            Decimal::from_str("1.25").unwrap(),
+            Decimal::from_str("5").unwrap()
         ]
     );
 }
