@@ -3,7 +3,7 @@ use cw_multi_test::{ContractWrapper, Executor};
 
 use rujira_fin::mock::Fin;
 use rujira_rs::{
-    brune::{InstantiateMsg, SudoMsg},
+    brune::{InstantiateMsg, RangeConfig, SudoMsg},
     fin::{self, Denoms, SwapRequest},
     proto::types::{NodeBondProvider, NodeBondProviders, QueryNodeResponse},
     TokenMetadata,
@@ -79,7 +79,12 @@ fn brune_fin_staking_e2e() {
                 fin_contract: fin.addr().to_string(),
                 max_bond: Uint128::new(10_000),
                 mint_cap: Uint128::new(1_000_000),
-                spread: Decimal::permille(5),
+                range: RangeConfig {
+                    high: Decimal::percent(99),
+                    low: Decimal::percent(80),
+                    skew: cosmwasm_std::SignedDecimal::zero(),
+                    step: Decimal::permille(5),
+                },
                 permissionless: false,
             },
             &[],

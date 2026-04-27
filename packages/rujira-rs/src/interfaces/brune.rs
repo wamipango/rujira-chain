@@ -1,7 +1,20 @@
 use crate::{bow, proto::types::QueryNodeResponse, CallbackData, TokenMetadata};
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, Decimal, Event, Timestamp, Uint128};
+use cosmwasm_std::{Coin, Decimal, Event, SignedDecimal, Timestamp, Uint128};
 use std::str::FromStr;
+
+#[cw_serde]
+pub struct RangeConfig {
+    /// Bid-side single-sided SCL liquidity config. Highest bid price offered by the BRUNE
+    /// market maker. Must be < 1.
+    pub high: Decimal,
+    /// Lowest bid price offered by the BRUNE market maker
+    pub low: Decimal,
+    /// Linear skew of quote distribution
+    pub skew: SignedDecimal,
+    /// Distance between successive bid quote levels
+    pub step: Decimal,
+}
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -11,8 +24,8 @@ pub struct InstantiateMsg {
     pub target_utilization: Decimal,
     /// The Node Operator fee below which all Bond weighting is euqal
     pub min_node_fee: Decimal,
-    /// The spread deducted from the first bid price
-    pub spread: Decimal,
+    /// Single-sided SCL range used for BRUNE bid liquidity
+    pub range: RangeConfig,
     /// Allow any caller to process nodes via execute
     pub permissionless: bool,
     /// The contract address that receives revenue
@@ -40,6 +53,7 @@ pub enum ExecuteMsg {
     ProcessNode { addr: String },
 }
 
+#[allow(clippy::large_enum_variant)]
 #[cw_serde]
 pub enum SudoMsg {
     /// Processes a new Node Address as a bond target
@@ -48,7 +62,6 @@ pub enum SudoMsg {
     ProcessNode {
         addr: String,
     },
-
     UpdateConfig(ConfigUpdate),
 }
 
@@ -57,7 +70,7 @@ pub struct ConfigUpdate {
     pub fin_contract: Option<String>,
     pub target_utilization: Option<Decimal>,
     pub min_node_fee: Option<Decimal>,
-    pub spread: Option<Decimal>,
+    pub range: Option<RangeConfig>,
     pub permissionless: Option<bool>,
     pub stake_contract: Option<String>,
     pub revenue_smear: Option<u32>,
@@ -85,7 +98,7 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub target_utilization: Decimal,
     pub min_node_fee: Decimal,
-    pub spread: Decimal,
+    pub range: RangeConfig,
     pub permissionless: bool,
     pub fin_contract: String,
     pub stake_contract: String,

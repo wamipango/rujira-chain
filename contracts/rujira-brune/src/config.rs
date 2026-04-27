@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, Deps, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Decimal, Deps, SignedDecimal, StdResult, Storage, Uint128};
 use cw_storage_plus::Item;
-use rujira_rs::brune::{ConfigResponse, ConfigUpdate, InstantiateMsg};
+use rujira_rs::brune::{ConfigResponse, ConfigUpdate, InstantiateMsg, RangeConfig};
 
 use crate::ContractError;
 
@@ -13,7 +13,7 @@ pub static RUNE: &str = "rune";
 pub struct Config {
     pub target_utilization: Decimal,
     pub min_node_fee: Decimal,
-    pub spread: Decimal,
+    pub range: RangeConfig,
     pub permissionless: bool,
     pub fin_contract: Addr,
     pub stake_contract: Addr,
@@ -28,7 +28,7 @@ impl Config {
         Ok(Self {
             target_utilization: msg.target_utilization,
             min_node_fee: msg.min_node_fee,
-            spread: msg.spread,
+            range: msg.range.clone(),
             permissionless: msg.permissionless,
             fin_contract: deps.api.addr_validate(&msg.fin_contract)?,
             stake_contract: deps.api.addr_validate(&msg.stake_contract)?,
@@ -43,6 +43,24 @@ impl Config {
         CONFIG.load(storage)
     }
 
+    pub fn migrate(storage: &mut dyn Storage, range: RangeConfig) -> StdResult<Self> {
+        let legacy: OldConfig = Item::new("config").load(storage)?;
+        let config = Self {
+            target_utilization: legacy.target_utilization,
+            min_node_fee: legacy.min_node_fee,
+            range,
+            permissionless: legacy.permissionless,
+            fin_contract: legacy.fin_contract,
+            stake_contract: legacy.stake_contract,
+            revenue_smear: legacy.revenue_smear,
+            token_id: legacy.token_id,
+            max_bond: legacy.max_bond,
+            mint_cap: legacy.mint_cap,
+        };
+        CONFIG.save(storage, &config)?;
+        Ok(config)
+    }
+
     pub fn validate(&self) -> Result<(), ContractError> {
         if self.target_utilization <= Decimal::zero() || self.target_utilization >= Decimal::one() {
             return Err(ContractError::Invalid(
@@ -54,9 +72,25 @@ impl Config {
                 "min_node_fee must be between 0 and 1".to_string(),
             ));
         }
-        if self.spread <= Decimal::zero() {
+        if self.range.high >= Decimal::one() {
             return Err(ContractError::Invalid(
-                "spread must be greater than 0".to_string(),
+                "range.high must be less than 1".to_string(),
+            ));
+        }
+        if self.range.low >= self.range.high {
+            return Err(ContractError::Invalid(
+                "range.low must be less than range.high".to_string(),
+            ));
+        }
+        let two = SignedDecimal::from_atomics(2i128, 0).unwrap();
+        if self.range.skew <= -two || self.range.skew >= two {
+            return Err(ContractError::Invalid(
+                "range.skew must be between -2 and 2".to_string(),
+            ));
+        }
+        if self.range.step <= Decimal::zero() || self.range.step >= Decimal::one() {
+            return Err(ContractError::Invalid(
+                "range.step must be between 0 and 1".to_string(),
             ));
         }
         if self.revenue_smear <= 100 {
@@ -89,8 +123,8 @@ impl Config {
         if let Some(min_node_fee) = update.min_node_fee {
             self.min_node_fee = min_node_fee;
         };
-        if let Some(spread) = update.spread {
-            self.spread = spread;
+        if let Some(range) = update.range {
+            self.range = range;
         };
         if let Some(permissionless) = update.permissionless {
             self.permissionless = permissionless;
@@ -108,12 +142,27 @@ impl Config {
     }
 }
 
+#[cw_serde]
+// Old stored layout retained only so migrate can rewrite pre-range deployments.
+struct OldConfig {
+    target_utilization: Decimal,
+    min_node_fee: Decimal,
+    spread: Decimal,
+    permissionless: bool,
+    fin_contract: Addr,
+    stake_contract: Addr,
+    revenue_smear: u32,
+    token_id: String,
+    max_bond: Uint128,
+    mint_cap: Uint128,
+}
+
 impl From<Config> for ConfigResponse {
     fn from(value: Config) -> Self {
         Self {
             target_utilization: value.target_utilization,
             min_node_fee: value.min_node_fee,
-            spread: value.spread,
+            range: value.range,
             permissionless: value.permissionless,
             fin_contract: value.fin_contract.to_string(),
             stake_contract: value.stake_contract.to_string(),
@@ -129,12 +178,21 @@ impl From<Config> for ConfigResponse {
 mod tests {
     use super::*;
 
+    fn range() -> RangeConfig {
+        RangeConfig {
+            high: Decimal::percent(99),
+            low: Decimal::percent(80),
+            skew: SignedDecimal::zero(),
+            step: Decimal::percent(1),
+        }
+    }
+
     #[test]
     fn validation_ok() {
         Config {
             target_utilization: Decimal::percent(90),
             min_node_fee: Decimal::percent(5),
-            spread: Decimal::percent(1),
+            range: range(),
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
@@ -152,7 +210,7 @@ mod tests {
         let base = Config {
             target_utilization: Decimal::percent(90),
             min_node_fee: Decimal::percent(5),
-            spread: Decimal::percent(1),
+            range: range(),
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
@@ -180,7 +238,7 @@ mod tests {
         let base = Config {
             target_utilization: Decimal::percent(90),
             min_node_fee: Decimal::percent(5),
-            spread: Decimal::percent(1),
+            range: range(),
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
@@ -208,7 +266,7 @@ mod tests {
         let base = Config {
             target_utilization: Decimal::percent(90),
             min_node_fee: Decimal::percent(5),
-            spread: Decimal::percent(1),
+            range: range(),
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
@@ -232,11 +290,11 @@ mod tests {
     }
 
     #[test]
-    fn validation_spread_bounds() {
+    fn validation_range_bounds() {
         let base = Config {
             target_utilization: Decimal::percent(90),
             min_node_fee: Decimal::percent(5),
-            spread: Decimal::percent(1),
+            range: range(),
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
@@ -246,7 +304,29 @@ mod tests {
             mint_cap: Uint128::new(1_000),
         };
         assert!(Config {
-            spread: Decimal::zero(),
+            range: RangeConfig {
+                high: Decimal::one(),
+                ..range()
+            },
+            ..base.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(Config {
+            range: RangeConfig {
+                low: Decimal::percent(99),
+                high: Decimal::percent(90),
+                ..range()
+            },
+            ..base.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(Config {
+            range: RangeConfig {
+                step: Decimal::zero(),
+                ..range()
+            },
             ..base
         }
         .validate()
@@ -258,7 +338,7 @@ mod tests {
         let base = Config {
             target_utilization: Decimal::percent(90),
             min_node_fee: Decimal::percent(5),
-            spread: Decimal::percent(1),
+            range: range(),
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,

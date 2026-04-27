@@ -517,7 +517,12 @@ mod tests {
         let config = Config {
             target_utilization: Decimal::one(),
             min_node_fee: Decimal::percent(5),
-            spread: Decimal::percent(1),
+            range: rujira_rs::brune::RangeConfig {
+                high: Decimal::percent(99),
+                low: Decimal::percent(80),
+                skew: cosmwasm_std::SignedDecimal::zero(),
+                step: Decimal::percent(1),
+            },
             permissionless: false,
             fin_contract: Addr::unchecked("fin"),
             stake_contract: Addr::unchecked("stake"),
@@ -544,7 +549,12 @@ mod tests {
         let config = Config {
             target_utilization: Decimal::one(),
             min_node_fee: Decimal::percent(5),
-            spread: Decimal::percent(1),
+            range: rujira_rs::brune::RangeConfig {
+                high: Decimal::percent(99),
+                low: Decimal::percent(80),
+                skew: cosmwasm_std::SignedDecimal::zero(),
+                step: Decimal::percent(1),
+            },
             permissionless: false,
             fin_contract: Addr::unchecked("fin"),
             stake_contract: Addr::unchecked("stake"),
@@ -568,7 +578,12 @@ mod tests {
         let config = Config {
             target_utilization: Decimal::one(),
             min_node_fee: Decimal::percent(5),
-            spread: Decimal::percent(1),
+            range: rujira_rs::brune::RangeConfig {
+                high: Decimal::percent(99),
+                low: Decimal::percent(80),
+                skew: cosmwasm_std::SignedDecimal::zero(),
+                step: Decimal::percent(1),
+            },
             permissionless: false,
             fin_contract: Addr::unchecked("fin"),
             stake_contract: Addr::unchecked("stake"),

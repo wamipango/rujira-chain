@@ -1,0 +1,341 @@
+use crate::{
+    config::{Config, RUNE},
+    events::{event_burn, event_mint},
+    state::State,
+    ContractError,
+};
+use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{
+    coins, to_json_binary, BankMsg, Binary, Coin, Decimal, Deps, Env, MessageInfo, Response,
+    Uint128,
+};
+use cw_utils::must_pay;
+use rujira_rs::{
+    bow::{self, QuoteRequest, QuoteResponse},
+    brune::RangeConfig,
+    fin::{Scl, Side},
+    TokenFactory,
+};
+use std::cmp::Ordering;
+
+#[cw_serde]
+struct QuoteData {
+    next: Decimal,
+}
+
+impl State {
+    pub fn quote(
+        &self,
+        deps: Deps,
+        env: &Env,
+        config: &Config,
+        req: &QuoteRequest,
+    ) -> Result<QuoteResponse, ContractError> {
+        let token = TokenFactory::new(env, &config.token_id);
+        if req.ask_denom == RUNE && req.offer_denom == token.denom() {
+            self.quote_bid(deps, env, config, req)
+        } else if req.ask_denom == token.denom() && req.offer_denom == RUNE {
+            self.quote_ask(deps, env, config, req)
+        } else {
+            Err(ContractError::InsufficientFunds {})
+        }
+    }
+
+    fn quote_ask(
+        &self,
+        deps: Deps,
+        env: &Env,
+        config: &Config,
+        req: &QuoteRequest,
+    ) -> Result<QuoteResponse, ContractError> {
+        match req.data {
+            Some(_) => Err(ContractError::InsufficientFunds {}),
+            None => {
+                let size = self
+                    .nodes(deps, env, config)?
+                    .capacity()
+                    .checked_div(config.target_utilization)?
+                    .to_uint_floor()
+                    .min(config.mint_cap.saturating_sub(self.minted.to_uint_floor()));
+
+                if size.is_zero() {
+                    return Err(ContractError::InsufficientFunds {});
+                }
+
+                Ok(bow::QuoteResponse {
+                    price: Decimal::one(),
+                    size,
+                    data: Some(Binary::default()),
+                })
+            }
+        }
+    }
+
+    fn quote_bid(
+        &self,
+        deps: Deps,
+        env: &Env,
+        config: &Config,
+        req: &QuoteRequest,
+    ) -> Result<QuoteResponse, ContractError> {
+        let quote = self.quote_liquidity(deps, env, config, None)?;
+        let start = req
+            .data
+            .clone()
+            .map(cosmwasm_std::from_json::<QuoteData>)
+            .transpose()?
+            .map(|data| data.next)
+            .unwrap_or(config.range.high);
+
+        let Some((price, size, next)) = quote_slice(&config.range, quote, start) else {
+            return Err(ContractError::InsufficientFunds {});
+        };
+
+        if size < Uint128::new(50) {
+            return Err(ContractError::InsufficientFunds {});
+        }
+
+        Ok(QuoteResponse {
+            price,
+            size,
+            data: Some(to_json_binary(&QuoteData { next })?),
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn swap(
+        &mut self,
+        deps: Deps,
+        env: &Env,
+        info: &MessageInfo,
+        config: &Config,
+        min_return: &Coin,
+        response: Response,
+        rune: Decimal,
+    ) -> Result<Response, ContractError> {
+        let token = TokenFactory::new(env, &config.token_id);
+
+        if min_return.denom == token.denom() {
+            self.swap_join(deps, env, info, config, &token, min_return, response)
+        } else if min_return.denom == RUNE {
+            self.swap_leave(deps, env, info, config, &token, min_return, response, rune)
+        } else {
+            Err(ContractError::InsufficientFunds {})
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn swap_join(
+        &mut self,
+        deps: Deps,
+        env: &Env,
+        info: &MessageInfo,
+        config: &Config,
+        token: &TokenFactory,
+        min_return: &Coin,
+        response: Response,
+    ) -> Result<Response, ContractError> {
+        let rune = must_pay(info, RUNE)?;
+        let capacity = self
+            .nodes(deps, env, config)?
+            .capacity()
+            .checked_div(config.target_utilization)?
+            .to_uint_floor();
+
+        if min_return.amount > rune {
+            return Err(ContractError::InsufficientReturn {
+                offer: rune,
+                ask: min_return.amount,
+            });
+        }
+
+        if rune > capacity {
+            return Err(ContractError::InsufficientCapacity(capacity));
+        }
+        let minted = self.deposit(rune)?;
+        if self.minted.to_uint_ceil().gt(&config.mint_cap) {
+            return Err(ContractError::MintCapExceeded(config.mint_cap));
+        }
+        Ok(response
+            .add_event(event_mint(&info.sender, minted, &token.denom()))
+            .add_message(token.mint_msg(minted, info.sender.clone())))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn swap_leave(
+        &mut self,
+        deps: Deps,
+        env: &Env,
+        info: &MessageInfo,
+        config: &Config,
+        token: &TokenFactory,
+        min_return: &Coin,
+        response: Response,
+        received: Decimal,
+    ) -> Result<Response, ContractError> {
+        let amount = must_pay(info, &token.denom())?;
+        let quote = self.quote_liquidity(deps, env, config, Some(received))?;
+        let returned = quote_return(&config.range, quote, amount);
+
+        if returned.cmp(&min_return.amount) == Ordering::Less {
+            return Err(ContractError::InsufficientFunds {});
+        }
+
+        self.withdraw(amount)?;
+
+        Ok(response
+            .add_event(event_burn(&info.sender, amount, &token.denom()))
+            .add_message(BankMsg::Send {
+                to_address: info.sender.to_string(),
+                amount: coins(min_return.amount.u128(), RUNE),
+            })
+            .add_message(token.burn_msg(amount)))
+    }
+}
+
+fn quote_slice(
+    range: &RangeConfig,
+    quote: Decimal,
+    start: Decimal,
+) -> Option<(Decimal, Uint128, Decimal)> {
+    if quote.is_zero() || start <= range.low || start > range.high {
+        return None;
+    }
+
+    let scl = Scl::new(range.high, range.low, range.skew);
+    let step = start * range.step;
+    let end = start.checked_sub(step).ok()?.max(range.low);
+    if end >= start {
+        return None;
+    }
+
+    let size = scl.amount_in_slice(&Side::Quote, Decimal::zero(), quote, range.high, start, end);
+    let price = Decimal::try_from(scl.effective_price(start, end)?).ok()?;
+    let size = size.to_uint_floor();
+
+    if size.is_zero() {
+        return None;
+    }
+
+    Some((price, size, end))
+}
+
+fn quote_return(range: &RangeConfig, quote: Decimal, offer: Uint128) -> Uint128 {
+    let mut total = Uint128::zero();
+    let mut remaining = offer;
+    let mut start = range.high;
+
+    while !remaining.is_zero() {
+        let Some((price, size, next)) = quote_slice(range, quote, start) else {
+            break;
+        };
+        let capacity = Decimal::from_ratio(size, 1u128) / price;
+        let capacity = capacity.to_uint_floor();
+
+        if capacity.is_zero() {
+            break;
+        }
+
+        if remaining < capacity {
+            total += (Decimal::from_ratio(remaining, 1u128) * price).to_uint_floor();
+            break;
+        }
+
+        total += size;
+        remaining -= capacity;
+        start = next;
+    }
+
+    total
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::{Addr, SignedDecimal};
+
+    fn config() -> Config {
+        Config {
+            target_utilization: Decimal::percent(75),
+            min_node_fee: Decimal::percent(5),
+            range: rujira_rs::brune::RangeConfig {
+                high: Decimal::percent(99),
+                low: Decimal::percent(80),
+                skew: SignedDecimal::zero(),
+                step: Decimal::percent(10),
+            },
+            permissionless: false,
+            fin_contract: Addr::unchecked("fin"),
+            stake_contract: Addr::unchecked("stake"),
+            revenue_smear: 1_000,
+            token_id: "brune".to_string(),
+            max_bond: Uint128::new(10_000),
+            mint_cap: Uint128::new(1_000_000),
+        }
+    }
+
+    fn slice_capacity(price: Decimal, size: Uint128) -> Uint128 {
+        (Decimal::from_ratio(size, 1u128) / price).to_uint_floor()
+    }
+
+    #[test]
+    fn quote_steps_walk_down_the_range() {
+        let config = config();
+        let quote = Decimal::from_ratio(10_000u128, 1u128);
+        let mut start = config.range.high;
+        let mut prices = vec![];
+        let mut nexts = vec![];
+
+        while let Some((price, size, next)) = quote_slice(&config.range, quote, start) {
+            assert!(size > Uint128::zero());
+            assert!(price < start);
+            assert!(next < start);
+            assert!(next >= config.range.low);
+            prices.push(price);
+            nexts.push(next);
+            start = next;
+        }
+
+        assert!(prices.len() > 1);
+        assert!(prices.windows(2).all(|w| w[1] < w[0]));
+        assert_eq!(nexts.last().copied(), Some(config.range.low));
+        assert!(quote_slice(&config.range, quote, config.range.low).is_none());
+    }
+
+    #[test]
+    fn quote_return_matches_full_and_partial_step_fills() {
+        let config = config();
+        let quote = Decimal::from_ratio(10_000u128, 1u128);
+
+        let (price_1, size_1, next) = quote_slice(&config.range, quote, config.range.high).unwrap();
+        let (price_2, _size_2, _) = quote_slice(&config.range, quote, next).unwrap();
+
+        let cap_1 = slice_capacity(price_1, size_1);
+        let partial_2 = Uint128::new(37);
+        let offer = cap_1 + partial_2;
+
+        let expected = size_1 + (Decimal::from_ratio(partial_2, 1u128) * price_2).to_uint_floor();
+
+        assert_eq!(quote_return(&config.range, quote, offer), expected);
+    }
+
+    #[test]
+    fn quote_return_stops_at_total_range_liquidity() {
+        let config = config();
+        let quote = Decimal::from_ratio(10_000u128, 1u128);
+        let mut start = config.range.high;
+        let mut total_size = Uint128::zero();
+        let mut total_capacity = Uint128::zero();
+
+        while let Some((price, size, next)) = quote_slice(&config.range, quote, start) {
+            total_size += size;
+            total_capacity += slice_capacity(price, size);
+            start = next;
+        }
+
+        assert_eq!(
+            quote_return(&config.range, quote, total_capacity + Uint128::new(1_000)),
+            total_size
+        );
+    }
+}

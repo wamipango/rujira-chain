@@ -7,13 +7,13 @@ use cosmwasm_std::{
 use cw_storage_plus::{Bound, Index, IndexList, IndexedMap, Item, MultiIndex};
 use cw_utils::NativeBalance;
 use rujira_rs::{
-    fin::{Denoms, RangeConfig, Side, Tick},
+    fin::{Denoms, RangeConfig, Scl, Side, Tick},
     utils::split_floor,
 };
 
 use crate::ranges::error::RangeError;
 
-use super::{RangeContext, Scl};
+use super::RangeContext;
 
 const KEY: &str = "r";
 const KEY_OWNER: &str = "r_o";

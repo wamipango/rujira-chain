@@ -21,9 +21,11 @@
 //! - p_m = (high + low)/2, Δp = high - low
 
 use cosmwasm_std::{Decimal, Decimal256, SignedDecimal};
-use rujira_rs::fin::{Side, Tick};
-use rujira_rs::SignedDecimal256;
 
+use crate::{
+    fin::{Side, Tick},
+    SignedDecimal256,
+};
 /// Linear skew concentrated liquidity calculator
 pub struct Scl {
     /// sqrt(low)
@@ -102,8 +104,8 @@ impl Scl {
         -self.alpha / s_sq - self.beta
     }
 
-    /// Solve for price from reserves using Newton-Raphson
-    /// Finds s such that F(s) = x·Y(s) - y·X(s) = 0
+    /// Solve for price from reserves using Newton-Raphson.
+    /// Finds s such that F(s) = x·Y(s) - y·X(s) = 0.
     pub fn price(&self, base: Decimal, quote: Decimal) -> Decimal {
         if quote.is_zero() {
             return Decimal::try_from(self.s_a * self.s_a).unwrap_or(Decimal::zero());
@@ -202,8 +204,8 @@ impl Scl {
 
         let s_price = Decimal256::from(price).sqrt();
 
-        // Compute L₀ from reserves
-        // Use quote / Y(s_price) when quote is available, otherwise base / X(s_price)
+        // Compute L₀ from reserves.
+        // Use quote / Y(s_price) when quote is available, otherwise base / X(s_price).
         let y_s = self.y_at(s_price);
         let x_s = self.x_at(s_price);
         let l0 = if !quote.is_zero() && !y_s.is_zero() {

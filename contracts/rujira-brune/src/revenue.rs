@@ -47,6 +47,13 @@ impl Revenue {
         let due = (self.fee_rate * elapsed).min(self.pending);
         // Clamp to the max liquid available
         let payout = due.min(max).to_uint_floor();
+
+        if payout.is_zero() {
+            // Skip zero-amount transfer to avoid bank module rejection.
+            // Do not advance timestamp so sub-unit accrual can accumulate.
+            return Ok((response, Uint128::zero()));
+        }
+
         self.pending = self
             .pending
             .saturating_sub(Decimal::from_atomics(payout, 0)?);

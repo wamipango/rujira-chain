@@ -6,8 +6,8 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::must_pay;
 use rujira_rs::brune::{
-    ConfigResponse, ExecuteMsg, InstantiateMsg, NodesResponse, QueryMsg, RevenueResponse,
-    StateResponse, SudoMsg,
+    ConfigResponse, ExecuteMsg, InstantiateMsg, NodesResponse, QueryMsg, RangeConfig,
+    RevenueResponse, StateResponse, SudoMsg,
 };
 use rujira_rs::TokenFactory;
 
@@ -83,6 +83,7 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
         SudoMsg::ProcessNode { addr } => process_node(deps, env, &config, &addr),
         SudoMsg::UpdateConfig(update) => {
             config.update(deps.as_ref(), update)?;
+            config.validate()?;
             config.save(deps.storage)?;
             Ok(Response::default())
         }
@@ -136,24 +137,12 @@ pub fn reply(_deps: DepsMut, _env: Env, _msg: Reply) -> Result<Response, Contrac
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, env: Env, _msg: ()) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, msg: RangeConfig) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    let config = Config::load(deps.storage)?;
-    let token = TokenFactory::new(&env, &config.token_id);
-    let amount = deps
-        .querier
-        .query_balance(&env.contract.address, token.denom())?
-        .amount;
-
-    if !amount.is_zero() {
-        let mut state = State::load(deps.storage)?;
-        state.withdraw(amount)?;
-        state.save(deps.storage)?;
-        Ok(Response::default().add_message(token.burn_msg(amount)))
-    } else {
-        Ok(Response::default())
-    }
+    let config = Config::migrate(deps.storage, msg)?;
+    config.validate()?;
+    Ok(Response::default())
 }
 
 #[cfg(test)]
@@ -163,10 +152,20 @@ mod tests {
     use cosmwasm_std::{coin, coins, Decimal, Event, Timestamp, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{
+        brune::RangeConfig,
         proto::types::{NodeBondProvider, NodeBondProviders, QueryNodeResponse},
         TokenMetadata,
     };
     use rujira_rs_testing::mock_rujira_app;
+
+    fn range() -> RangeConfig {
+        RangeConfig {
+            high: Decimal::percent(99),
+            low: Decimal::percent(80),
+            skew: cosmwasm_std::SignedDecimal::zero(),
+            step: Decimal::percent(1),
+        }
+    }
 
     #[test]
     fn instantiation() {
@@ -190,7 +189,7 @@ mod tests {
                 &InstantiateMsg {
                     target_utilization: Decimal::percent(90),
                     min_node_fee: Decimal::percent(5),
-                    spread: Decimal::percent(1),
+                    range: range(),
                     permissionless: false,
                     stake_contract: stake.to_string(),
                     revenue_smear: 100000,
@@ -228,7 +227,7 @@ mod tests {
             ConfigResponse {
                 target_utilization: Decimal::percent(90),
                 min_node_fee: Decimal::percent(5),
-                spread: Decimal::percent(1),
+                range: range(),
                 permissionless: false,
                 fin_contract: fin.to_string(),
                 stake_contract: stake.to_string(),
@@ -291,7 +290,7 @@ mod tests {
                 &InstantiateMsg {
                     target_utilization: Decimal::percent(90),
                     min_node_fee: Decimal::percent(5),
-                    spread: Decimal::percent(1),
+                    range: range(),
                     permissionless: false,
                     stake_contract: stake.to_string(),
                     revenue_smear: 100000,

@@ -11,7 +11,7 @@ use cw_utils::NativeBalance;
 use proptest::prelude::*;
 use rujira_rs::{
     exchange::{SwapContext, SwapItem, Swapper},
-    fin::{Denoms, RangeConfig, Side, SwapRequest, Tick},
+    fin::{Denoms, RangeConfig, Scl, Side, SwapRequest, Tick},
 };
 
 #[test]

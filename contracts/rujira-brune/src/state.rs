@@ -166,20 +166,23 @@ impl State {
         )?;
         Ok(bal.sub(received.unwrap_or_default()))
     }
-    /// Returns equivalent XY balances for use in an XYK invariant to price bids in the orderbook
-    pub fn xy(
+    /// Returns liquid RUNE available to support bid-side liquidity.
+    pub fn quote_liquidity(
         &self,
         deps: Deps,
         env: &Env,
         config: &Config,
         received: Option<Decimal>,
-    ) -> Result<(Decimal, Decimal), ContractError> {
-        Ok((
-            self.minted.mul(Decimal::one() - config.target_utilization),
-            // saturating_sub here as liquid balance can fall below pending revenue.
-            // At this point, revenue takes priority and a request_bond should be hit
-            Self::balance(deps, env, received)?.saturating_sub(self.revenue.pending),
-        ))
+    ) -> Result<Decimal, ContractError> {
+        let balance = Self::balance(deps, env, received)?;
+        let bonded = self.nodes(deps, env, config)?.bonded();
+        let ownership = balance + bonded;
+        let surplus = ownership.saturating_sub(self.minted);
+        let effective_pending = self.revenue.pending.max(surplus);
+
+        // saturating_sub here as liquid balance can fall below pending revenue.
+        // At this point, revenue takes priority and a request_bond should be hit
+        Ok(balance.saturating_sub(effective_pending))
     }
 }
 
@@ -345,7 +348,12 @@ mod tests {
             let config = Config {
                 target_utilization: Decimal::percent(target_utilization as u64),
                 min_node_fee: Decimal::percent(1),
-                spread: Decimal::percent(1),
+                range: rujira_rs::brune::RangeConfig {
+                    high: Decimal::percent(99),
+                    low: Decimal::percent(80),
+                    skew: cosmwasm_std::SignedDecimal::zero(),
+                    step: Decimal::percent(1),
+                },
                 permissionless: false,
                 fin_contract: api.addr_make("fin"),
                 stake_contract: api.addr_make("stake"),

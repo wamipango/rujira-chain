@@ -9,10 +9,10 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Attribute, Decimal, Decimal256, Uint128};
 use rujira_rs::{
     exchange::{SwapError, SwapItem},
-    fin::Side,
+    fin::{Scl, Side},
 };
 
-use super::{Range, RangeContext, Scl};
+use super::{Range, RangeContext};
 
 /// Carries post-swap range state back to `RangeOfferIter`.
 ///
