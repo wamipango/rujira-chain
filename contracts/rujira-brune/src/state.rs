@@ -40,7 +40,7 @@ impl State {
         STATE.load(storage)
     }
 
-    pub fn save(&self, storage: &mut dyn Storage) -> StdResult<()> {
+    pub fn save(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
         STATE.save(storage, self)
     }
 
@@ -98,6 +98,7 @@ impl State {
         let signer = deps.api.addr_canonicalize(env.contract.address.as_str())?;
 
         let mut nodes = self.nodes(deps.as_ref(), env, config)?;
+
         let bonded = nodes.bonded();
         let balance = Self::effective_balance(rune_balance(&deps.as_ref(), env)?, received);
 
@@ -165,12 +166,9 @@ impl State {
     /// Returns liquid RUNE available to support bid-side liquidity.
     pub fn quote_liquidity(
         &self,
-        deps: Deps,
-        env: &Env,
-        config: &Config,
         balance: &Decimal,
+        bonded: &Decimal,
     ) -> Result<Decimal, ContractError> {
-        let bonded = self.nodes(deps, env, config)?.bonded();
         let ownership = balance + bonded;
         let surplus = ownership.saturating_sub(self.minted);
         let effective_pending = self.revenue.pending.max(surplus);

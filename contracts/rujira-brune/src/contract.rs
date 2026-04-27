@@ -63,7 +63,8 @@ pub fn execute(
                 &config,
                 &min_return,
                 response,
-                rune,
+                &state.nodes(deps.as_ref(), &env, &config)?.bonded(),
+                &rune,
             )?;
             // Only required to store to the Event Log. Safe to `branch`
             response = state.allocate(deps.branch(), &env, &config, response, Some(rune))?;
@@ -119,6 +120,7 @@ struct StoreCache {
     pub config: Config,
     pub state: State,
     pub balance: Decimal,
+    pub bonded: Decimal,
     pub quote: Option<Binary>,
 }
 
@@ -137,18 +139,24 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         QueryMsg::Quote(req) => {
             let cache = match req.data.clone().map(from_json).transpose()? {
                 Some(v) => v,
-                None => StoreCache {
-                    config: Config::load(deps.storage)?,
-                    state: State::load(deps.storage)?,
-                    quote: None,
-                    balance: rune_balance(&deps, &env)?,
-                },
+                None => {
+                    let state = State::load(deps.storage)?;
+                    let config = Config::load(deps.storage)?;
+                    StoreCache {
+                        bonded: state.nodes(deps, &env, &config)?.bonded(),
+                        quote: None,
+                        balance: rune_balance(&deps, &env)?,
+                        config,
+                        state,
+                    }
+                }
             };
             let res = cache.state.quote(
                 deps,
                 &env,
                 &cache.config,
                 &cache.balance,
+                &cache.bonded,
                 &cache.quote,
                 (req.ask_denom, req.offer_denom),
             )?;
@@ -456,6 +464,7 @@ mod tests {
             )
             .unwrap();
 
-        from_json::<StoreCache>(res.data.unwrap()).unwrap();
+        let res = from_json::<StoreCache>(res.data.unwrap()).unwrap();
+        assert_eq!(res.bonded, Decimal::percent(9000));
     }
 }

@@ -25,18 +25,20 @@ pub struct QuoteData {
 }
 
 impl State {
+    #[allow(clippy::too_many_arguments)]
     pub fn quote(
         &self,
         deps: Deps,
         env: &Env,
         config: &Config,
         balance: &Decimal,
+        bonded: &Decimal,
         data: &Option<Binary>,
         (ask_denom, offer_denom): (String, String),
     ) -> Result<QuoteResponse, ContractError> {
         let token = TokenFactory::new(env, &config.token_id);
         if ask_denom == RUNE && offer_denom == token.denom() {
-            self.quote_bid(deps, env, config, balance, data)
+            self.quote_bid(config, balance, bonded, data)
         } else if ask_denom == token.denom() && offer_denom == RUNE {
             self.quote_ask(deps, env, config, data)
         } else {
@@ -76,10 +78,9 @@ impl State {
 
     fn quote_bid(
         &self,
-        deps: Deps,
-        env: &Env,
         config: &Config,
         balance: &Decimal,
+        bonded: &Decimal,
         data: &Option<Binary>,
     ) -> Result<QuoteResponse, ContractError> {
         let data = data.clone().map(from_json::<QuoteData>).transpose()?;
@@ -88,7 +89,7 @@ impl State {
             .map(|data| data.next)
             .unwrap_or(config.range.high);
 
-        let quote = self.quote_liquidity(deps, env, config, balance)?;
+        let quote = self.quote_liquidity(bonded, balance)?;
 
         let Some((price, size, next)) = quote_slice(&config.range, quote, start) else {
             return Err(ContractError::InsufficientFunds {});
@@ -114,14 +115,17 @@ impl State {
         config: &Config,
         min_return: &Coin,
         response: Response,
-        rune: Decimal,
+        bonded: &Decimal,
+        rune: &Decimal,
     ) -> Result<Response, ContractError> {
         let token = TokenFactory::new(env, &config.token_id);
 
         if min_return.denom == token.denom() {
             self.swap_join(deps, env, info, config, &token, min_return, response)
         } else if min_return.denom == RUNE {
-            self.swap_leave(deps, env, info, config, &token, min_return, response, rune)
+            self.swap_leave(
+                deps, env, info, config, &token, min_return, response, bonded, rune,
+            )
         } else {
             Err(ContractError::InsufficientFunds {})
         }
@@ -174,11 +178,12 @@ impl State {
         token: &TokenFactory,
         min_return: &Coin,
         response: Response,
-        received: Decimal,
+        bonded: &Decimal,
+        received: &Decimal,
     ) -> Result<Response, ContractError> {
         let amount = must_pay(info, &token.denom())?;
-        let balance = Self::effective_balance(rune_balance(&deps, env)?, Some(received));
-        let quote = self.quote_liquidity(deps, env, config, &balance)?;
+        let balance = Self::effective_balance(rune_balance(&deps, env)?, Some(*received));
+        let quote = self.quote_liquidity(bonded, &balance)?;
         let returned = quote_return(&config.range, quote, amount);
 
         if returned.cmp(&min_return.amount) == Ordering::Less {
