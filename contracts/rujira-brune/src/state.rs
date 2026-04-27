@@ -98,7 +98,7 @@ impl State {
 
         let mut nodes = self.nodes(deps.as_ref(), env, config)?;
         let bonded = nodes.bonded();
-        let balance = Self::balance(deps.as_ref(), env, received)?;
+        let balance = Self::effective_balance(Self::query_balance(deps.as_ref(), env)?, received);
 
         // Step 1: Calculate any new revenue and execute revenue distribution
         // 1. Calculate total RUNE ownership - balance + bonded
@@ -157,24 +157,27 @@ impl State {
         }
     }
 
-    fn balance(deps: Deps, env: &Env, received: Option<Decimal>) -> Result<Decimal, ContractError> {
-        let bal = Decimal::from_atomics(
+    pub(crate) fn query_balance(deps: Deps, env: &Env) -> Result<Decimal, ContractError> {
+        Ok(Decimal::from_atomics(
             deps.querier
                 .query_balance(&env.contract.address, RUNE)?
                 .amount,
             0,
-        )?;
-        Ok(bal.sub(received.unwrap_or_default()))
+        )?)
     }
+
+    pub(crate) fn effective_balance(balance: Decimal, received: Option<Decimal>) -> Decimal {
+        balance.sub(received.unwrap_or_default())
+    }
+
     /// Returns liquid RUNE available to support bid-side liquidity.
     pub fn quote_liquidity(
         &self,
         deps: Deps,
         env: &Env,
         config: &Config,
-        received: Option<Decimal>,
+        balance: &Decimal,
     ) -> Result<Decimal, ContractError> {
-        let balance = Self::balance(deps, env, received)?;
         let bonded = self.nodes(deps, env, config)?.bonded();
         let ownership = balance + bonded;
         let surplus = ownership.saturating_sub(self.minted);
