@@ -10,7 +10,8 @@ use cw_storage_plus::Item;
 use rujira_rs::brune::RevenueResponse;
 
 use crate::{
-    config::{Config, RUNE},
+    config::Config,
+    contract::rune_balance,
     events::event_warn,
     nodes::{Node, Nodes},
     revenue::Revenue,
@@ -98,7 +99,7 @@ impl State {
 
         let mut nodes = self.nodes(deps.as_ref(), env, config)?;
         let bonded = nodes.bonded();
-        let balance = Self::effective_balance(Self::query_balance(deps.as_ref(), env)?, received);
+        let balance = Self::effective_balance(rune_balance(&deps.as_ref(), env)?, received);
 
         // Step 1: Calculate any new revenue and execute revenue distribution
         // 1. Calculate total RUNE ownership - balance + bonded
@@ -157,15 +158,6 @@ impl State {
         }
     }
 
-    pub(crate) fn query_balance(deps: Deps, env: &Env) -> Result<Decimal, ContractError> {
-        Ok(Decimal::from_atomics(
-            deps.querier
-                .query_balance(&env.contract.address, RUNE)?
-                .amount,
-            0,
-        )?)
-    }
-
     pub(crate) fn effective_balance(balance: Decimal, received: Option<Decimal>) -> Decimal {
         balance.sub(received.unwrap_or_default())
     }
@@ -198,6 +190,7 @@ impl From<Revenue> for RevenueResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::RUNE;
     use crate::revenue::Revenue;
     use cosmwasm_std::Binary;
     use cosmwasm_std::{

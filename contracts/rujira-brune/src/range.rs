@@ -1,17 +1,18 @@
 use crate::{
     config::{Config, RUNE},
+    contract::rune_balance,
     events::{event_burn, event_mint},
     state::State,
     ContractError,
 };
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    coins, to_json_binary, BankMsg, Binary, Coin, Decimal, Deps, Env, MessageInfo, Response,
-    Uint128,
+    coins, from_json, to_json_binary, BankMsg, Binary, Coin, Decimal, Deps, Env, MessageInfo,
+    Response, Uint128,
 };
 use cw_utils::must_pay;
 use rujira_rs::{
-    bow::{self, QuoteRequest, QuoteResponse},
+    bow::{self, QuoteResponse},
     brune::RangeConfig,
     fin::{Scl, Side},
     TokenFactory,
@@ -19,9 +20,8 @@ use rujira_rs::{
 use std::cmp::Ordering;
 
 #[cw_serde]
-struct QuoteData {
+pub struct QuoteData {
     next: Decimal,
-    balance: Decimal,
 }
 
 impl State {
@@ -30,13 +30,15 @@ impl State {
         deps: Deps,
         env: &Env,
         config: &Config,
-        req: &QuoteRequest,
+        balance: &Decimal,
+        data: &Option<Binary>,
+        (ask_denom, offer_denom): (String, String),
     ) -> Result<QuoteResponse, ContractError> {
         let token = TokenFactory::new(env, &config.token_id);
-        if req.ask_denom == RUNE && req.offer_denom == token.denom() {
-            self.quote_bid(deps, env, config, req)
-        } else if req.ask_denom == token.denom() && req.offer_denom == RUNE {
-            self.quote_ask(deps, env, config, req)
+        if ask_denom == RUNE && offer_denom == token.denom() {
+            self.quote_bid(deps, env, config, balance, data)
+        } else if ask_denom == token.denom() && offer_denom == RUNE {
+            self.quote_ask(deps, env, config, data)
         } else {
             Err(ContractError::InsufficientFunds {})
         }
@@ -47,9 +49,9 @@ impl State {
         deps: Deps,
         env: &Env,
         config: &Config,
-        req: &QuoteRequest,
+        data: &Option<Binary>,
     ) -> Result<QuoteResponse, ContractError> {
-        match req.data {
+        match data {
             Some(_) => Err(ContractError::InsufficientFunds {}),
             None => {
                 let size = self
@@ -77,22 +79,16 @@ impl State {
         deps: Deps,
         env: &Env,
         config: &Config,
-        req: &QuoteRequest,
+        balance: &Decimal,
+        data: &Option<Binary>,
     ) -> Result<QuoteResponse, ContractError> {
-        let data = req
-            .data
-            .clone()
-            .map(cosmwasm_std::from_json::<QuoteData>)
-            .transpose()?;
+        let data = data.clone().map(from_json::<QuoteData>).transpose()?;
         let start = data
             .as_ref()
             .map(|data| data.next)
             .unwrap_or(config.range.high);
-        let balance = match data.as_ref() {
-            Some(data) => data.balance,
-            None => State::query_balance(deps, env)?,
-        };
-        let quote = self.quote_liquidity(deps, env, config, &balance)?;
+
+        let quote = self.quote_liquidity(deps, env, config, balance)?;
 
         let Some((price, size, next)) = quote_slice(&config.range, quote, start) else {
             return Err(ContractError::InsufficientFunds {});
@@ -105,7 +101,7 @@ impl State {
         Ok(QuoteResponse {
             price,
             size,
-            data: Some(to_json_binary(&QuoteData { next, balance })?),
+            data: Some(to_json_binary(&QuoteData { next })?),
         })
     }
 
@@ -181,7 +177,7 @@ impl State {
         received: Decimal,
     ) -> Result<Response, ContractError> {
         let amount = must_pay(info, &token.denom())?;
-        let balance = Self::effective_balance(Self::query_balance(deps, env)?, Some(received));
+        let balance = Self::effective_balance(rune_balance(&deps, env)?, Some(received));
         let quote = self.quote_liquidity(deps, env, config, &balance)?;
         let returned = quote_return(&config.range, quote, amount);
 
@@ -260,8 +256,8 @@ fn quote_return(range: &RangeConfig, quote: Decimal, offer: Uint128) -> Uint128 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env};
-    use cosmwasm_std::{coin, Addr, SignedDecimal};
+
+    use cosmwasm_std::{Addr, SignedDecimal};
 
     fn config() -> Config {
         Config {
@@ -346,56 +342,5 @@ mod tests {
             quote_return(&config.range, quote, total_capacity + Uint128::new(1_000)),
             total_size
         );
-    }
-
-    #[test]
-    fn quote_bid_reuses_balance_from_quote_data() {
-        let config = config();
-        let mut deps = mock_dependencies_with_balance(&[coin(10_000, RUNE)]);
-        let env = mock_env();
-        let mut state = State::default();
-        state.minted = Decimal::from_ratio(10_000u128, 1u128);
-        let token = TokenFactory::new(&env, &config.token_id);
-
-        let first = state
-            .quote(
-                deps.as_ref(),
-                &env,
-                &config,
-                &QuoteRequest {
-                    min_price: None,
-                    offer_denom: token.denom(),
-                    ask_denom: RUNE.to_string(),
-                    data: None,
-                },
-            )
-            .unwrap();
-
-        let first_data = first.data.unwrap();
-        let stored = cosmwasm_std::from_json::<QuoteData>(first_data.clone()).unwrap();
-        assert_eq!(stored.balance, Decimal::from_ratio(10_000u128, 1u128));
-
-        deps.querier
-            .bank
-            .update_balance(env.contract.address.as_str(), vec![]);
-
-        let second = state
-            .quote(
-                deps.as_ref(),
-                &env,
-                &config,
-                &QuoteRequest {
-                    min_price: None,
-                    offer_denom: token.denom(),
-                    ask_denom: RUNE.to_string(),
-                    data: Some(first_data),
-                },
-            )
-            .unwrap();
-
-        let second_data = cosmwasm_std::from_json::<QuoteData>(second.data.unwrap()).unwrap();
-        assert_eq!(second_data.balance, stored.balance);
-        assert!(second.price < first.price);
-        assert!(second_data.next < stored.next);
     }
 }

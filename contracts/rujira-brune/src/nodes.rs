@@ -4,6 +4,7 @@ use std::{
     str::FromStr,
 };
 
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     Addr, CanonicalAddr, Decimal, DepsMut, Env, QuerierWrapper, Response, StdResult, Storage,
     SubMsg, Uint128,
@@ -24,7 +25,8 @@ use crate::{
 };
 
 /// Convenience struct to load all whitelisted nodes and perform aggregate queries over them
-#[derive(Default, Debug)]
+#[cw_serde]
+#[derive(Default)]
 pub struct Nodes {
     bond: Decimal,
     weight: Decimal,
@@ -260,7 +262,7 @@ impl Add<Node> for Nodes {
     }
 }
 
-#[derive(Clone, Debug)]
+#[cw_serde]
 pub struct Node {
     pub addr: Addr,
     /// The fee charged by the node operator

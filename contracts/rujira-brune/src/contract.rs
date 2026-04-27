@@ -1,10 +1,13 @@
+use cosmwasm_schema::cw_serde;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    ensure_eq, to_json_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply, Response,
+    ensure_eq, from_json, to_json_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply,
+    Response,
 };
 use cw2::set_contract_version;
 use cw_utils::must_pay;
+use rujira_rs::bow::QuoteResponse;
 use rujira_rs::brune::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, NodesResponse, QueryMsg, RevenueResponse,
     StateResponse, SudoMsg,
@@ -110,23 +113,71 @@ fn process_node(
     }
 }
 
+/// Skip re-loading all nodes and state every iteration in Quote
+#[cw_serde]
+struct StoreCache {
+    pub config: Config,
+    pub state: State,
+    pub balance: Decimal,
+    pub quote: Option<Binary>,
+}
+
+pub fn rune_balance(deps: &Deps, env: &Env) -> Result<Decimal, ContractError> {
+    Ok(Decimal::from_atomics(
+        deps.querier
+            .query_balance(&env.contract.address, RUNE)?
+            .amount,
+        0,
+    )?)
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
-    let config = Config::load(deps.storage)?;
-    let state = State::load(deps.storage)?;
     match msg {
-        QueryMsg::Quote(req) => Ok(to_json_binary(&state.quote(deps, &env, &config, &req)?)?),
+        QueryMsg::Quote(req) => {
+            let cache = match req.data.clone().map(from_json).transpose()? {
+                Some(v) => v,
+                None => StoreCache {
+                    config: Config::load(deps.storage)?,
+                    state: State::load(deps.storage)?,
+                    quote: None,
+                    balance: rune_balance(&deps, &env)?,
+                },
+            };
+            let res = cache.state.quote(
+                deps,
+                &env,
+                &cache.config,
+                &cache.balance,
+                &cache.quote,
+                (req.ask_denom, req.offer_denom),
+            )?;
+            Ok(to_json_binary(&QuoteResponse {
+                data: Some(to_json_binary(&StoreCache {
+                    quote: res.data,
+                    ..cache
+                })?),
+                ..res
+            })?)
+        }
         QueryMsg::Events { start_after, limit } => {
             Ok(to_json_binary(&rujira_rs::brune::EventLogResponse {
                 events: query_events(deps.storage, start_after, limit)?,
             })?)
         }
-        QueryMsg::Config {} => Ok(to_json_binary(&ConfigResponse::from(config))?),
-        QueryMsg::State {} => Ok(to_json_binary(&StateResponse {
-            minted: state.minted,
-            nodes: NodesResponse::from(state.nodes(deps, &env, &config)?),
-            revenue: RevenueResponse::from(state.revenue),
-        })?),
+        QueryMsg::Config {} => Ok(to_json_binary(&ConfigResponse::from(Config::load(
+            deps.storage,
+        )?))?),
+        QueryMsg::State {} => {
+            let config = Config::load(deps.storage)?;
+            let state = State::load(deps.storage)?;
+
+            Ok(to_json_binary(&StateResponse {
+                minted: state.minted,
+                nodes: NodesResponse::from(state.nodes(deps, &env, &config)?),
+                revenue: RevenueResponse::from(state.revenue),
+            })?)
+        }
     }
 }
 
@@ -149,6 +200,7 @@ mod tests {
     use cosmwasm_std::{coin, coins, Decimal, Event, Timestamp, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{
+        bow,
         brune::RangeConfig,
         proto::types::{NodeBondProvider, NodeBondProviders, QueryNodeResponse},
         TokenMetadata,
@@ -390,5 +442,20 @@ mod tests {
                 .bond_address,
             contract.to_string()
         );
+
+        let res: bow::QuoteResponse = app
+            .wrap()
+            .query_wasm_smart(
+                contract.clone(),
+                &QueryMsg::Quote(bow::QuoteRequest {
+                    min_price: None,
+                    offer_denom: RUNE.to_owned(),
+                    ask_denom: "x/brune".to_string(),
+                    data: None,
+                }),
+            )
+            .unwrap();
+
+        from_json::<StoreCache>(res.data.unwrap()).unwrap();
     }
 }
