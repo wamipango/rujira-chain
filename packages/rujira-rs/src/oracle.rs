@@ -38,6 +38,12 @@ impl From<Layer1Asset> for Oracle {
     }
 }
 
+impl From<&str> for Oracle {
+    fn from(value: &str) -> Self {
+        Self::Enshrined(value.to_string())
+    }
+}
+
 impl From<String> for Oracle {
     fn from(value: String) -> Self {
         Self::Enshrined(value)

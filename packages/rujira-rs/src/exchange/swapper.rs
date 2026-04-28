@@ -44,13 +44,16 @@ impl<T: SwapItem> Swapper<T> {
         for mut v in iter {
             let mut next_context = self.context.clone();
             let (offer, bids, atts) = v.swap(&mut next_context, self.remaining_offer)?;
+            // A zero-leg result is not executable under integer settlement.
+            // Skip it without committing state; a later item may still be executable.
+            if offer.is_zero() || bids.is_zero() {
+                continue;
+            }
             // If we've breached reached a SwapRequest::Limit, don't commit this step and break
             if let SwapRequest::Limit { price: limit, .. } = self.req {
-                if !bids.is_zero() {
-                    let achieved = Decimal::from_ratio(offer, bids);
-                    if achieved > limit {
-                        break;
-                    }
+                let achieved = Decimal::from_ratio(offer, bids);
+                if achieved > limit {
+                    break;
                 }
             }
             self.context = next_context;
@@ -345,5 +348,36 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_swap_skips_zero_fill_tier() {
+        let mut iter = TestIter::new(vec![
+            (Decimal::from_str("1.0").unwrap(), Uint128::from(5u128)),
+            // Complete-fill branch: floor(1 / 2) = 0, so this tier is not executable.
+            (Decimal::from_str("2.0").unwrap(), Uint128::from(1u128)),
+            (Decimal::from_str("0.5").unwrap(), Uint128::from(100u128)),
+        ]);
+
+        let mut s = Swapper::new(
+            "some-prefix",
+            TestIterContext::default(),
+            Uint128::from(10u128),
+            SwapRequest::Yolo {
+                to: None,
+                callback: None,
+            },
+            Decimal::zero(),
+        );
+        let res = s.swap(&mut iter).unwrap();
+
+        assert_eq!(res.consumed_offer, Uint128::from(10u128));
+        assert_eq!(res.return_amount, Uint128::from(8u128));
+        assert_eq!(res.remaining_offer, Uint128::zero());
+        assert_eq!(res.events.len(), 2);
+        assert_eq!(res.events[0].attributes[1].value, "5");
+        assert_eq!(res.events[0].attributes[2].value, "5");
+        assert_eq!(res.events[1].attributes[1].value, "5");
+        assert_eq!(res.events[1].attributes[2].value, "3");
     }
 }

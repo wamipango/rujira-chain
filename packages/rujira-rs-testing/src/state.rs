@@ -1,5 +1,6 @@
 use anyhow::{Context, Result as AnyResult};
 use cosmwasm_std::{from_base64, from_hex, Addr, Coin};
+use cw_multi_test::Stargate;
 use serde::Deserialize;
 
 use crate::mock::RujiraApp;
@@ -22,8 +23,8 @@ struct ExportedBankState {
     balances: Vec<Coin>,
 }
 
-pub fn load_contract_state(
-    app: &mut RujiraApp,
+pub fn load_contract_state<T: Stargate>(
+    app: &mut RujiraApp<T>,
     contract_addr: &Addr,
     label: &str,
     height: u64,
@@ -51,8 +52,8 @@ pub fn load_contract_state(
     Ok(())
 }
 
-fn load_wasm_state_from_slice(
-    app: &mut RujiraApp,
+fn load_wasm_state_from_slice<T: Stargate>(
+    app: &mut RujiraApp<T>,
     contract_addr: &Addr,
     data: &[u8],
 ) -> AnyResult<usize> {
@@ -74,8 +75,8 @@ fn load_wasm_state_from_slice(
     Ok(loaded)
 }
 
-fn load_bank_balances_from_slice(
-    app: &mut RujiraApp,
+fn load_bank_balances_from_slice<T: Stargate>(
+    app: &mut RujiraApp<T>,
     contract_addr: &Addr,
     data: &[u8],
 ) -> AnyResult<()> {

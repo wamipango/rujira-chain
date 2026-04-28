@@ -257,7 +257,9 @@ mod tests {
         staking::{AccountResponse, StatusResponse},
         TokenMetadata,
     };
-    use rujira_rs_testing::{mock_rujira_app, mock_swap_contract, MsgSwap, RujiraApp};
+    use rujira_rs_testing::{
+        mock_rujira_app, mock_swap_contract, MsgSwap, RujiraApp, RujiraStargate,
+    };
 
     enum TestFee {
         FivePercent,
@@ -281,7 +283,7 @@ mod tests {
 
     // Helper functions
     fn bond_account(
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<RujiraStargate>,
         contract: &Addr,
         account: &Addr,
         amount: u128,
@@ -297,7 +299,7 @@ mod tests {
     }
 
     fn bond_liquid(
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<RujiraStargate>,
         contract: &Addr,
         account: &Addr,
         amount: u128,
@@ -312,12 +314,17 @@ mod tests {
         .unwrap()
     }
 
-    fn assert_balance(app: &RujiraApp, account: &Addr, denom: &str, amount: Uint128) {
+    fn assert_balance(
+        app: &RujiraApp<RujiraStargate>,
+        account: &Addr,
+        denom: &str,
+        amount: Uint128,
+    ) {
         let balance = app.wrap().query_balance(account.clone(), denom).unwrap();
         assert_eq!(balance.amount, amount);
     }
 
-    fn get_pending_swap(app: &RujiraApp, contract: &Addr) -> Uint128 {
+    fn get_pending_swap(app: &RujiraApp<RujiraStargate>, contract: &Addr) -> Uint128 {
         let pending_swap_key = "s".as_bytes();
         let raw_value = app
             .wrap()
@@ -330,11 +337,16 @@ mod tests {
         Uint128::from(value)
     }
 
-    fn assert_pending_swap(app: &RujiraApp, contract: &Addr, expected: Uint128) {
+    fn assert_pending_swap(app: &RujiraApp<RujiraStargate>, contract: &Addr, expected: Uint128) {
         assert_eq!(get_pending_swap(app, contract), expected);
     }
 
-    fn assert_state(app: &RujiraApp, contract: &Addr, _comment: &str, expected: &StatusResponse) {
+    fn assert_state(
+        app: &RujiraApp<RujiraStargate>,
+        contract: &Addr,
+        _comment: &str,
+        expected: &StatusResponse,
+    ) {
         let status: StatusResponse = app
             .wrap()
             .query_wasm_smart(contract.clone(), &QueryMsg::Status {})
@@ -342,7 +354,11 @@ mod tests {
         assert_eq!(status, *expected);
     }
 
-    fn assert_account(app: &RujiraApp, contract: &Addr, expected: &AccountResponse) {
+    fn assert_account(
+        app: &RujiraApp<RujiraStargate>,
+        contract: &Addr,
+        expected: &AccountResponse,
+    ) {
         let account: AccountResponse = app
             .wrap()
             .query_wasm_smart(
@@ -367,7 +383,9 @@ mod tests {
         pub account_2: Addr,
     }
 
-    fn init_app(test_fee: Option<TestFee>) -> (RujiraApp, Addr, Addr, Stakers, Fees) {
+    fn init_app(
+        test_fee: Option<TestFee>,
+    ) -> (RujiraApp<RujiraStargate>, Addr, Addr, Stakers, Fees) {
         let mut app = mock_rujira_app();
         let apps = app.api().addr_make("apps");
         let owner = app.api().addr_make("owner");
@@ -412,7 +430,7 @@ mod tests {
         (app, apps, owner, stakers, fees)
     }
 
-    fn create_swap_contract(app: &mut RujiraApp, owner: &Addr) -> Addr {
+    fn create_swap_contract(app: &mut RujiraApp<RujiraStargate>, owner: &Addr) -> Addr {
         let swap_code_id = app.store_code(mock_swap_contract());
         app.instantiate_contract(
             swap_code_id,
@@ -426,7 +444,7 @@ mod tests {
     }
 
     fn create_staking_contract(
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<RujiraStargate>,
         owner: &Addr,
         fee: Option<(Decimal, String)>,
         swap_contract: Addr,

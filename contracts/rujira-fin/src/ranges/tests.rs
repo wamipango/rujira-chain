@@ -426,6 +426,53 @@ fn range_offer_swap_partial_fill() {
 }
 
 #[test]
+fn range_offer_swap_dust_rounds_down_to_no_fill() {
+    let mut offer = RangeOffer {
+        side: Side::Quote,
+        start: Decimal::from_str("2281.6").unwrap(),
+        end: Decimal::from_str("2281.59").unwrap(),
+        total: Decimal::from_str("3040823.826021148969545223").unwrap(),
+        effective_rate: Decimal256::from_str("2281.595000076186318857").unwrap(),
+        ranges: vec![(
+            Range {
+                idx: Uint128::one(),
+                fees: [Decimal::zero(), Decimal::zero()],
+                owner: Addr::unchecked(""),
+                high: Decimal::from_str("3000").unwrap(),
+                low: Decimal::from_str("1500").unwrap(),
+                skew: SignedDecimal::zero(),
+                spread: Decimal::zero(),
+                fee: Decimal::zero(),
+                base: Decimal::one(),
+                quote: Decimal::from_str("5000").unwrap(),
+                price: Decimal::from_str("2281.595000076186318857").unwrap(),
+                ask: Decimal::from_str("2281.6").unwrap(),
+                bid: Decimal::from_str("2281.59").unwrap(),
+            },
+            Decimal::from_str("3040823.826021148969545223").unwrap(),
+        )],
+        updates: Default::default(),
+    };
+    let mut ctx = RangeContext::new(
+        Addr::unchecked(""),
+        Decimal::zero(),
+        Denoms::new("base", "quote"),
+        Tick::new(8),
+    );
+
+    let before_total = offer.total;
+    let before_range = offer.ranges[0].clone();
+    let (offer_consumed, bids_returned, attrs) = offer.swap(&mut ctx, Uint128::one()).unwrap();
+
+    assert_eq!(offer_consumed, Uint128::zero());
+    assert_eq!(bids_returned, Uint128::zero());
+    assert!(attrs.is_empty());
+    assert_eq!(offer.total, before_total);
+    assert_eq!(offer.ranges[0], before_range);
+    assert!(ctx.ranges.is_empty());
+}
+
+#[test]
 fn range_offer_swap_overfill() {
     let mut offer = RangeOffer {
         side: Side::Quote,
@@ -760,7 +807,7 @@ fn range_offer_iter_commit_changes() {
     };
     assert_eq!(res.consumed_offer, Uint128::new(999_999));
     // return_amount reflects curve-effective pricing (ΔY/ΔX) instead of slice boundary
-    assert_eq!(res.return_amount, Uint128::new(3_394_327));
+    assert_eq!(res.return_amount, Uint128::new(3_394_321));
 
     swapper
         .context

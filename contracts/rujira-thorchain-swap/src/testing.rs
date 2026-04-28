@@ -6,7 +6,7 @@ use rujira_rs::{
     thorchain_swap::{ExecuteMsg, InstantiateMsg, SudoMsg},
     TokenMetadata,
 };
-use rujira_rs_testing::{mock_rujira_app, RujiraApp};
+use rujira_rs_testing::{mock_rujira_app, RujiraApp, RujiraStargate};
 
 use crate::contract;
 
@@ -74,7 +74,7 @@ fn complete_swap() {
     );
 }
 
-pub fn setup(app: &mut RujiraApp, owner: &Addr) -> Addr {
+pub fn setup(app: &mut RujiraApp<RujiraStargate>, owner: &Addr) -> Addr {
     app.init_modules(|x, _api, storage| {
         x.bank.init_balance(
             storage,

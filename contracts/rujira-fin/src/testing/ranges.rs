@@ -214,13 +214,13 @@ fn test_composite_range_lifecycle() {
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", user_b.as_str()),
         ("sender", fin.addr().as_str()),
-        ("amount", "1btc-btc,140711541022rune"),
+        ("amount", "1btc-btc,140710491931rune"),
     ]));
 
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", fees.as_str()),
         ("sender", fin.addr().as_str()),
-        ("amount", "2142815346rune"),
+        ("amount", "2142799370rune"),
     ]));
 
     let range_1 = fin.query_range(&app, &Uint128::one()).unwrap();
@@ -231,7 +231,7 @@ fn test_composite_range_lifecycle() {
 
     assert_eq!(
         range_1.base,
-        Decimal::from_str("578487110282.996296569819300403").unwrap()
+        Decimal::from_str("578487766137.242027476068656204").unwrap()
     );
     // quote updated due to halved range_fee — more goes to reserves
     assert_eq!(
@@ -247,7 +247,7 @@ fn test_composite_range_lifecycle() {
 
     assert_eq!(
         range_2.base,
-        Decimal::from_str("360958533349.003703430180699597").unwrap()
+        Decimal::from_str("360958942561.757972523931343796").unwrap()
     );
     assert_eq!(
         range_2.quote,
@@ -284,7 +284,7 @@ fn test_composite_range_lifecycle() {
         &Event::new("wasm-rujira-fin/range.close").add_attributes(vec![
             ("owner", user_a.as_str()),
             ("idx", "1"),
-            ("base", "578487110282"),
+            ("base", "578487766137"),
             ("quote", "5614711"),
             ("fee_base", "0"),
             ("fee_quote", "0"),
@@ -294,7 +294,7 @@ fn test_composite_range_lifecycle() {
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", user_a.as_str()),
         ("sender", fin.addr().as_str()),
-        ("amount", "5614711btc-btc,578487110282rune"),
+        ("amount", "5614711btc-btc,578487766137rune"),
     ]));
 
     let res = fin.close_range(&mut app, &user_a, &range_2.idx).unwrap();
@@ -302,7 +302,7 @@ fn test_composite_range_lifecycle() {
         &Event::new("wasm-rujira-fin/range.close").add_attributes(vec![
             ("owner", user_a.as_str()),
             ("idx", "2"),
-            ("base", "360958533349"),
+            ("base", "360958942561"),
             ("quote", "4750350"),
             ("fee_base", "0"),
             ("fee_quote", "19"),
@@ -312,7 +312,7 @@ fn test_composite_range_lifecycle() {
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", user_a.as_str()),
         ("sender", fin.addr().as_str()),
-        ("amount", "4750369btc-btc,360958533349rune"),
+        ("amount", "4750369btc-btc,360958942561rune"),
     ]));
 }
 

@@ -4,51 +4,58 @@ stages:
   - schema
   - optimize
 
+.rust-job: &rust-job
+  image: docker.io/rust:1.75-slim-bullseye
+  variables:
+    CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+    CARGO_INCREMENTAL: "0"
+    CARGO_TARGET_DIR: "/cache/$CI_PROJECT_PATH_SLUG/$CI_COMMIT_REF_SLUG/target"
+    RUSTFLAGS: "-C debuginfo=0"
+  before_script:
+    - export PATH="$CARGO_HOME/bin:$PATH"
+    - apt update -y
+    - apt install curl git -y
+    - command -v just >/dev/null || curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to "$CARGO_HOME/bin"
+  cache: &cargo-cache
+    key:
+      files:
+        - Cargo.lock
+      prefix: cargo
+    policy: pull
+    paths:
+      - .cargo/bin
+      - .cargo/registry/index
+      - .cargo/registry/cache
+      - .cargo/git/db
+      - .cargo/git/checkouts
+
 build:
+  <<: *rust-job
   stage: build
   needs: []
-  image: docker.io/rust:1.75-slim-bullseye
+  cache:
+    <<: *cargo-cache
+    policy: pull-push
   script:
-    - apt update -y
-    - apt install curl -y
-    - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/cargo/bin
     - rustup component add clippy rustfmt
     - just cargo-compile
     - just cargo-clippy-check
     - just cargo-fmt-check
-  cache:
-    paths:
-      - .cargo
-      - target
 
 test:
+  <<: *rust-job
   stage: test
   needs: []
-  image: docker.io/rust:1.75-slim-bullseye
   script:
-    - apt update -y
-    - apt install curl -y
-    - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/cargo/bin
     - just cargo-test
-  cache:
-    paths:
-      - .cargo
-      - target
       
 schema:
+  <<: *rust-job
   stage: schema
   needs: []
-  image: docker.io/rust:1.75-slim-bullseye
   script:
-    - apt update -y
-    - apt install curl git -y
-    - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/cargo/bin
     - just generate-schema
     - git diff --exit-code || { echo "Schema generation resulted in a diff. Please run 'just generate-schema' locally and commit the changes."; exit 1; }
-  cache:
-    paths:
-      - .cargo
-      - target
 
 optimize:
   stage: optimize

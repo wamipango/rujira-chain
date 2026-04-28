@@ -269,9 +269,9 @@ mod tests {
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
 
     use rujira_rs::pilot::Denoms;
-    use rujira_rs_testing::{mock_rujira_app, RujiraApp};
+    use rujira_rs_testing::{mock_rujira_app, RujiraApp, RujiraStargate};
 
-    fn setup() -> (RujiraApp, Addr) {
+    fn setup() -> (RujiraApp<RujiraStargate>, Addr) {
         let mut app = mock_rujira_app();
 
         let owner = app.api().addr_make("owner");

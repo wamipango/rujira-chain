@@ -1,0 +1,68 @@
+{
+  "balances": [
+    {
+      "denom": "avax-avax",
+      "amount": "10800105"
+    },
+    {
+      "denom": "avax-usdc-0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
+      "amount": "2393220"
+    },
+    {
+      "denom": "base-usdc-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "amount": "31831820"
+    },
+    {
+      "denom": "bch-bch",
+      "amount": "23012"
+    },
+    {
+      "denom": "bsc-usdt-0x55d398326f99059ff775485246999027b3197955",
+      "amount": "9996"
+    },
+    {
+      "denom": "btc-btc",
+      "amount": "872440"
+    },
+    {
+      "denom": "doge-doge",
+      "amount": "16993389"
+    },
+    {
+      "denom": "eth-eth",
+      "amount": "3222380"
+    },
+    {
+      "denom": "eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amount": "95311818150"
+    },
+    {
+      "denom": "eth-usdt-0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amount": "6489580855"
+    },
+    {
+      "denom": "eth-wbtc-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "amount": "8407"
+    },
+    {
+      "denom": "gaia-atom",
+      "amount": "28550824"
+    },
+    {
+      "denom": "rune",
+      "amount": "2"
+    },
+    {
+      "denom": "tcy",
+      "amount": "1006037736972"
+    },
+    {
+      "denom": "x/ruji",
+      "amount": "46563574824"
+    },
+    {
+      "denom": "xrp-xrp",
+      "amount": "67387208"
+    }
+  ]
+}

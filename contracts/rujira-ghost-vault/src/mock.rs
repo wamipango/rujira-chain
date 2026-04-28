@@ -1,5 +1,5 @@
 use cosmwasm_std::{coins, Addr, Decimal, Uint128};
-use cw_multi_test::{ContractWrapper, Executor};
+use cw_multi_test::{ContractWrapper, Executor, Stargate};
 
 use rujira_rs::{
     ghost::{self, interest::Interest},
@@ -18,9 +18,9 @@ impl GhostVault {
     }
 
     /// Execute a deposit into the vault
-    pub fn deposit(
+    pub fn deposit<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         amount: u128,
         denom: &str,
@@ -34,9 +34,9 @@ impl GhostVault {
     }
 
     /// Execute a withdrawal from the vault
-    pub fn withdraw(
+    pub fn withdraw<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         amount: Uint128,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
@@ -49,9 +49,9 @@ impl GhostVault {
     }
 
     /// Set borrower permissions via sudo
-    pub fn set_borrower(
+    pub fn set_borrower<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         contract: &str,
         limit: Uint128,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
@@ -65,16 +65,19 @@ impl GhostVault {
     }
 
     /// Query vault status
-    pub fn query_status(&self, app: &RujiraApp) -> anyhow::Result<ghost::vault::StatusResponse> {
+    pub fn query_status<T: Stargate>(
+        &self,
+        app: &RujiraApp<T>,
+    ) -> anyhow::Result<ghost::vault::StatusResponse> {
         Ok(app
             .wrap()
             .query_wasm_smart(self.0.clone(), &ghost::vault::QueryMsg::Status {})?)
     }
 
     /// Query borrower info
-    pub fn query_borrower(
+    pub fn query_borrower<T: Stargate>(
         &self,
-        app: &RujiraApp,
+        app: &RujiraApp<T>,
         addr: &str,
     ) -> anyhow::Result<ghost::common::BorrowerResponse> {
         Ok(app.wrap().query_wasm_smart(
@@ -86,7 +89,7 @@ impl GhostVault {
     }
 
     /// Setup a ghost vault for a specific denom
-    pub fn create(app: &mut RujiraApp, owner: &Addr, denom: &str) -> Self {
+    pub fn create<T: Stargate>(app: &mut RujiraApp<T>, owner: &Addr, denom: &str) -> Self {
         let vault_code = Box::new(
             ContractWrapper::new(
                 crate::contract::execute,

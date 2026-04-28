@@ -129,6 +129,13 @@ impl SwapItem for RangeOffer {
             Side::Quote => Decimal256::from(bids_used) * rate_inv256,
         })?
         .floor();
+
+        // Integer settlement cannot execute a trade once either leg rounds to zero.
+        // Returning a partial zero-leg fill here creates phantom profit in arb loops.
+        if offer_used.to_uint_ceil().is_zero() || bids_used.to_uint_floor().is_zero() {
+            return Ok((Uint128::zero(), Uint128::zero(), vec![]));
+        }
+
         let mut remaining_bids_used = bids_used;
         let mut remaining_offer_used = offer_used;
         let len = self.ranges.len();

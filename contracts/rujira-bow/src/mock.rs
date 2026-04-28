@@ -1,5 +1,5 @@
 use cosmwasm_std::{coins, Addr, Decimal, Uint128};
-use cw_multi_test::{ContractWrapper, Executor};
+use cw_multi_test::{ContractWrapper, Executor, Stargate};
 use rujira_rs_testing::RujiraApp;
 
 use rujira_rs::{
@@ -18,9 +18,9 @@ impl Bow {
     }
 
     /// Execute a deposit into the BOW pool
-    pub fn deposit(
+    pub fn deposit<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         amounts: &[cosmwasm_std::Coin],
         min_return: Option<Uint128>,
@@ -37,9 +37,9 @@ impl Bow {
     }
 
     /// Execute a withdrawal from the BOW pool
-    pub fn withdraw(
+    pub fn withdraw<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         amount: Uint128,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
@@ -52,9 +52,9 @@ impl Bow {
     }
 
     /// Execute a swap through the BOW pool
-    pub fn swap(
+    pub fn swap<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         offer_amount: u128,
         offer_denom: &str,
@@ -73,16 +73,19 @@ impl Bow {
     }
 
     /// Query the BOW strategy
-    pub fn query_strategy(&self, app: &RujiraApp) -> anyhow::Result<bow::StrategyResponse> {
+    pub fn query_strategy<T: Stargate>(
+        &self,
+        app: &RujiraApp<T>,
+    ) -> anyhow::Result<bow::StrategyResponse> {
         Ok(app
             .wrap()
             .query_wasm_smart(self.0.clone(), &bow::QueryMsg::Strategy {})?)
     }
 
     /// Query a quote from the BOW pool
-    pub fn query_quote(
+    pub fn query_quote<T: Stargate>(
         &self,
-        app: &RujiraApp,
+        app: &RujiraApp<T>,
         request: bow::QuoteRequest,
     ) -> anyhow::Result<bow::QuoteResponse> {
         Ok(app
@@ -91,8 +94,8 @@ impl Bow {
     }
 
     /// Setup a BOW contract with XYK strategy
-    pub fn create(
-        app: &mut RujiraApp,
+    pub fn create<T: Stargate>(
+        app: &mut RujiraApp<T>,
         fin: &Addr,
         owner: &Addr,
         base_denom: &str,

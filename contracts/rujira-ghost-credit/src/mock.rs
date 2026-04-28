@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use cosmwasm_std::{coin, coins, to_json_binary, Addr, Binary, Coin, Decimal, Uint128};
-use cw_multi_test::{AppResponse, ContractWrapper, Executor};
+use cw_multi_test::{AppResponse, ContractWrapper, Executor, Stargate};
 use rujira_ghost_vault::mock::GhostVault;
 use rujira_rs::ghost::credit::{
     AccountMsg, AccountResponse, AccountsResponse, ConfigResponse, ExecuteMsg, InstantiateMsg,
@@ -22,9 +22,9 @@ impl GhostCredit {
         &self.0
     }
 
-    pub fn create_account(
+    pub fn create_account<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         owner: &Addr,
         label: &str,
         tag: &str,
@@ -43,9 +43,9 @@ impl GhostCredit {
         .unwrap()
     }
 
-    pub fn account(
+    pub fn account<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         account: &AccountResponse,
         msgs: Vec<AccountMsg>,
     ) -> anyhow::Result<AppResponse> {
@@ -60,9 +60,9 @@ impl GhostCredit {
         )
     }
 
-    pub fn account_borrow(
+    pub fn account_borrow<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         account: &AccountResponse,
         amount: u128,
         denom: &str,
@@ -70,16 +70,16 @@ impl GhostCredit {
         self.account(app, account, vec![AccountMsg::Borrow(coin(amount, denom))])
     }
 
-    pub fn account_execute<T>(
+    pub fn account_execute<M, T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         account: &AccountResponse,
         contract: &Addr,
-        msg: T,
+        msg: M,
         funds: Vec<Coin>,
     ) -> anyhow::Result<AppResponse>
     where
-        T: Serialize + Sized,
+        M: Serialize + Sized,
     {
         self.account(
             app,
@@ -92,9 +92,9 @@ impl GhostCredit {
         )
     }
 
-    pub fn account_send(
+    pub fn account_send<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         account: &AccountResponse,
         amount: u128,
         denom: &str,
@@ -110,9 +110,9 @@ impl GhostCredit {
         )
     }
 
-    pub fn account_preference_order(
+    pub fn account_preference_order<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         account: &AccountResponse,
         denom: &str,
         after: Option<&str>,
@@ -127,9 +127,9 @@ impl GhostCredit {
         )
     }
 
-    pub fn liquidate(
+    pub fn liquidate<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         account: &AccountResponse,
         msgs: Vec<LiquidateMsg>,
     ) -> anyhow::Result<AppResponse> {
@@ -144,16 +144,16 @@ impl GhostCredit {
         )
     }
 
-    pub fn liquidate_execute<T>(
+    pub fn liquidate_execute<M, T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         account: &AccountResponse,
         contract: &Addr,
-        msg: T,
+        msg: M,
         funds: Vec<Coin>,
     ) -> anyhow::Result<AppResponse>
     where
-        T: Serialize + Sized,
+        M: Serialize + Sized,
     {
         self.liquidate(
             app,
@@ -166,17 +166,17 @@ impl GhostCredit {
         )
     }
 
-    pub fn liquidate_execute_repay<T>(
+    pub fn liquidate_execute_repay<M, T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         account: &AccountResponse,
         contract: &Addr,
-        msg: T,
+        msg: M,
         funds: Vec<Coin>,
         repay: &str,
     ) -> anyhow::Result<AppResponse>
     where
-        T: Serialize + Sized,
+        M: Serialize + Sized,
     {
         self.liquidate(
             app,
@@ -192,7 +192,12 @@ impl GhostCredit {
         )
     }
 
-    pub fn set_collateral(&self, app: &mut RujiraApp, denom: &str, ratio: &str) -> AppResponse {
+    pub fn set_collateral<T: Stargate>(
+        &self,
+        app: &mut RujiraApp<T>,
+        denom: &str,
+        ratio: &str,
+    ) -> AppResponse {
         app.wasm_sudo(
             self.0.clone(),
             &SudoMsg::SetCollateral {
@@ -203,7 +208,11 @@ impl GhostCredit {
         .unwrap()
     }
 
-    pub fn set_vault(&self, app: &mut RujiraApp, vault: &GhostVault) -> AppResponse {
+    pub fn set_vault<T: Stargate>(
+        &self,
+        app: &mut RujiraApp<T>,
+        vault: &GhostVault,
+    ) -> AppResponse {
         app.wasm_sudo(
             self.0.clone(),
             &SudoMsg::SetVault {
@@ -213,15 +222,15 @@ impl GhostCredit {
         .unwrap()
     }
 
-    pub fn query_account(&self, app: &RujiraApp, addr: &Addr) -> AccountResponse {
+    pub fn query_account<T: Stargate>(&self, app: &RujiraApp<T>, addr: &Addr) -> AccountResponse {
         app.wrap()
             .query_wasm_smart(self.0.clone(), &QueryMsg::Account(addr.to_string()))
             .unwrap()
     }
 
-    pub fn query_accounts(
+    pub fn query_accounts<T: Stargate>(
         &self,
-        app: &RujiraApp,
+        app: &RujiraApp<T>,
         owner: &Addr,
         tag: Option<String>,
     ) -> AccountsResponse {
@@ -236,7 +245,11 @@ impl GhostCredit {
             .unwrap()
     }
 
-    pub fn query_all_accounts(&self, app: &RujiraApp, cursor: Option<Addr>) -> AccountsResponse {
+    pub fn query_all_accounts<T: Stargate>(
+        &self,
+        app: &RujiraApp<T>,
+        cursor: Option<Addr>,
+    ) -> AccountsResponse {
         app.wrap()
             .query_wasm_smart(
                 self.0.clone(),
@@ -248,13 +261,13 @@ impl GhostCredit {
             .unwrap()
     }
 
-    pub fn query_config(&self, app: &RujiraApp) -> ConfigResponse {
+    pub fn query_config<T: Stargate>(&self, app: &RujiraApp<T>) -> ConfigResponse {
         app.wrap()
             .query_wasm_smart(self.0.clone(), &QueryMsg::Config {})
             .unwrap()
     }
 
-    pub fn query_next(&self, app: &RujiraApp, owner: &Addr, salt: Binary) -> Addr {
+    pub fn query_next<T: Stargate>(&self, app: &RujiraApp<T>, owner: &Addr, salt: Binary) -> Addr {
         app.wrap()
             .query_wasm_smart(
                 self.0.clone(),
@@ -266,7 +279,7 @@ impl GhostCredit {
             .unwrap()
     }
 
-    pub fn create(app: &mut RujiraApp, owner: &Addr, fees: &Addr) -> Self {
+    pub fn create<T: Stargate>(app: &mut RujiraApp<T>, owner: &Addr, fees: &Addr) -> Self {
         let account_code = Box::new(
             ContractWrapper::new(
                 rujira_account::contract::execute,

@@ -194,7 +194,8 @@ impl Range {
         if self.spread.is_zero() {
             ensure!(self.fee.is_zero(), RangeError::InvalidFeeWithZeroSpread {});
         } else {
-            ensure!(self.fee <= self.spread, RangeError::InvalidFee {});
+            let limit = self.spread * Decimal::from_ratio(98u128, 100u128);
+            ensure!(self.fee <= limit, RangeError::InvalidFee {});
         }
         tick.validate_price(&self.high)?;
         tick.validate_price(&self.low)?;

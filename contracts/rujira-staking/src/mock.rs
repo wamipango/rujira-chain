@@ -1,5 +1,5 @@
 use cosmwasm_std::{coins, Addr, Binary, Decimal, Uint128};
-use cw_multi_test::{ContractWrapper, Executor};
+use cw_multi_test::{ContractWrapper, Executor, Stargate};
 
 use rujira_rs::staking::{
     AccountMsg, AccountResponse, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, StatusResponse,
@@ -20,8 +20,8 @@ impl Staking {
         &self.addr
     }
 
-    pub fn create(
-        app: &mut RujiraApp,
+    pub fn create<T: Stargate>(
+        app: &mut RujiraApp<T>,
         owner: &Addr,
         bond_denom: &str,
         revenue_denom: &str,
@@ -65,9 +65,9 @@ impl Staking {
         }
     }
 
-    pub fn account_create(
+    pub fn account_create<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         amount: Uint128,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
@@ -79,9 +79,9 @@ impl Staking {
         )
     }
 
-    pub fn bond_liquid(
+    pub fn bond_liquid<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         amount: Uint128,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
@@ -93,9 +93,9 @@ impl Staking {
         )
     }
 
-    pub fn account_claim(
+    pub fn account_claim<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
         app.execute_contract(
@@ -106,13 +106,13 @@ impl Staking {
         )
     }
 
-    pub fn query_status(&self, app: &RujiraApp) -> StatusResponse {
+    pub fn query_status<T: Stargate>(&self, app: &RujiraApp<T>) -> StatusResponse {
         app.wrap()
             .query_wasm_smart(self.addr.clone(), &QueryMsg::Status {})
             .unwrap()
     }
 
-    pub fn query_account(&self, app: &RujiraApp, addr: &Addr) -> AccountResponse {
+    pub fn query_account<T: Stargate>(&self, app: &RujiraApp<T>, addr: &Addr) -> AccountResponse {
         app.wrap()
             .query_wasm_smart(
                 self.addr.clone(),

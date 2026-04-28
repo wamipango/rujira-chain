@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use cosmwasm_std::{coins, Addr, Coin, Decimal, SignedDecimal, Uint128};
-use cw_multi_test::{ContractWrapper, Executor};
+use cw_multi_test::{ContractWrapper, Executor, Stargate};
 
 use rujira_rs::{
     fin::{
@@ -25,9 +25,9 @@ impl Fin {
     }
 
     /// Execute a swap through FIN
-    pub fn swap(
+    pub fn swap<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         offer_amount: u128,
         offer_denom: &str,
@@ -52,9 +52,9 @@ impl Fin {
     }
 
     /// Place an order on FIN
-    pub fn place_order(
+    pub fn place_order<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         side: Side,
         price: Price,
@@ -70,9 +70,9 @@ impl Fin {
     }
 
     /// Place an order on FIN
-    pub fn place_orders(
+    pub fn place_orders<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         orders: Vec<(Side, Price, Option<Uint128>)>,
         funds: &[Coin],
@@ -86,9 +86,9 @@ impl Fin {
     }
 
     /// Query the order book
-    pub fn query_book(
+    pub fn query_book<T: Stargate>(
         &self,
-        app: &RujiraApp,
+        app: &RujiraApp<T>,
         limit: Option<u8>,
         offset: Option<u32>,
     ) -> anyhow::Result<BookResponse> {
@@ -98,9 +98,9 @@ impl Fin {
     }
 
     /// Query a specific order
-    pub fn query_order(
+    pub fn query_order<T: Stargate>(
         &self,
-        app: &RujiraApp,
+        app: &RujiraApp<T>,
         owner: &str,
         side: Side,
         price: Price,
@@ -112,9 +112,9 @@ impl Fin {
     }
 
     /// Query orders for an owner
-    pub fn query_orders(
+    pub fn query_orders<T: Stargate>(
         &self,
-        app: &RujiraApp,
+        app: &RujiraApp<T>,
         owner: Option<&str>,
         side: Option<Side>,
         limit: Option<u8>,
@@ -132,9 +132,9 @@ impl Fin {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn create_range(
+    pub fn create_range<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         (high, low): (&str, &str),
         spread: &str,
@@ -159,9 +159,9 @@ impl Fin {
         )
     }
 
-    pub fn claim_range(
+    pub fn claim_range<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         idx: &Uint128,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
@@ -173,9 +173,9 @@ impl Fin {
         )
     }
 
-    pub fn close_range(
+    pub fn close_range<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         idx: &Uint128,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
@@ -187,9 +187,9 @@ impl Fin {
         )
     }
 
-    pub fn query_range(
+    pub fn query_range<T: Stargate>(
         &self,
-        app: &RujiraApp,
+        app: &RujiraApp<T>,
         idx: &Uint128,
     ) -> anyhow::Result<rujira_rs::fin::RangeResponse> {
         Ok(app
@@ -197,8 +197,8 @@ impl Fin {
             .query_wasm_smart(self.0.clone(), &QueryMsg::Range(*idx))?)
     }
     /// Setup FIN contract
-    pub fn create(
-        app: &mut RujiraApp,
+    pub fn create<T: Stargate>(
+        app: &mut RujiraApp<T>,
         owner: &Addr,
         fees: &Addr,
         market_makers: &[Addr],
@@ -234,17 +234,17 @@ impl Fin {
         Fin(fin_addr)
     }
 
-    pub fn update_config(
+    pub fn update_config<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         update: ConfigUpdate,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
         app.wasm_sudo(self.0.clone(), &SudoMsg::UpdateConfig(update))
     }
 
-    pub fn update_market_makers(
+    pub fn update_market_makers<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         market_makerts: Vec<String>,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
         self.update_config(

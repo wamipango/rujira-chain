@@ -1,5 +1,5 @@
 use cosmwasm_std::{coin, Addr, Decimal};
-use cw_multi_test::{ContractWrapper, Executor};
+use cw_multi_test::{ContractWrapper, Executor, Stargate};
 
 use rujira_ghost_vault::mock::GhostVault;
 use rujira_rs::thorchain_swap::{ExecuteMsg, InstantiateMsg, SudoMsg};
@@ -16,9 +16,9 @@ impl ThorchainSwap {
     }
 
     /// Execute a swap
-    pub fn swap(
+    pub fn swap<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
         min_return: cosmwasm_std::Coin,
         offer_amount: u128,
@@ -38,18 +38,18 @@ impl ThorchainSwap {
     }
 
     /// Execute repay
-    pub fn repay(
+    pub fn repay<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         sender: &Addr,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
         app.execute_contract(sender.clone(), self.0.clone(), &ExecuteMsg::Repay {}, &[])
     }
 
     /// Set market via sudo
-    pub fn set_market(
+    pub fn set_market<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         addr: &str,
         enabled: bool,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
@@ -63,9 +63,9 @@ impl ThorchainSwap {
     }
 
     /// Set vault via sudo
-    pub fn set_vault(
+    pub fn set_vault<T: Stargate>(
         &self,
-        app: &mut RujiraApp,
+        app: &mut RujiraApp<T>,
         denom: &str,
         vault: Option<&GhostVault>,
     ) -> anyhow::Result<cw_multi_test::AppResponse> {
@@ -79,9 +79,9 @@ impl ThorchainSwap {
     }
 
     /// Query config
-    pub fn query_config(
+    pub fn query_config<T: Stargate>(
         &self,
-        app: &RujiraApp,
+        app: &RujiraApp<T>,
     ) -> anyhow::Result<rujira_rs::thorchain_swap::ConfigResponse> {
         Ok(app.wrap().query_wasm_smart(
             self.0.clone(),
@@ -90,9 +90,9 @@ impl ThorchainSwap {
     }
 
     /// Query all vaults
-    pub fn query_vaults(
+    pub fn query_vaults<T: Stargate>(
         &self,
-        app: &RujiraApp,
+        app: &RujiraApp<T>,
     ) -> anyhow::Result<rujira_rs::thorchain_swap::VaultsResponse> {
         Ok(app.wrap().query_wasm_smart(
             self.0.clone(),
@@ -101,9 +101,9 @@ impl ThorchainSwap {
     }
 
     /// Helper method to get a specific vault by denom
-    pub fn get_vault_for_denom(
+    pub fn get_vault_for_denom<T: Stargate>(
         &self,
-        app: &RujiraApp,
+        app: &RujiraApp<T>,
         denom: &str,
     ) -> anyhow::Result<Option<Addr>> {
         let vaults_response = self.query_vaults(app)?;
@@ -115,7 +115,7 @@ impl ThorchainSwap {
     }
 
     /// Setup Thorchain Swap contract with ghost vaults
-    pub fn create(app: &mut RujiraApp, owner: &Addr) -> Self {
+    pub fn create<T: Stargate>(app: &mut RujiraApp<T>, owner: &Addr) -> Self {
         let code = Box::new(
             ContractWrapper::new(
                 crate::contract::execute,

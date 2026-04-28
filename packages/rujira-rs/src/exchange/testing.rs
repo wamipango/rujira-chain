@@ -27,6 +27,21 @@ impl TestItem {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct FloorItem {
+    pub price: Decimal,
+    pub amount: Uint128,
+}
+
+impl FloorItem {
+    pub fn new(price: &str, amount: u128) -> Self {
+        Self {
+            price: Decimal::from_str(price).unwrap(),
+            amount: Uint128::from(amount),
+        }
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct TestIterContext {
     items: Vec<TestItem>,
@@ -80,6 +95,44 @@ impl SwapItem for TestItem {
         // Increment commitment as the same offer may be used multiple times, particularly during arbitrage
         self.commitment = (offer, ask);
         Ok((offer, ask, vec![Attribute::new("test", "attr")]))
+    }
+}
+
+impl SwapItem for FloorItem {
+    type Context = ();
+
+    fn rate(&self) -> Decimal {
+        self.price
+    }
+
+    fn total(&self) -> Uint128 {
+        self.amount
+    }
+
+    fn swap(
+        &mut self,
+        _context: &mut Self::Context,
+        offer: Uint128,
+    ) -> Result<(Uint128, Uint128, Vec<Attribute>), SwapError> {
+        let offer_value = Decimal::from_ratio(offer, 1u128)
+            .mul(self.price)
+            .to_uint_floor();
+        let pool_value = Decimal::from_ratio(self.amount, 1u128)
+            .div(self.price)
+            .to_uint_floor();
+        let (offer, ask) = match self.amount.cmp(&offer_value) {
+            Ordering::Greater => {
+                self.amount -= offer_value;
+                (offer, offer_value)
+            }
+            _ => {
+                let size = self.amount;
+                self.amount = Uint128::zero();
+                (pool_value, size)
+            }
+        };
+
+        Ok((offer, ask, vec![]))
     }
 }
 

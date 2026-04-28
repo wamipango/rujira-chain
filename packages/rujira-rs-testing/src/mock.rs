@@ -17,7 +17,7 @@ mod denom;
 mod thorchain;
 mod wasm;
 
-pub type RujiraApp = App<
+pub type RujiraApp<T = RujiraStargate> = App<
     BankKeeper,
     MockApi,
     MockStorage,
@@ -30,10 +30,10 @@ pub type RujiraApp = App<
     FailingModule<Empty, Empty, Empty>,
     IbcFailingModule,
     GovFailingModule,
-    RujiraStargate,
+    T,
 >;
 
-pub fn mock_rujira_app() -> RujiraApp {
+pub fn mock_rujira_app() -> RujiraApp<RujiraStargate> {
     BasicAppBuilder::new()
         .with_stargate(RujiraStargate::default())
         .build(|_, _, _| {})
