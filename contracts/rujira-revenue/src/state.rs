@@ -9,7 +9,7 @@ use rujira_rs::revenue::{ActionResponse, ConfigResponse, InstantiateMsg};
 
 static CONFIG: Item<Config> = Item::new("config");
 static LAST: Item<String> = Item::new("last");
-static ACTIONS: Map<String, (Addr, Uint128, Binary)> = Map::new("actions");
+static ACTIONS: Map<String, (Addr, Uint128, Uint128, Binary)> = Map::new("actions");
 
 #[cw_serde]
 pub struct Config {
@@ -19,8 +19,8 @@ pub struct Config {
     /// The address permitted to execute the crank
     pub executor: Addr,
 
-    /// The denoms that are transferred to the fee_collector at the end of every execution
-    target_denoms: Vec<String>,
+    /// The denoms, max_per_second that are transferred to the fee_collector at the end of every execution
+    target_denoms: Vec<(String, Uint128)>,
 
     /// The final destinations that `target_denom` is sent to (address, weight)
     pub target_addresses: Vec<(Addr, u8)>,
@@ -48,15 +48,28 @@ impl Config {
         CONFIG.save(storage, self)
     }
 
-    pub fn target_denoms(&self) -> Vec<String> {
+    pub fn target_denoms(&self) -> Vec<(String, Uint128)> {
         self.clone().target_denoms
     }
 
-    pub fn add_target_denom(&mut self, denom: String) {
-        if self.target_denoms.contains(&denom) {
-            return;
+    pub fn set_target_denom(&mut self, denom: String, limit: Uint128) {
+        for (d, l) in self.target_denoms.iter_mut() {
+            if &denom == d {
+                *l = limit;
+                return;
+            }
         }
-        self.target_denoms.push(denom);
+        self.target_denoms.push((denom, limit));
+    }
+
+    pub fn set_target_address(&mut self, address: Addr, weight: u8) {
+        for (a, w) in self.target_addresses.iter_mut() {
+            if &address == a {
+                *w = weight;
+                return;
+            }
+        }
+        self.target_addresses.push((address, weight));
     }
 }
 
@@ -71,6 +84,8 @@ impl From<Config> for ConfigResponse {
                 .iter()
                 .map(|(a, b)| (a.to_string(), *b))
                 .collect::<Vec<(String, u8)>>(),
+            last_executed: Default::default(),
+            schedule: None,
         }
     }
 }
@@ -81,8 +96,10 @@ pub struct Action {
     pub denom: String,
     /// The target contract for swapping
     pub contract: Addr,
+    /// The minimum amount of the token that must be included in any one execution of the Action
+    pub min: Uint128,
     /// The maximum amount of the token that can be included in any one execution of the Action
-    pub limit: Uint128,
+    pub max: Uint128,
     /// The msg executed on the contract to swap to the target token
     pub msg: Binary,
 }
@@ -97,7 +114,7 @@ impl Action {
         match ACTIONS
             .range(storage, min, None, Order::Ascending)
             .take(1)
-            .collect::<StdResult<Vec<(String, (Addr, Uint128, Binary))>>>()?
+            .collect::<StdResult<Vec<(String, (Addr, Uint128, Uint128, Binary))>>>()?
             .first()
         {
             Some(res) => Ok(Some(Self::load(storage, res)?)),
@@ -113,13 +130,14 @@ impl Action {
 
     fn load(
         storage: &mut dyn Storage,
-        (denom, (contract, limit, msg)): &(String, (Addr, Uint128, Binary)),
+        (denom, (contract, min, max, msg)): &(String, (Addr, Uint128, Uint128, Binary)),
     ) -> StdResult<Self> {
         LAST.save(storage, denom)?;
         Ok(Self {
             denom: denom.clone(),
             contract: contract.clone(),
-            limit: *limit,
+            max: *max,
+            min: *min,
             msg: msg.clone(),
         })
     }
@@ -128,10 +146,11 @@ impl Action {
         ACTIONS
             .range(storage, None, None, Order::Ascending)
             .map(|res| match res {
-                Ok((denom, (contract, limit, msg))) => Ok(Self {
+                Ok((denom, (contract, min, max, msg))) => Ok(Self {
                     denom: denom.clone(),
                     contract,
-                    limit,
+                    min,
+                    max,
                     msg,
                 }),
                 Err(err) => Err(err),
@@ -143,10 +162,15 @@ impl Action {
         storage: &mut dyn Storage,
         denom: String,
         contract: Addr,
-        limit: Uint128,
+        min: Uint128,
+        max: Uint128,
         msg: Binary,
     ) -> StdResult<()> {
-        ACTIONS.save(storage, denom, &(contract, limit, msg))
+        if min.ge(&max) {
+            return Err(StdError::generic_err("invalid action min >= max"));
+        }
+
+        ACTIONS.save(storage, denom, &(contract, min, max, msg))
     }
 
     pub fn unset(storage: &mut dyn Storage, denom: String) {
@@ -157,8 +181,8 @@ impl Action {
         if amount.denom != self.denom {
             return Err(StdError::generic_err("Invalid Denom"));
         }
-        let total = min(amount.amount, self.limit);
-        if total.is_zero() {
+        let total = min(amount.amount, self.max);
+        if total.lt(&self.min) || total.is_zero() {
             return Ok(None);
         }
         Ok(Some(WasmMsg::Execute {
@@ -174,7 +198,8 @@ impl From<Action> for ActionResponse {
         Self {
             denom: value.denom,
             contract: value.contract.to_string(),
-            limit: value.limit,
+            min: value.min,
+            max: value.max,
             msg: value.msg,
         }
     }

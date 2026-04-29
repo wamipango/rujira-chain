@@ -1,34 +1,41 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Binary, Uint128};
+use cosmwasm_std::{Binary, Timestamp, Uint128};
 
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
     pub executor: String,
-    pub target_denoms: Vec<String>,
+    pub target_denoms: Vec<(String, Uint128)>,
     pub target_addresses: Vec<(String, u8)>,
 }
 
 #[cw_serde]
 pub enum ExecuteMsg {
     Run {},
+    Distribute {},
 }
 
 #[cw_serde]
 pub enum SudoMsg {
+    Run {},
     SetOwner(String),
     SetExecutor(String),
     SetAction {
         denom: String,
         /// The target contract for swapping
         contract: String,
+        /// The minimum amount of the token that must be included in any one execution of the Action
+        min: Uint128,
         /// The maximum amount of the token that can be included in any one execution of the Action
-        limit: Uint128,
+        max: Uint128,
         /// The msg executed on the contract to swap to the target token
         msg: Binary,
     },
     UnsetAction(String),
-    AddTargetDenom(String),
+    SetSchedule(u64),
+    UnsetSchedule(),
+    SetTargetDenom((String, Uint128)),
+    SetTargetAddress((String, u8)),
 }
 
 #[cw_serde]
@@ -46,8 +53,10 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub owner: String,
     pub executor: String,
-    pub target_denoms: Vec<String>,
+    pub target_denoms: Vec<(String, Uint128)>,
     pub target_addresses: Vec<(String, u8)>,
+    pub schedule: Option<u64>,
+    pub last_executed: Timestamp,
 }
 
 #[cw_serde]
@@ -58,7 +67,8 @@ pub struct ActionsResponse {
 pub struct ActionResponse {
     pub denom: String,
     pub contract: String,
-    pub limit: Uint128,
+    pub min: Uint128,
+    pub max: Uint128,
     pub msg: Binary,
 }
 

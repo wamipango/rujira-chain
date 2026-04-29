@@ -1677,7 +1677,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-revenue"
-version = "1.1.0"
+version = "2.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -1685,6 +1685,7 @@ dependencies = [
  "cw-storage-plus",
  "cw2",
  "rujira-rs",
+ "rujira-rs-testing",
  "schemars",
  "serde",
  "thiserror 1.0.63",
