@@ -78,6 +78,7 @@ fn brune_fin_staking_e2e() {
                 },
                 fin_contract: fin.addr().to_string(),
                 max_bond: Uint128::new(10_000),
+                max_effective_bond: Uint128::new(1_000_000),
                 mint_cap: Uint128::new(1_000_000),
                 range: RangeConfig {
                     high: Decimal::percent(99),

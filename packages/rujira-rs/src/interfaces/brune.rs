@@ -34,12 +34,20 @@ pub struct InstantiateMsg {
     pub revenue_smear: u32,
     /// Max bond per whitelisted node. Should eventually be replaced with a query of the hard bond cap
     pub max_bond: Uint128,
+    /// Cap on the total bond on a node across all bond providers. Tracks the network's
+    /// max-effective bond so the contract stops adding bond once a node is saturated.
+    pub max_effective_bond: Uint128,
     /// Max amount of BRUNE that can be minted
     pub mint_cap: Uint128,
     /// The B-TOKEN denom ID
     pub token_id: String,
     /// Token Metadata for the B-TOKEN
     pub token_metadata: TokenMetadata,
+}
+
+#[cw_serde]
+pub struct MigrateMsg {
+    pub max_effective_bond: Uint128,
 }
 
 #[cw_serde]
@@ -75,6 +83,7 @@ pub struct ConfigUpdate {
     pub stake_contract: Option<String>,
     pub revenue_smear: Option<u32>,
     pub max_bond: Option<Uint128>,
+    pub max_effective_bond: Option<Uint128>,
     pub mint_cap: Option<Uint128>,
 }
 
@@ -105,6 +114,7 @@ pub struct ConfigResponse {
     pub revenue_smear: u32,
     pub token_id: String,
     pub max_bond: Uint128,
+    pub max_effective_bond: Uint128,
     pub mint_cap: Uint128,
 }
 

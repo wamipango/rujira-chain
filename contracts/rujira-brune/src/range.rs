@@ -279,6 +279,7 @@ mod tests {
             revenue_smear: 1_000,
             token_id: "brune".to_string(),
             max_bond: Uint128::new(10_000),
+            max_effective_bond: Uint128::new(1_000_000),
             mint_cap: Uint128::new(1_000_000),
         }
     }

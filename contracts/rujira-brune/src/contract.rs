@@ -8,8 +8,8 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_utils::must_pay;
 use rujira_rs::brune::{
-    ConfigResponse, ExecuteMsg, InstantiateMsg, NodesResponse, QueryMsg, RevenueResponse,
-    StateResponse, SudoMsg,
+    ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, NodesResponse, QueryMsg,
+    RevenueResponse, StateResponse, SudoMsg,
 };
 use rujira_rs::fin::market_maker::QuoteResponse;
 use rujira_rs::TokenFactory;
@@ -196,8 +196,10 @@ pub fn reply(_deps: DepsMut, _env: Env, _msg: Reply) -> Result<Response, Contrac
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    let config = Config::migrate(deps.storage, &msg)?;
+    config.validate()?;
     Ok(Response::default())
 }
 
@@ -261,6 +263,7 @@ mod tests {
                     },
                     fin_contract: fin.to_string(),
                     max_bond: Uint128::new(10000),
+                    max_effective_bond: Uint128::new(1_000_000),
                     mint_cap: Uint128::new(1_000_000),
                 },
                 &[],
@@ -291,6 +294,7 @@ mod tests {
                 revenue_smear: 100000,
                 token_id: "brune".to_string(),
                 max_bond: Uint128::new(10000),
+                max_effective_bond: Uint128::new(1_000_000),
                 mint_cap: Uint128::new(1_000_000),
             }
         );
@@ -362,6 +366,7 @@ mod tests {
                     },
                     fin_contract: fin.to_string(),
                     max_bond: Uint128::new(10000),
+                    max_effective_bond: Uint128::new(1_000_000),
                     mint_cap: Uint128::new(1_000_000),
                 },
                 &[],

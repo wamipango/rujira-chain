@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, Deps, SignedDecimal, StdResult, Storage, Uint128};
 use cw_storage_plus::Item;
-use rujira_rs::brune::{ConfigResponse, ConfigUpdate, InstantiateMsg, RangeConfig};
+use rujira_rs::brune::{ConfigResponse, ConfigUpdate, InstantiateMsg, MigrateMsg, RangeConfig};
 
 use crate::ContractError;
 
@@ -20,6 +20,7 @@ pub struct Config {
     pub revenue_smear: u32,
     pub token_id: String,
     pub max_bond: Uint128,
+    pub max_effective_bond: Uint128,
     pub mint_cap: Uint128,
 }
 
@@ -35,6 +36,7 @@ impl Config {
             revenue_smear: msg.revenue_smear,
             token_id: msg.token_id.clone(),
             max_bond: msg.max_bond,
+            max_effective_bond: msg.max_effective_bond,
             mint_cap: msg.mint_cap,
         })
     }
@@ -43,18 +45,19 @@ impl Config {
         CONFIG.load(storage)
     }
 
-    pub fn migrate(storage: &mut dyn Storage, range: RangeConfig) -> StdResult<Self> {
+    pub fn migrate(storage: &mut dyn Storage, msg: &MigrateMsg) -> StdResult<Self> {
         let legacy: OldConfig = Item::new("config").load(storage)?;
         let config = Self {
             target_utilization: legacy.target_utilization,
             min_node_fee: legacy.min_node_fee,
-            range,
+            range: legacy.range,
             permissionless: legacy.permissionless,
             fin_contract: legacy.fin_contract,
             stake_contract: legacy.stake_contract,
             revenue_smear: legacy.revenue_smear,
             token_id: legacy.token_id,
             max_bond: legacy.max_bond,
+            max_effective_bond: msg.max_effective_bond,
             mint_cap: legacy.mint_cap,
         };
         CONFIG.save(storage, &config)?;
@@ -103,6 +106,11 @@ impl Config {
                 "mint_cap must be greater than 0".to_string(),
             ));
         }
+        if self.max_effective_bond.is_zero() {
+            return Err(ContractError::Invalid(
+                "max_effective_bond must be greater than 0".to_string(),
+            ));
+        }
         Ok(())
     }
 
@@ -135,6 +143,9 @@ impl Config {
         if let Some(max_bond) = update.max_bond {
             self.max_bond = max_bond;
         };
+        if let Some(max_effective_bond) = update.max_effective_bond {
+            self.max_effective_bond = max_effective_bond;
+        };
         if let Some(mint_cap) = update.mint_cap {
             self.mint_cap = mint_cap;
         };
@@ -143,11 +154,11 @@ impl Config {
 }
 
 #[cw_serde]
-// Old stored layout retained only so migrate can rewrite pre-range deployments.
+// Pre-v3 stored layout retained only so migrate can backfill max_effective_bond.
 struct OldConfig {
     target_utilization: Decimal,
     min_node_fee: Decimal,
-    spread: Decimal,
+    range: RangeConfig,
     permissionless: bool,
     fin_contract: Addr,
     stake_contract: Addr,
@@ -169,6 +180,7 @@ impl From<Config> for ConfigResponse {
             revenue_smear: value.revenue_smear,
             token_id: value.token_id,
             max_bond: value.max_bond,
+            max_effective_bond: value.max_effective_bond,
             mint_cap: value.mint_cap,
         }
     }
@@ -199,6 +211,7 @@ mod tests {
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
             mint_cap: Uint128::new(1_000),
         }
         .validate()
@@ -217,6 +230,7 @@ mod tests {
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
             mint_cap: Uint128::new(1_000),
         };
         assert!(Config {
@@ -245,6 +259,7 @@ mod tests {
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
             mint_cap: Uint128::new(1_000),
         };
         assert!(Config {
@@ -273,6 +288,7 @@ mod tests {
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
             mint_cap: Uint128::new(1_000),
         };
         assert!(Config {
@@ -301,6 +317,7 @@ mod tests {
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
             mint_cap: Uint128::new(1_000),
         };
         assert!(Config {
@@ -345,10 +362,34 @@ mod tests {
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
             mint_cap: Uint128::new(1_000),
         };
         assert!(Config {
             mint_cap: Uint128::zero(),
+            ..base
+        }
+        .validate()
+        .is_err());
+    }
+
+    #[test]
+    fn validation_max_effective_bond_bounds() {
+        let base = Config {
+            target_utilization: Decimal::percent(90),
+            min_node_fee: Decimal::percent(5),
+            range: range(),
+            permissionless: false,
+            stake_contract: Addr::unchecked("stake"),
+            revenue_smear: 101,
+            token_id: "brune".to_string(),
+            fin_contract: Addr::unchecked("fin"),
+            max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
+            mint_cap: Uint128::new(1_000),
+        };
+        assert!(Config {
+            max_effective_bond: Uint128::zero(),
             ..base
         }
         .validate()

@@ -316,12 +316,18 @@ impl Node {
             .find(|x| x.bond_address == env.contract.address.to_string())?;
         let fee = Decimal::from_ratio(u64::from_str(&p.node_operator_fee).ok()?, 10_000u64);
         let bond = Decimal::from_str(&provider.bond).ok()?;
+        let total_bond = Decimal::from_str(&res.total_bond).unwrap_or_default();
         let max_bond = Decimal::from_ratio(config.max_bond.u128(), 1u128);
+        let max_effective_bond = Decimal::from_ratio(config.max_effective_bond.u128(), 1u128);
+        let capacity = min(
+            max_bond.saturating_sub(bond),
+            max_effective_bond.saturating_sub(total_bond),
+        );
         Some(Self {
             addr: addr.clone(),
             weight: Self::weight(config, &fee),
             fee,
-            capacity: max_bond.saturating_sub(bond),
+            capacity,
             bond,
             is_leaving: res.forced_to_leave || res.requested_to_leave,
             status: NodeStatus::from_str(&res.status).unwrap_or(NodeStatus::Unknown),
@@ -531,6 +537,7 @@ mod tests {
             revenue_smear: 1,
             token_id: "brune".to_string(),
             max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
             mint_cap: Uint128::new(1_000),
         };
         let fee_low = Decimal::percent(1);
@@ -563,6 +570,7 @@ mod tests {
             revenue_smear: 1,
             token_id: "brune".to_string(),
             max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
             mint_cap: Uint128::new(1_000),
         };
         let addr = Addr::unchecked("node");
@@ -592,6 +600,7 @@ mod tests {
             revenue_smear: 1,
             token_id: "brune".to_string(),
             max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
             mint_cap: Uint128::new(1_000),
         };
         let addr = Addr::unchecked("node");
@@ -615,6 +624,92 @@ mod tests {
         assert_eq!(node.bond, Decimal::from_ratio(25u128, 1u128));
         assert!(node.is_leaving);
         assert_eq!(node.status, NodeStatus::Active);
+    }
+
+    #[test]
+    fn from_response_caps_capacity_by_max_effective_bond() {
+        let mut env = mock_env();
+        env.contract.address = Addr::unchecked("contract");
+        let config = Config {
+            target_utilization: Decimal::one(),
+            min_node_fee: Decimal::percent(5),
+            range: rujira_rs::brune::RangeConfig {
+                high: Decimal::percent(99),
+                low: Decimal::percent(80),
+                skew: cosmwasm_std::SignedDecimal::zero(),
+                step: Decimal::percent(1),
+            },
+            permissionless: false,
+            fin_contract: Addr::unchecked("fin"),
+            stake_contract: Addr::unchecked("stake"),
+            revenue_smear: 1,
+            token_id: "brune".to_string(),
+            // High per-node cap so max_effective_bond is the binding constraint.
+            max_bond: Uint128::new(10_000),
+            max_effective_bond: Uint128::new(1_000),
+            mint_cap: Uint128::new(1_000),
+        };
+        let addr = Addr::unchecked("node");
+        let res = QueryNodeResponse {
+            node_address: addr.to_string(),
+            status: "Active".to_string(),
+            total_bond: "800".to_string(),
+            bond_providers: Some(NodeBondProviders {
+                node_operator_fee: "500".to_string(),
+                providers: vec![NodeBondProvider {
+                    bond_address: env.contract.address.to_string(),
+                    bond: "100".to_string(),
+                }],
+            }),
+            ..QueryNodeResponse::default()
+        };
+
+        let node = Node::from_response(&env, &config, &addr, res).unwrap();
+        // headroom = max_effective_bond - total_bond = 1000 - 800 = 200
+        // (would be 9_900 from max_bond - bond, so max_effective is the binding cap)
+        assert_eq!(node.capacity, Decimal::from_ratio(200u128, 1u128));
+    }
+
+    #[test]
+    fn from_response_capacity_zero_when_node_saturated() {
+        let mut env = mock_env();
+        env.contract.address = Addr::unchecked("contract");
+        let config = Config {
+            target_utilization: Decimal::one(),
+            min_node_fee: Decimal::percent(5),
+            range: rujira_rs::brune::RangeConfig {
+                high: Decimal::percent(99),
+                low: Decimal::percent(80),
+                skew: cosmwasm_std::SignedDecimal::zero(),
+                step: Decimal::percent(1),
+            },
+            permissionless: false,
+            fin_contract: Addr::unchecked("fin"),
+            stake_contract: Addr::unchecked("stake"),
+            revenue_smear: 1,
+            token_id: "brune".to_string(),
+            max_bond: Uint128::new(10_000),
+            max_effective_bond: Uint128::new(1_000),
+            mint_cap: Uint128::new(1_000),
+        };
+        let addr = Addr::unchecked("node");
+        let res = QueryNodeResponse {
+            node_address: addr.to_string(),
+            status: "Active".to_string(),
+            // total_bond exceeds max_effective_bond — no headroom.
+            total_bond: "1500".to_string(),
+            bond_providers: Some(NodeBondProviders {
+                node_operator_fee: "500".to_string(),
+                providers: vec![NodeBondProvider {
+                    bond_address: env.contract.address.to_string(),
+                    bond: "0".to_string(),
+                }],
+            }),
+            ..QueryNodeResponse::default()
+        };
+
+        let node = Node::from_response(&env, &config, &addr, res).unwrap();
+        assert_eq!(node.capacity, Decimal::zero());
     }
 
     #[test]
