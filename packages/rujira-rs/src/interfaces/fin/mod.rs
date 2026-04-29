@@ -1,5 +1,6 @@
 mod denoms;
 mod execute;
+pub mod market_maker;
 mod price;
 mod query;
 mod scl;

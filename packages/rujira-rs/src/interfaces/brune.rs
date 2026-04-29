@@ -1,4 +1,4 @@
-use crate::{bow, proto::types::QueryNodeResponse, CallbackData, TokenMetadata};
+use crate::{fin, proto::types::QueryNodeResponse, CallbackData, TokenMetadata};
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Event, SignedDecimal, Timestamp, Uint128};
 use std::str::FromStr;
@@ -90,8 +90,8 @@ pub enum QueryMsg {
         start_after: Option<u128>,
         limit: Option<u32>,
     },
-    #[returns(bow::QuoteResponse)]
-    Quote(bow::QuoteRequest),
+    #[returns(fin::market_maker::QuoteResponse)]
+    Quote(fin::market_maker::QuoteRequest),
 }
 
 #[cw_serde]

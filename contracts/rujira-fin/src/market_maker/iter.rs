@@ -1,9 +1,9 @@
 use std::ops::Mul;
 
 use cosmwasm_std::{Addr, Binary, Decimal, Fraction, QuerierWrapper, StdResult, Uint128};
-use rujira_rs::{
-    bow,
-    fin::{Denoms, Side, Tick},
+use rujira_rs::fin::{
+    market_maker::{MarketMakerQueryMsg, QuoteRequest, QuoteResponse},
+    Denoms, Side, Tick,
 };
 
 use super::MarketMakerOffer;
@@ -42,9 +42,9 @@ impl<'a> MarketMakerIter<'a> {
     }
 
     fn query_next(&mut self, contract: Addr) -> Option<MarketMakerOffer> {
-        let res: StdResult<Option<bow::QuoteResponse>> = self.q.query_wasm_smart(
+        let res: StdResult<Option<QuoteResponse>> = self.q.query_wasm_smart(
             contract.to_string(),
-            &bow::QueryMsg::Quote(bow::QuoteRequest {
+            &MarketMakerQueryMsg::Quote(QuoteRequest {
                 min_price: self.last_price,
                 ask_denom: self.denoms.bid(&self.side).to_string(),
                 offer_denom: self.denoms.ask(&self.side).to_string(),

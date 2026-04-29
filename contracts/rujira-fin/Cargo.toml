@@ -20,7 +20,7 @@ crate-type = ["cdylib", "rlib"]
 [features]
 # use library feature to disable all instantiate/execute/query exports
 library = []
-mock    = ["anyhow", "cw-multi-test", "rujira-rs-testing", "rujira-bow"]
+mock    = ["anyhow", "cw-multi-test", "rujira-rs-testing"]
 
 [dependencies]
 anyhow            = { workspace = true, optional = true }
@@ -31,8 +31,7 @@ cw-storage-plus   = { workspace = true }
 cw-utils          = { workspace = true }
 cw2               = { workspace = true }
 itertools         = { workspace = true }
-rujira-bow        = { path = "../rujira-bow", features = ["mock"], optional = true }
-rujira-rs         = { workspace = true, features = ["interface-fin", "interface-bow", "decimal-scaled", "signed-decimal256", "premium", "oracle", "query", "bid-pool", "exchange", "merge-n-by-iter"], default-features = false }
+rujira-rs         = { workspace = true, features = ["interface-fin", "decimal-scaled", "signed-decimal256", "premium", "oracle", "query", "bid-pool", "exchange", "merge-n-by-iter"], default-features = false }
 rujira-rs-testing = { workspace = true, optional = true }
 schemars          = { workspace = true }
 serde             = { workspace = true }
@@ -42,7 +41,6 @@ thiserror         = { workspace = true }
 anyhow                = { workspace = true }
 cw-multi-test         = { workspace = true }
 proptest              = { workspace = true }
-rujira-bow            = { path = "../rujira-bow", features = ["mock"] }
 rujira-ghost-vault    = { path = "../rujira-ghost-vault" }
 rujira-rs-testing     = { workspace = true }
 rujira-thorchain-swap = { path = "../rujira-thorchain-swap", features = ["mock"] }

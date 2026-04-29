@@ -4,7 +4,6 @@ use cosmwasm_std::{coin, Addr, Decimal, SignedDecimal, Uint128};
 use cw_multi_test::Executor;
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseResult;
-use rujira_bow::mock::Bow;
 use rujira_rs::fin::{
     Denoms, ExecuteMsg, OrderResponse, OrdersResponse, Price, QueryMsg, RangeConfig, RangeMsg,
     RangeResponse, RangesResponse, Side, SwapRequest,
@@ -20,11 +19,6 @@ const START_BALANCE: u128 = 2_000_000_000_000;
 
 #[derive(Clone, Debug)]
 enum Action {
-    MmDeposit {
-        actor: u8,
-        base: u64,
-        quote: u64,
-    },
     Swap {
         actor: u8,
         offer_base: bool,
@@ -76,8 +70,6 @@ enum Action {
 
 fn action_strategy() -> impl Strategy<Value = Action> {
     prop_oneof![
-        (any::<u8>(), 1u64..4_000_000u64, 1u64..4_000_000u64)
-            .prop_map(|(actor, base, quote)| Action::MmDeposit { actor, base, quote }),
         (
             any::<u8>(),
             any::<bool>(),
@@ -163,7 +155,7 @@ fn action_strategy() -> impl Strategy<Value = Action> {
     ]
 }
 
-fn setup(initial_mm_base: u64, initial_mm_quote: u64) -> (RujiraApp, Fin, Bow, Vec<Addr>) {
+fn setup() -> (RujiraApp, Fin, Vec<Addr>) {
     let mut app = mock_rujira_app();
     let owner = app.api().addr_make("owner");
     let fees = app.api().addr_make("fees");
@@ -204,27 +196,8 @@ fn setup(initial_mm_base: u64, initial_mm_quote: u64) -> (RujiraApp, Fin, Bow, V
         None,
         Decimal::zero(),
     );
-    let bow = Bow::create(
-        &mut app,
-        fin.addr(),
-        &owner,
-        BASE,
-        QUOTE,
-        Uint128::from(10_000u128),
-    );
-    let _ = bow.deposit(
-        &mut app,
-        &owner,
-        &[
-            coin(initial_mm_base as u128, BASE),
-            coin(initial_mm_quote as u128, QUOTE),
-        ],
-        None,
-    );
-    fin.update_market_makers(&mut app, vec![bow.addr().to_string()])
-        .unwrap();
 
-    (app, fin, bow, users)
+    (app, fin, users)
 }
 
 fn select_user(users: &[Addr], idx: u8) -> Addr {
@@ -243,17 +216,8 @@ fn fixed_price(price_raw: u32) -> Price {
     Price::Fixed(Decimal::from_ratio((price_raw as u128) + 1, 100_000u128))
 }
 
-fn apply_action(app: &mut RujiraApp, fin: &Fin, bow: &Bow, users: &[Addr], action: &Action) {
+fn apply_action(app: &mut RujiraApp, fin: &Fin, users: &[Addr], action: &Action) {
     match action {
-        Action::MmDeposit { actor, base, quote } => {
-            let sender = select_user(users, *actor);
-            let _ = bow.deposit(
-                app,
-                &sender,
-                &[coin(*base as u128, BASE), coin(*quote as u128, QUOTE)],
-                None,
-            );
-        }
         Action::Swap {
             actor,
             offer_base,
@@ -589,16 +553,14 @@ proptest! {
 
     #[test]
     fn e2e_solvency(
-        initial_mm_base in 1u64..2_000_000_000u64,
-        initial_mm_quote in 1u64..2_000_000_000u64,
         actions in prop::collection::vec(action_strategy(), 5..100)
     ) {
-        let (mut app, fin, bow, users) = setup(initial_mm_base, initial_mm_quote);
+        let (mut app, fin,  users) = setup();
 
         check_solvency(&app, &fin, 0, None)?;
 
         for (step, action) in actions.iter().enumerate() {
-            apply_action(&mut app, &fin, &bow, &users, action);
+            apply_action(&mut app, &fin, &users, action);
             check_solvency(&app, &fin, step + 1, Some(action))?;
         }
     }

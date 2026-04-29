@@ -4,9 +4,8 @@ use cosmwasm_std::{
     coin, ensure, to_json_binary, Addr, Coin, CosmosMsg, Response, Storage, Uint128, WasmMsg,
 };
 use rujira_rs::{
-    bow,
     exchange::{SwapContext, SwapError},
-    fin::{Denoms, Side},
+    fin::{market_maker::MarketMakerExecuteMsg, Denoms, Side},
 };
 
 /// Due to type Context = T::Context for impl SwapItem<Vec<T: SwapItem>>,
@@ -93,7 +92,7 @@ impl SwapContext for MarketMakerContext {
         for (addr, (offer, ask)) in self.compile() {
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: addr.to_string(),
-                msg: to_json_binary(&bow::ExecuteMsg::Swap {
+                msg: to_json_binary(&MarketMakerExecuteMsg::Swap {
                     min_return: ask.clone(),
                     to: None,
                     callback: None,

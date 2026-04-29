@@ -283,7 +283,7 @@ mod tests {
     use super::*;
     use cosmwasm_std::{Decimal, Uint128};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
-    use rujira_rs::bow::{QuoteRequest, QuoteResponse};
+    use rujira_rs::fin::market_maker::{QuoteRequest, QuoteResponse};
     use rujira_rs_testing::mock_rujira_app;
 
     #[test]

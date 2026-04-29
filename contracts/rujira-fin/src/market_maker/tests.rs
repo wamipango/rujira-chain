@@ -8,18 +8,20 @@ use cosmwasm_std::{
     SystemError, SystemResult, Uint128, WasmMsg, WasmQuery,
 };
 use rujira_rs::{
-    bow,
     exchange::{SwapContext, SwapItem},
-    fin::{Denoms, Side, Tick},
+    fin::{
+        market_maker::{MarketMakerExecuteMsg, MarketMakerQueryMsg, QuoteResponse},
+        Denoms, Side, Tick,
+    },
 };
 
 fn mock_querier() -> MockQuerier {
     let mut q = MockQuerier::default();
     q.update_wasm(|x| match x {
         WasmQuery::Smart { msg, .. } => {
-            let query: bow::QueryMsg = from_json(msg).unwrap();
+            let query: MarketMakerQueryMsg = from_json(msg).unwrap();
             match query {
-                bow::QueryMsg::Quote(query) => {
+                MarketMakerQueryMsg::Quote(query) => {
                     let ask_total: Uint128 = query
                         .data
                         .map(from_json)
@@ -38,7 +40,7 @@ fn mock_querier() -> MockQuerier {
                     };
 
                     SystemResult::Ok(ContractResult::Ok(
-                        to_json_binary(&bow::QuoteResponse {
+                        to_json_binary(&QuoteResponse {
                             size,
                             data: to_json_binary(&size.add(ask_total)).ok(),
                             price: query
@@ -49,8 +51,6 @@ fn mock_querier() -> MockQuerier {
                         .unwrap(),
                     ))
                 }
-                bow::QueryMsg::Strategy {} => todo!(),
-                bow::QueryMsg::Market {} => todo!(),
             }
         }
         _ => SystemResult::Err(SystemError::Unknown {}),
@@ -240,7 +240,7 @@ fn test_market_maker_commit_no_fee() {
         res.messages,
         vec![SubMsg::reply_never(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: "bow".to_string(),
-            msg: to_json_binary(&bow::ExecuteMsg::Swap {
+            msg: to_json_binary(&MarketMakerExecuteMsg::Swap {
                 min_return: coin(2750, "usdc"),
                 to: None,
                 callback: None

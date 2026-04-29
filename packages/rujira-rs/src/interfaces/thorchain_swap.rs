@@ -1,4 +1,4 @@
-use crate::{bow, ghost, CallbackData};
+use crate::{fin, ghost, CallbackData};
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{
     to_json_binary, Addr, Coin, CosmosMsg, Decimal, QuerierWrapper, StdResult, Uint128, WasmMsg,
@@ -55,8 +55,8 @@ pub enum QueryMsg {
     #[returns(ConfigResponse)]
     Config {},
 
-    #[returns(bow::QuoteResponse)]
-    Quote(bow::QuoteRequest),
+    #[returns(fin::market_maker::QuoteResponse)]
+    Quote(fin::market_maker::QuoteRequest),
 
     #[returns(MarketsResponse)]
     Markets {},

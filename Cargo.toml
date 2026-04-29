@@ -25,7 +25,6 @@ postcard               = "1.1.1"
 proptest               = "1.6.0"
 prost                  = "0.13"
 regex                  = "1.11.1"
-rujira-bow             = { path = "./contracts/rujira-bow" }
 rujira-brune           = { path = "./contracts/rujira-brune" }
 rujira-fin             = { path = "./contracts/rujira-fin" }
 rujira-ghost-vault     = { path = "./contracts/rujira-ghost-vault" }

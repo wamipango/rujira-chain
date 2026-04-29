@@ -12,9 +12,8 @@ use cosmwasm_std::{
 };
 use cw_utils::must_pay;
 use rujira_rs::{
-    bow::{self, QuoteResponse},
     brune::RangeConfig,
-    fin::{Scl, Side},
+    fin::{market_maker::QuoteResponse, Scl, Side},
     TokenFactory,
 };
 use std::cmp::Ordering;
@@ -67,7 +66,7 @@ impl State {
                     return Err(ContractError::InsufficientFunds {});
                 }
 
-                Ok(bow::QuoteResponse {
+                Ok(QuoteResponse {
                     price: Decimal::one(),
                     size,
                     data: Some(Binary::default()),

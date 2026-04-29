@@ -1,7 +1,5 @@
 #[cfg(feature = "interface-account")]
 pub mod account;
-#[cfg(feature = "interface-bow")]
-pub mod bow;
 #[cfg(feature = "interface-brune")]
 pub mod brune;
 #[cfg(feature = "interface-demo")]
@@ -12,10 +10,6 @@ pub mod fin;
 pub mod ghost;
 #[cfg(feature = "interface-merge")]
 pub mod merge;
-#[cfg(feature = "interface-mint")]
-pub mod mint;
-#[cfg(feature = "interface-pilot")]
-pub mod pilot;
 #[cfg(feature = "interface-revenue")]
 pub mod revenue;
 #[cfg(feature = "interface-staking")]

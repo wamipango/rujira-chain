@@ -1,61 +1,32 @@
+use crate::CallbackData;
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 
-use crate::{CallbackData, TokenMetadata};
-
-use super::{strategy::Strategies, xyk::XykState, Xyk};
-
 #[cw_serde]
-pub struct InstantiateMsg {
-    pub metadata: TokenMetadata,
-    pub strategy: Strategies,
-    pub market: String,
-}
-
-#[cw_serde]
-pub enum ExecuteMsg {
-    /// Executes a market trade based on current order book.
+pub enum MarketMakerExecuteMsg {
     Swap {
         min_return: Coin,
         to: Option<String>,
         callback: Option<CallbackData>,
     },
-    Deposit {
-        /// The minimum amount of LP shares to be returned
-        min_return: Option<Uint128>,
-        callback: Option<CallbackData>,
-    },
-    Withdraw {
-        callback: Option<CallbackData>,
-    },
-}
-
-#[cw_serde]
-pub enum SudoMsg {
-    SetMarket(String),
-    SetStrategy(Strategies),
 }
 
 #[cw_serde]
 #[derive(QueryResponses)]
-pub enum QueryMsg {
-    #[returns(cosmwasm_std::Addr)]
-    Market {},
-    #[returns(StrategyResponse)]
-    Strategy {},
-    #[returns(QuoteResponse)]
+pub enum MarketMakerQueryMsg {
+    #[returns(Option<QuoteResponse>)]
     Quote(QuoteRequest),
 }
 
 #[cw_serde]
 pub struct QuoteRequest {
-    /// The minimum price that BOW must respond with
+    /// The minimum price that the market maker must respond with.
     /// This is used eg in FIN to reay the previous price quoted for and in
     /// ORCA to set the min price of the next premium
     pub min_price: Option<Decimal>,
 
     /// Denom that the Caller is offering
-    /// ie the token that will be sent by FIN to BOW
+    /// ie the token that will be sent by FIN to the market maker
     /// Eg. if a market order USDC buy of RUJI on FIN is being
     /// executed, FIN will require RUJI to execute the swap and so
     /// the offer_denom here will be USDC and the ask_denom RUJI
@@ -85,9 +56,4 @@ pub struct QuoteResponse {
     /// Provided in order to allow the market maker to load from storage only once, instead of
     /// for each iteration of the query
     pub data: Option<Binary>,
-}
-
-#[cw_serde]
-pub enum StrategyResponse {
-    Xyk((Xyk, XykState)),
 }

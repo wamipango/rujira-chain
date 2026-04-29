@@ -1487,24 +1487,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rujira-bow"
-version = "1.1.2"
-dependencies = [
- "anyhow",
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-multi-test",
- "cw-storage-plus",
- "cw-utils",
- "cw2",
- "rujira-rs",
- "rujira-rs-testing",
- "schemars",
- "serde",
- "thiserror 1.0.63",
-]
-
-[[package]]
 name = "rujira-brune"
 version = "2.0.3"
 dependencies = [
@@ -1555,7 +1537,6 @@ dependencies = [
  "cw2",
  "itertools 0.14.0",
  "proptest",
- "rujira-bow",
  "rujira-ghost-vault",
  "rujira-rs",
  "rujira-rs-testing",
@@ -1577,7 +1558,6 @@ dependencies = [
  "cw-utils",
  "cw2",
  "rujira-account",
- "rujira-bow",
  "rujira-fin",
  "rujira-ghost-vault",
  "rujira-rs",
@@ -1635,41 +1615,6 @@ dependencies = [
  "cw-utils",
  "cw2",
  "rujira-rs",
- "schemars",
- "serde",
- "thiserror 1.0.63",
-]
-
-[[package]]
-name = "rujira-mint"
-version = "1.0.1"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-multi-test",
- "cw-storage-plus",
- "cw-utils",
- "cw2",
- "rujira-rs",
- "rujira-rs-testing",
- "schemars",
- "serde",
- "thiserror 1.0.63",
-]
-
-[[package]]
-name = "rujira-pilot"
-version = "0.0.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-multi-test",
- "cw-storage-plus",
- "cw-utils",
- "cw2",
- "itertools 0.14.0",
- "rujira-rs",
- "rujira-rs-testing",
  "schemars",
  "serde",
  "thiserror 1.0.63",

@@ -7,11 +7,11 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_utils::must_pay;
-use rujira_rs::bow::QuoteResponse;
 use rujira_rs::brune::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, NodesResponse, QueryMsg, RevenueResponse,
     StateResponse, SudoMsg,
 };
+use rujira_rs::fin::market_maker::QuoteResponse;
 use rujira_rs::TokenFactory;
 
 use crate::config::{Config, RUNE};
@@ -208,8 +208,8 @@ mod tests {
     use cosmwasm_std::{coin, coins, Decimal, Event, Timestamp, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
     use rujira_rs::{
-        bow,
         brune::RangeConfig,
+        fin::market_maker::QuoteRequest,
         proto::types::{NodeBondProvider, NodeBondProviders, QueryNodeResponse},
         TokenMetadata,
     };
@@ -451,11 +451,11 @@ mod tests {
             contract.to_string()
         );
 
-        let res: bow::QuoteResponse = app
+        let res: QuoteResponse = app
             .wrap()
             .query_wasm_smart(
                 contract.clone(),
-                &QueryMsg::Quote(bow::QuoteRequest {
+                &QueryMsg::Quote(QuoteRequest {
                     min_price: None,
                     offer_denom: RUNE.to_owned(),
                     ask_denom: "x/brune".to_string(),

@@ -3,7 +3,7 @@ use cosmwasm_std::{
     from_json, to_json_binary, Binary, Decimal, Fraction, QuerierWrapper, StdResult, Uint128,
 };
 use rujira_rs::{
-    bow::QuoteResponse,
+    fin::market_maker::QuoteResponse,
     proto::types::{QueryMimirWithKeyRequest, QueryMimirWithKeyResponse},
     query::grpc::Queryable,
     query::Pool,

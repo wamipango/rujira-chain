@@ -34,7 +34,6 @@ thiserror         = { workspace = true }
 anyhow             = { workspace = true }
 cw-multi-test      = { workspace = true }
 rujira-account     = { path = "../rujira-account" }
-rujira-bow         = { path = "../rujira-bow", features = ["mock"] }
 rujira-fin         = { path = "../rujira-fin", features = ["mock"] }
 rujira-ghost-vault = { path = "../rujira-ghost-vault", features = ["mock"] }
 rujira-rs-testing  = { workspace = true }

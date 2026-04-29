@@ -1,6 +1,6 @@
 use cosmwasm_std::{CheckedFromRatioError, DecimalRangeExceeded, StdError, Uint128};
 use cw_utils::PaymentError;
-use rujira_rs::{bow::StrategyError, query::grpc::QueryError};
+use rujira_rs::query::grpc::QueryError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -13,9 +13,6 @@ pub enum ContractError {
 
     #[error("{0}")]
     CheckedFromRatio(#[from] CheckedFromRatioError),
-
-    #[error("{0}")]
-    Strategy(#[from] StrategyError),
 
     #[error("{0}")]
     DecimalRangeExceeded(#[from] DecimalRangeExceeded),

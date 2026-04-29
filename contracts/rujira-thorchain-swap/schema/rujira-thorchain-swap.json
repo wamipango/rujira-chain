@@ -242,7 +242,7 @@
             ]
           },
           "min_price": {
-            "description": "The minimum price that BOW must respond with This is used eg in FIN to reay the previous price quoted for and in ORCA to set the min price of the next premium",
+            "description": "The minimum price that the market maker must respond with. This is used eg in FIN to reay the previous price quoted for and in ORCA to set the min price of the next premium",
             "anyOf": [
               {
                 "$ref": "#/definitions/Decimal"
@@ -253,7 +253,7 @@
             ]
           },
           "offer_denom": {
-            "description": "Denom that the Caller is offering ie the token that will be sent by FIN to BOW Eg. if a market order USDC buy of RUJI on FIN is being executed, FIN will require RUJI to execute the swap and so the offer_denom here will be USDC and the ask_denom RUJI",
+            "description": "Denom that the Caller is offering ie the token that will be sent by FIN to the market maker Eg. if a market order USDC buy of RUJI on FIN is being executed, FIN will require RUJI to execute the swap and so the offer_denom here will be USDC and the ask_denom RUJI",
             "type": "string"
           }
         },
