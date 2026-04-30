@@ -45,6 +45,8 @@ pub use asset::{
 
 #[cfg(feature = "callback")]
 pub use callback::{CallbackData, CallbackMsg};
+#[cfg(feature = "coin")]
+pub use coin::Coin;
 #[cfg(feature = "decimal-scaled")]
 pub use decimal_scaled::DecimalScaled;
 pub use interfaces::*;

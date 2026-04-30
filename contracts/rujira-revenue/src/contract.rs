@@ -8,7 +8,11 @@ use cosmwasm_std::{
     WasmMsg,
 };
 use cw_storage_plus::Item;
+use rujira_rs::msg::deposit::MsgDeposit;
 use rujira_rs::proto::scheduler::MsgScheduleExecuteContract;
+use rujira_rs::utils::module_address;
+use rujira_rs::Asset;
+use rujira_rs::Coin;
 
 use crate::error::ContractError;
 use crate::events::event_run;
@@ -141,12 +145,8 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     cw2::set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::new(deps.api, msg)?;
-    config.save(deps.storage)?;
-    LAST_EXECUTED.save(deps.storage, &env.block.time)?;
-    SCHEDULE.save(deps.storage, &None)?;
     Ok(Response::default())
 }
 
@@ -211,7 +211,7 @@ fn distribute_denom(
     sends: &mut Vec<CosmosMsg>,
     denom: String,
     limit: Uint128,
-) -> StdResult<()> {
+) -> Result<(), ContractError> {
     let seconds = env
         .block
         .time
@@ -247,12 +247,22 @@ fn distribute_denom(
                 continue;
             }
             remaining -= amount;
+
             sends.push(
-                BankMsg::Send {
-                    to_address: addr.to_string(),
-                    amount: coins(amount.u128(), denom.clone()),
-                }
-                .into(),
+                if deps.api.addr_canonicalize(addr.as_str())? == module_address("reserve") {
+                    MsgDeposit::new(
+                        vec![Coin::new(Asset::from_denom(&denom)?, amount.into())],
+                        "RESERVE".to_owned(),
+                        deps.api.addr_canonicalize(env.contract.address.as_str())?,
+                    )
+                    .into()
+                } else {
+                    BankMsg::Send {
+                        to_address: addr.to_string(),
+                        amount: coins(amount.u128(), denom.clone()),
+                    }
+                    .into()
+                },
             )
         }
     };
