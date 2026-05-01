@@ -96,6 +96,7 @@ pub fn setup(app: &mut RujiraApp<RujiraStargate>, owner: &Addr) -> Addr {
             &InstantiateMsg {
                 max_stream_length: 1u32,
                 max_borrow_ratio: Decimal::one(),
+                min_borrow_amount: Uint128::zero(),
                 reserve_fee: Decimal::from_ratio(1u128, 5000u128),
                 stream_step_ratio: Decimal::one(),
                 fee: (Decimal::permille(15), owner.to_string()),

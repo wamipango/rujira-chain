@@ -15,6 +15,8 @@ pub struct InstantiateMsg {
     pub reserve_fee: Decimal,
     /// The maximum percentage of a pool's depth that can be borrowed
     pub max_borrow_ratio: Decimal,
+    /// The minimum amount borrowed in order to execute a swap. Required to avoid a ZeroShare issue from a ghost-vault for tiny swaps
+    pub min_borrow_amount: Uint128,
     /// AMM fee rate and destination address
     pub fee: (Decimal, String),
 }
@@ -46,6 +48,7 @@ pub struct ConfigUpdate {
     pub stream_step_ratio: Option<Decimal>,
     pub max_borrow_ratio: Option<Decimal>,
     pub reserve_fee: Option<Decimal>,
+    pub min_borrow_amount: Option<Uint128>,
     pub fee: Option<(Decimal, String)>,
 }
 
@@ -70,6 +73,7 @@ pub struct ConfigResponse {
     pub max_stream_length: u32,
     pub stream_step_ratio: Decimal,
     pub max_borrow_ratio: Decimal,
+    pub min_borrow_amount: Uint128,
     pub reserve_fee: Decimal,
     pub fee: (Decimal, Addr),
 }

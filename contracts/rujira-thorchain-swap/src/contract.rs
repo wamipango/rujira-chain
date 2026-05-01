@@ -134,6 +134,7 @@ pub fn execute(
                     amount: coins(amm_fee.u128(), min_return.denom.clone()),
                 }]
             };
+            let borrow_amount = min_return.amount.add(amm_fee).max(config.min_borrow_amount);
             Ok(Response::default()
                 .add_event(event_swap(
                     &funds,
@@ -146,7 +147,7 @@ pub fn execute(
                 ))
                 .add_messages(execute_repayments(deps.as_ref(), env, Some(funds))?)
                 // Borrow everything that we need to send. We'll repay any excess in the next execution
-                .add_message(vault.borrow_msg(min_return.amount.add(amm_fee))?)
+                .add_message(vault.borrow_msg(borrow_amount)?)
                 .add_message(swap_msg)
                 .add_message(send_msg)
                 .add_messages(fee_msg))
@@ -262,12 +263,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     }
 }
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, msg: InstantiateMsg) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let config = Config::new(msg, deps.api)?;
-    config.validate()?;
-    config.save(deps.storage)?;
 
     Ok(Response::default())
 }
@@ -301,6 +299,7 @@ mod tests {
                 max_borrow_ratio: Decimal::one(),
                 reserve_fee: Decimal::from_ratio(10u128, 500u128),
                 stream_step_ratio: Decimal::one(),
+                min_borrow_amount: Uint128::zero(),
                 fee: (Decimal::permille(15), owner.to_string()),
             },
             &[],

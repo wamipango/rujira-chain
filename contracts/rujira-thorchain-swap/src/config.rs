@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Api, Decimal, StdResult, Storage};
+use cosmwasm_std::{Addr, Api, Decimal, StdResult, Storage, Uint128};
 use cw_storage_plus::Item;
 use rujira_rs::thorchain_swap::{ConfigResponse, ConfigUpdate, InstantiateMsg};
 
@@ -12,6 +12,8 @@ pub struct Config {
     pub max_stream_length: u32,
     pub stream_step_ratio: Decimal,
     pub max_borrow_ratio: Decimal,
+    #[serde(default)]
+    pub min_borrow_amount: Uint128,
     pub reserve_fee: Decimal,
     pub fee: (Decimal, Addr),
 }
@@ -23,6 +25,7 @@ impl Config {
             max_stream_length: msg.max_stream_length,
             stream_step_ratio: msg.stream_step_ratio,
             max_borrow_ratio: msg.max_borrow_ratio,
+            min_borrow_amount: msg.min_borrow_amount,
             reserve_fee: msg.reserve_fee,
             fee: (msg.fee.0, addr),
         })
@@ -46,9 +49,15 @@ impl Config {
         if let Some(max_borrow_ratio) = update.max_borrow_ratio {
             self.max_borrow_ratio = max_borrow_ratio;
         }
+
+        if let Some(min_borrow_amount) = update.min_borrow_amount {
+            self.min_borrow_amount = min_borrow_amount;
+        }
+
         if let Some(reserve_fee) = update.reserve_fee {
             self.reserve_fee = reserve_fee;
         }
+
         if let Some(fee) = update.fee.clone() {
             let addr = api.addr_validate(&fee.1)?;
             self.fee = (fee.0, addr);
@@ -67,6 +76,7 @@ impl From<Config> for ConfigResponse {
             max_stream_length: value.max_stream_length,
             stream_step_ratio: value.stream_step_ratio,
             max_borrow_ratio: value.max_borrow_ratio,
+            min_borrow_amount: value.min_borrow_amount,
             reserve_fee: value.reserve_fee,
             fee: value.fee,
         }
@@ -86,6 +96,7 @@ mod tests {
             max_borrow_ratio: Decimal::one(),
             reserve_fee: Decimal::from_ratio(10u128, 500u128),
             stream_step_ratio: Decimal::one(),
+            min_borrow_amount: Uint128::zero(),
             fee: (Decimal::zero(), deps.api.addr_make("fee")),
         }
         .validate()
