@@ -50,7 +50,7 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::Repay {} => {
-            Ok(Response::default().add_messages(execute_repayments(deps.as_ref(), env, None)?))
+            Ok(Response::default().add_messages(execute_repayments(deps.as_ref(), &env, None)?))
         }
         ExecuteMsg::Swap { min_return, to, .. } => {
             let funds = one_coin(&info)?;
@@ -87,7 +87,7 @@ pub fn execute(
                         &coin(min_return.amount.u128(), min_return.denom.clone()),
                         &format!("%%skipped%%:{} < 100", min_return.amount),
                     ))
-                    .add_messages(execute_repayments(deps.as_ref(), env, Some(funds))?)
+                    .add_messages(execute_repayments(deps.as_ref(), &env, Some(funds))?)
                     .add_message(vault.borrow_msg(min_return.amount)?)
                     .add_message(send_msg));
             }
@@ -134,8 +134,7 @@ pub fn execute(
                     amount: coins(amm_fee.u128(), min_return.denom.clone()),
                 }]
             };
-            let borrow_amount = min_return.amount.add(amm_fee).max(config.min_borrow_amount);
-            Ok(Response::default()
+            let mut response = Response::default()
                 .add_event(event_swap(
                     &funds,
                     &coin(clp_return.u128(), min_return.denom.clone()),
@@ -145,9 +144,20 @@ pub fn execute(
                     &min_return,
                     &memo,
                 ))
-                .add_messages(execute_repayments(deps.as_ref(), env, Some(funds))?)
-                // Borrow everything that we need to send. We'll repay any excess in the next execution
-                .add_message(vault.borrow_msg(borrow_amount)?)
+                .add_messages(execute_repayments(deps.as_ref(), &env, Some(funds))?);
+
+            let required_amount = min_return.amount.add(amm_fee).saturating_sub(
+                deps.querier
+                    .query_balance(&env.contract.address, &min_return.denom)?
+                    .amount,
+            );
+
+            if !required_amount.is_zero() {
+                response = response
+                    .add_message(vault.borrow_msg(required_amount.max(config.min_borrow_amount))?);
+            };
+
+            Ok(response
                 .add_message(swap_msg)
                 .add_message(send_msg)
                 .add_messages(fee_msg))
@@ -155,13 +165,11 @@ pub fn execute(
     }
 }
 
-fn execute_repayments(deps: Deps, env: Env, funds: Option<Coin>) -> StdResult<Vec<WasmMsg>> {
+fn execute_repayments(deps: Deps, env: &Env, funds: Option<Coin>) -> StdResult<Vec<WasmMsg>> {
     // Execute repayments first
     // Deprecated but the only other options are a) explicit list to repay or iterate over vaults every time, both of which are sub optimal
     #[allow(deprecated)]
-    let balances = deps
-        .querier
-        .query_all_balances(env.contract.address.clone())?;
+    let balances = deps.querier.query_all_balances(&env.contract.address)?;
     let mut repay_msgs: Vec<WasmMsg> = vec![];
     for balance in balances {
         let amount = match funds.clone() {
