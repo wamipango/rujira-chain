@@ -1,8 +1,8 @@
 use crate::ContractError;
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Order, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Decimal, Order, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Bound, Map};
-use rujira_rs::SharePool;
+use rujira_rs::DecimalSharePool;
 use std::{
     cmp::min,
     ops::{Add, Sub},
@@ -10,13 +10,13 @@ use std::{
 
 static BORROWERS: Map<Addr, Borrower> = Map::new("borrowers");
 // Delegated shares for a borrower
-static DELEGATE_SHARES: Map<(Addr, Addr), Uint128> = Map::new("delegates");
+static DELEGATE_SHARES: Map<(Addr, Addr), Decimal> = Map::new("delegates");
 
 #[cw_serde]
 pub struct Borrower {
     pub addr: Addr,
     pub limit: Uint128,
-    pub shares: Uint128,
+    pub shares: Decimal,
 }
 
 impl Borrower {
@@ -32,7 +32,7 @@ impl Borrower {
         BORROWERS.save(storage, self.addr.clone(), self)
     }
 
-    pub fn delegate_shares(&self, storage: &dyn Storage, delegate: Addr) -> Uint128 {
+    pub fn delegate_shares(&self, storage: &dyn Storage, delegate: Addr) -> Decimal {
         DELEGATE_SHARES
             .load(storage, (self.addr.clone(), delegate))
             .unwrap_or_default()
@@ -42,13 +42,13 @@ impl Borrower {
         &mut self,
         storage: &mut dyn Storage,
         delegate: Addr,
-        pool: &SharePool,
-        shares: Uint128,
+        pool: &DecimalSharePool,
+        shares: Decimal,
     ) -> Result<(), ContractError> {
         DELEGATE_SHARES.update(
             storage,
             (self.addr.clone(), delegate),
-            |v| -> Result<Uint128, ContractError> { Ok(v.unwrap_or_default().add(shares)) },
+            |v| -> Result<Decimal, ContractError> { Ok(v.unwrap_or_default().add(shares)) },
         )?;
         self.borrow(storage, pool, shares)
     }
@@ -56,10 +56,14 @@ impl Borrower {
     pub fn borrow(
         &mut self,
         storage: &mut dyn Storage,
-        pool: &SharePool,
-        shares: Uint128,
+        pool: &DecimalSharePool,
+        shares: Decimal,
     ) -> Result<(), ContractError> {
-        if pool.ownership(self.shares.add(shares)).gt(&self.limit) {
+        if pool
+            .ownership(self.shares.add(shares))
+            .to_uint_ceil()
+            .gt(&self.limit)
+        {
             return Err(ContractError::BorrowLimitReached { limit: self.limit });
         }
         self.shares += shares;
@@ -69,8 +73,8 @@ impl Borrower {
     pub fn repay(
         &mut self,
         storage: &mut dyn Storage,
-        shares: Uint128,
-    ) -> Result<Uint128, ContractError> {
+        shares: Decimal,
+    ) -> Result<Decimal, ContractError> {
         let repaid = min(shares, self.shares);
         self.shares -= repaid;
         self.save(storage)?;
@@ -81,8 +85,8 @@ impl Borrower {
         &mut self,
         storage: &mut dyn Storage,
         delegate: Addr,
-        shares: Uint128,
-    ) -> Result<Uint128, ContractError> {
+        shares: Decimal,
+    ) -> Result<Decimal, ContractError> {
         let k = (self.addr.clone(), delegate);
         let delegate = DELEGATE_SHARES.load(storage, k.clone())?;
         let repaid = min(shares, delegate);

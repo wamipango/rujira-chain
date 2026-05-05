@@ -79,9 +79,9 @@ pub struct StatusResponse {
 
     pub lend_rate: Decimal,
     // Share pool that accounts for accrued debt interest
-    pub debt_pool: common::PoolResponse,
+    pub debt_pool: common::DebtPoolResponse,
     // Share pool that allocated collected debt interest to lenders
-    pub deposit_pool: common::PoolResponse,
+    pub deposit_pool: common::DepositPoolResponse,
 }
 
 #[cw_serde]

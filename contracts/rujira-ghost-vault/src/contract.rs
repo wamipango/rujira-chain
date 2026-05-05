@@ -12,7 +12,8 @@ use cosmwasm_std::{
 use cw2::{ensure_from_older_version, set_contract_version};
 use cw_utils::must_pay;
 use rujira_rs::ghost::common::{
-    BorrowerResponse, BorrowersResponse, DelegateResponse, MarketMsg, PoolResponse,
+    BorrowerResponse, BorrowersResponse, DebtPoolResponse, DelegateResponse, DepositPoolResponse,
+    MarketMsg,
 };
 use rujira_rs::ghost::vault::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StatusResponse, SudoMsg,
@@ -184,12 +185,12 @@ pub fn execute_market(
             let borrower_debt = state.debt_pool.liability(borrower_shares);
 
             // Limit the repay to the debt in the case of an overpayment
-            let repay_amount = min(amount, borrower_debt);
+            let repay_amount = min(amount, borrower_debt.to_uint_ceil());
             // Allocate the remainder as a refund
             let refund_amount = amount.checked_sub(repay_amount)?;
             // Calculate shares that this capped amount is worth.
             // Internally, repay will ceil the multiplication to retain parity with the `liability` behaviour
-            let shares = state.repay(repay_amount)?;
+            let shares = state.repay(repay_amount, borrower_shares)?;
 
             match delegate_address.clone() {
                 Some(d) => borrower.delegate_repay(deps.storage, d, shares),
@@ -270,12 +271,12 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
             lend_rate: state.lend_rate(&config)?,
             utilization_ratio: state.utilization()?,
             last_updated: state.last_updated,
-            debt_pool: PoolResponse {
-                size: state.debt_pool.size(),
+            debt_pool: DebtPoolResponse {
+                size: state.debt_pool.size().to_uint_ceil(),
                 shares: state.debt_pool.shares(),
                 ratio: state.debt_pool.ratio(),
             },
-            deposit_pool: PoolResponse {
+            deposit_pool: DepositPoolResponse {
                 size: state.deposit_pool.size(),
                 shares: state.deposit_pool.shares(),
                 ratio: state.deposit_pool.ratio(),
@@ -283,7 +284,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         })?),
         QueryMsg::Borrower { addr } => {
             let borrower = Borrower::load(deps.storage, deps.api.addr_validate(&addr)?)?;
-            let current = state.debt_pool.ownership(borrower.shares);
+            let current = state.debt_pool.ownership(borrower.shares).to_uint_ceil();
             Ok(to_json_binary(&BorrowerResponse {
                 addr: borrower.addr.to_string(),
                 denom: config.denom,
@@ -293,14 +294,17 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                 available: min(
                     // Current borrows can exceed limit due to interest
                     borrower.limit.checked_sub(current).unwrap_or_default(),
-                    state.deposit_pool.size() - state.debt_pool.size(),
+                    state
+                        .deposit_pool
+                        .size()
+                        .saturating_sub(state.debt_pool.size().to_uint_ceil()),
                 ),
             })?)
         }
         QueryMsg::Delegate { borrower, addr } => {
             let borrower = Borrower::load(deps.storage, deps.api.addr_validate(&borrower)?)?;
             let delegate = borrower.delegate_shares(deps.storage, deps.api.addr_validate(&addr)?);
-            let current = state.debt_pool.ownership(borrower.shares);
+            let current = state.debt_pool.ownership(borrower.shares).to_uint_ceil();
 
             Ok(to_json_binary(&DelegateResponse {
                 borrower: BorrowerResponse {
@@ -311,11 +315,14 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                     shares: borrower.shares,
                     available: min(
                         borrower.limit.checked_sub(current).unwrap_or_default(),
-                        state.deposit_pool.size() - state.debt_pool.size(),
+                        state
+                            .deposit_pool
+                            .size()
+                            .saturating_sub(state.debt_pool.size().to_uint_ceil()),
                     ),
                 },
                 addr,
-                current: state.debt_pool.ownership(delegate),
+                current: state.debt_pool.ownership(delegate).to_uint_ceil(),
                 shares: delegate,
             })?)
         }
@@ -329,7 +336,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
             )
             .map(|x| {
                 x.map(|borrower| {
-                    let current = state.debt_pool.ownership(borrower.shares);
+                    let current = state.debt_pool.ownership(borrower.shares).to_uint_ceil();
 
                     BorrowerResponse {
                         addr: borrower.addr.to_string(),
@@ -340,7 +347,10 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                         available: min(
                             // Current borrows can exceed limit due to interest
                             borrower.limit.checked_sub(current).unwrap_or_default(),
-                            state.deposit_pool.size() - state.debt_pool.size(),
+                            state
+                                .deposit_pool
+                                .size()
+                                .saturating_sub(state.debt_pool.size().to_uint_ceil()),
                         ),
                     }
                 })
@@ -558,7 +568,7 @@ mod tests {
             Decimal::from_str("0.509803921568627451").unwrap()
         );
         assert_eq!(status.debt_pool.size, Uint128::from(416u128));
-        assert_eq!(status.debt_pool.shares, Uint128::from(400u128));
+        assert_eq!(status.debt_pool.shares, Decimal::percent(40000));
         assert_eq!(status.debt_pool.ratio, Decimal::from_str("1.04").unwrap());
         assert_eq!(status.deposit_pool.size, Uint128::from(816u128));
         assert_eq!(status.deposit_pool.shares, Uint128::from(800u128));
@@ -652,7 +662,7 @@ mod tests {
 
         assert_eq!(status.utilization_ratio, Decimal::zero());
         assert_eq!(status.debt_pool.size, Uint128::zero());
-        assert_eq!(status.debt_pool.shares, Uint128::zero());
+        assert_eq!(status.debt_pool.shares, Decimal::zero());
         assert_eq!(status.debt_pool.ratio, Decimal::zero());
         assert_eq!(status.deposit_pool.size, Uint128::from(1612u128));
         assert_eq!(status.deposit_pool.shares, Uint128::from(1580u128));

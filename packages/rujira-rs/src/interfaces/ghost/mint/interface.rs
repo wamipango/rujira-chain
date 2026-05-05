@@ -6,7 +6,7 @@ use cosmwasm_std::{
 
 use crate::{
     ghost::{
-        common::{self, BorrowerResponse, DelegateResponse, MarketMsg, PoolResponse},
+        common::{self, BorrowerResponse, DebtPoolResponse, DelegateResponse, MarketMsg},
         interest::Interest,
     },
     CallbackData, TokenMetadata,
@@ -77,7 +77,7 @@ pub struct StatusResponse {
     pub debt_rate: Decimal,
 
     // Share pool that accounts for accrued debt interest
-    pub debt_pool: PoolResponse,
+    pub debt_pool: DebtPoolResponse,
 }
 
 #[cw_serde]

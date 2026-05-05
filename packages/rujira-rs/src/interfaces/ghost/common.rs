@@ -20,7 +20,17 @@ pub enum MarketMsg {
 }
 
 #[cw_serde]
-pub struct PoolResponse {
+pub struct DebtPoolResponse {
+    /// The total deposits into the pool
+    pub size: Uint128,
+    /// The total ownership of the pool
+    pub shares: Decimal,
+    /// Ratio of shares / size
+    pub ratio: Decimal,
+}
+
+#[cw_serde]
+pub struct DepositPoolResponse {
     /// The total deposits into the pool
     pub size: Uint128,
     /// The total ownership of the pool
@@ -39,7 +49,7 @@ pub struct BorrowerResponse {
     /// The borrower's current utilization
     pub current: Uint128,
     /// The shares allocated to the current debt
-    pub shares: Uint128,
+    pub shares: Decimal,
     /// The remaining amount of borrowable funds for this borrower
     pub available: Uint128,
 }
@@ -56,7 +66,7 @@ pub struct DelegateResponse {
     /// The borrower's current utilization
     pub current: Uint128,
     /// The shares allocated to the current debt
-    pub shares: Uint128,
+    pub shares: Decimal,
 }
 
 impl OracleValue for DelegateResponse {

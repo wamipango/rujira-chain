@@ -59,7 +59,7 @@ pub use oracle::{Oracle, OracleError, OraclePair, OracleValue};
 #[cfg(feature = "premium")]
 pub use premium::Premiumable;
 #[cfg(feature = "share-pool")]
-pub use share_pool::{SharePool, SharePoolError};
+pub use share_pool::{DecimalSharePool, SharePool, SharePoolError};
 #[cfg(feature = "signed-decimal256")]
 pub use signed_decimal256::SignedDecimal256;
 #[cfg(feature = "token-factory")]

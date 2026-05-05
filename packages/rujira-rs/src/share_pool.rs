@@ -109,6 +109,106 @@ impl SharePool {
     }
 }
 
+/// Simple share-based pool implementation where your membership entitles you to a share of the pool
+#[cw_serde]
+#[derive(Default)]
+pub struct DecimalSharePool {
+    size: Decimal,
+    shares: Decimal,
+}
+
+impl DecimalSharePool {
+    /// Adds a deposit to the pool, returning the new shares issued
+    pub fn join(&mut self, amount: Decimal) -> Result<Decimal, SharePoolError> {
+        if amount.is_zero() {
+            return Err(SharePoolError::Zero("Amount".to_string()));
+        }
+        if self.shares.is_zero() {
+            self.size.add_assign(amount);
+            self.shares.add_assign(amount);
+            return Ok(amount);
+        }
+
+        let issuance = self.shares * amount / self.size;
+        if issuance.is_zero() {
+            return Err(SharePoolError::Zero("Shares".to_string()));
+        }
+
+        self.shares.add_assign(issuance);
+        self.size.add_assign(amount);
+        Ok(issuance)
+    }
+
+    /// Removes a share from the pool, returning the amount removed from the pool and deducted
+    pub fn leave(&mut self, amount: Decimal) -> Result<Decimal, SharePoolError> {
+        if amount.is_zero() {
+            return Err(SharePoolError::Zero("Amount".to_string()));
+        }
+
+        if amount.gt(&self.shares) {
+            return Err(SharePoolError::ShareOverflow {});
+        }
+
+        if amount.eq(&self.shares) {
+            let claim = self.size;
+            self.size = Decimal::zero();
+            self.shares = Decimal::zero();
+            return Ok(claim);
+        }
+
+        let claim = self.ownership(amount);
+        self.size.sub_assign(claim);
+        self.shares.sub_assign(amount);
+        Ok(claim)
+    }
+
+    pub fn ratio(&self) -> Decimal {
+        self.size.checked_div(self.shares).unwrap_or_default()
+    }
+
+    pub fn size(&self) -> Decimal {
+        self.size
+    }
+
+    pub fn shares(&self) -> Decimal {
+        self.shares
+    }
+
+    /// Floor-truncated ownership of the pool
+    pub fn ownership(&self, shares: Decimal) -> Decimal {
+        if shares.is_zero() {
+            return Decimal::zero();
+        }
+        self.size * shares / self.shares()
+    }
+
+    /// Ceil-truncated commitment to the pool. Used for debts etc
+    pub fn liability(&self, shares: Decimal) -> Decimal {
+        if shares.is_zero() {
+            return Decimal::zero();
+        }
+
+        self.size * shares / self.shares
+    }
+
+    pub fn deposit(&mut self, amount: Decimal) -> Result<(), SharePoolError> {
+        let mut checked = self.clone();
+        checked.size.add_assign(amount);
+        let deposit = Decimal::percent(100000);
+        let test = checked.join(deposit)?;
+        let value = checked.ownership(test);
+        let ratio = value / deposit;
+
+        // If a deposit causes a new `join` of 1000 units to lose more than 1% of its value,
+        // the share pool is in an invalid state, error and don't change state
+        if ratio < Decimal::percent(99) {
+            return Err(SharePoolError::InvalidDeposit {});
+        }
+        self.size.add_assign(amount);
+        Ok(())
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum SharePoolError {
     #[error("ShareOverflow")]
