@@ -178,7 +178,7 @@ mod tests {
         state.borrow(Uint128::new(50)).unwrap();
         state.debt_pool.deposit(Decimal::one()).unwrap();
 
-        let repay_amount = state.debt_pool.liability(actor_shares).to_uint_ceil();
+        let repay_amount = state.debt_pool.ownership(actor_shares).to_uint_ceil();
         let burned = state.repay(repay_amount, actor_shares).unwrap();
 
         assert_eq!(burned, actor_shares);

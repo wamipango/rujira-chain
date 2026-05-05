@@ -182,7 +182,7 @@ pub fn execute_market(
             };
             // Calculate the total liability of this actor's shares
             // Liability is rounded up to ensure marginal overpayment
-            let borrower_debt = state.debt_pool.liability(borrower_shares);
+            let borrower_debt = state.debt_pool.ownership(borrower_shares);
 
             // Limit the repay to the debt in the case of an overpayment
             let repay_amount = min(amount, borrower_debt.to_uint_ceil());
@@ -373,11 +373,13 @@ mod tests {
 
     use std::str::FromStr;
 
+    use crate::mock::GhostVault;
+
     use super::*;
-    use cosmwasm_std::{coin, Decimal, Event, Uint128};
-    use cw_multi_test::{ContractWrapper, Executor};
+    use cosmwasm_std::{coin, testing::MockApi, Decimal, Event, Timestamp, Uint128};
+    use cw_multi_test::{BasicAppBuilder, ContractWrapper, Executor};
     use rujira_rs::{ghost::interest::Interest, TokenMetadata};
-    use rujira_rs_testing::mock_rujira_app;
+    use rujira_rs_testing::{load_contract_state, mock_rujira_app, RujiraStargate};
 
     #[test]
     fn lifecycle() {
@@ -670,5 +672,37 @@ mod tests {
             status.deposit_pool.ratio,
             Decimal::from_str("1.020253164556962025").unwrap()
         );
+    }
+
+    #[test]
+    fn query_error_26047981() {
+        let mut app = BasicAppBuilder::new()
+            .with_stargate(RujiraStargate::default())
+            .with_api(MockApi::default().with_prefix("thor"))
+            .build(|_, _, _| {});
+        let owner = app.api().addr_make("owner");
+        let vault = GhostVault::create(
+            &mut app,
+            &owner,
+            "eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        );
+        load_contract_state(
+            &mut app,
+            vault.addr(),
+            "rujira-ghost-vault-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            26047981,
+        )
+        .unwrap();
+
+        app.update_block(|x| x.time = Timestamp::from_seconds(1777984961));
+
+        let res = vault
+            .query_borrower(
+                &app,
+                "thor1ekkt8wfls055t7f7yznj07j0s4mtndkq546swutzv2de7sfcxptq27duyt",
+            )
+            .unwrap();
+
+        assert_eq!(res.shares, Decimal::from_str("17998361669570").unwrap());
     }
 }

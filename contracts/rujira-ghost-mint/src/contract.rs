@@ -136,7 +136,7 @@ pub fn execute_market(
                 Some(d) => borrower.delegate_shares(deps.storage, d.clone()),
                 None => borrower.shares,
             };
-            let borrower_debt = state.debt_pool.liability(borrower_shares);
+            let borrower_debt = state.debt_pool.ownership(borrower_shares);
             let repay_amount = min(amount, borrower_debt.to_uint_ceil());
             let refund_amount = amount.checked_sub(repay_amount)?;
 
