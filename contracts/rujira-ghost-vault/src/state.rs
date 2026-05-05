@@ -4,7 +4,7 @@ use cw_storage_plus::Item;
 use rujira_rs::DecimalSharePool;
 use rujira_rs::{ghost::interest::Interest, DecimalScaled, SharePool, SharePoolError};
 use std::cmp::min;
-use std::ops::{Div, Mul, Sub};
+use std::ops::{Mul, Sub};
 
 use crate::{config::Config, ContractError};
 
@@ -68,9 +68,9 @@ impl State {
         if self.debt_pool.size().is_zero() {
             return Err(ContractError::ZeroDebt {});
         }
-        let amount_shares = Decimal::from_ratio(amount, 1u128)
-            .mul(self.debt_pool.shares())
-            .div(self.debt_pool.size())
+        let amount_shares = self
+            .debt_pool
+            .issuance(Decimal::from_ratio(amount, 1u128))
             .min(owned);
         // Calculate the amount of shares that this repay will burn
         // Clamp shares to the size of the pool, to accommodate the final repayment

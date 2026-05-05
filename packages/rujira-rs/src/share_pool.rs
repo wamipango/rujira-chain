@@ -1,7 +1,9 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal, Decimal256, Uint128, Uint256};
-use std::ops::{AddAssign, Div, Mul, SubAssign};
+use std::ops::{AddAssign, Div, SubAssign};
 use thiserror::Error;
+
+use crate::DecimalExt;
 
 /// Simple share-based pool implementation where your membership entitles you to a share of the pool
 #[cw_serde]
@@ -129,7 +131,7 @@ impl DecimalSharePool {
             return Ok(amount);
         }
 
-        let issuance = self.shares * amount / self.size;
+        let issuance = self.issuance(amount);
         if issuance.is_zero() {
             return Err(SharePoolError::Zero("Shares".to_string()));
         }
@@ -176,14 +178,11 @@ impl DecimalSharePool {
 
     /// Floor-truncated ownership of the pool
     pub fn ownership(&self, shares: Decimal) -> Decimal {
-        if shares.is_zero() {
-            return Decimal::zero();
-        }
-        Decimal256::from(self.size)
-            .mul(Decimal256::from(shares))
-            .div(Decimal256::from(self.shares))
-            .try_into()
-            .unwrap()
+        shares.safe_share(self.size, self.shares)
+    }
+
+    pub fn issuance(&self, amount: Decimal) -> Decimal {
+        amount.safe_share(self.shares, self.size)
     }
 
     pub fn deposit(&mut self, amount: Decimal) -> Result<(), SharePoolError> {

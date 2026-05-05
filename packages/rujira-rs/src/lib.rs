@@ -9,6 +9,7 @@ mod callback;
 mod coin;
 #[cfg(feature = "coins")]
 mod coins;
+mod decimal_ext;
 #[cfg(feature = "decimal-scaled")]
 mod decimal_scaled;
 #[cfg(feature = "exchange")]
@@ -36,6 +37,7 @@ mod signed_decimal256;
 #[cfg(feature = "token-factory")]
 mod token_factory;
 pub mod utils;
+pub use decimal_ext::DecimalExt;
 
 pub use account_pool::{AccountPool, AccountPoolAccount};
 #[cfg(feature = "asset")]
