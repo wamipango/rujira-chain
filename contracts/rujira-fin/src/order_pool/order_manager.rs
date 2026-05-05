@@ -52,7 +52,7 @@ impl OrderManager {
         storage: &mut dyn Storage,
         swap_iter: &SwapIter,
         o: Vec<(Side, Price, Option<Uint128>)>,
-        oracle: &impl Premiumable,
+        oracle: &Option<impl Premiumable>,
     ) -> Result<ExecutionResult, ContractError> {
         for (side, price, target) in o {
             price.validate()?;
@@ -130,7 +130,7 @@ impl OrderManager {
         pool: &mut Pool,
         side: &Side,
         target: Option<Uint128>,
-        oracle: &impl Premiumable,
+        oracle: &Option<impl Premiumable>,
     ) -> Result<(), ContractError> {
         if let Some(target) = target {
             let opposite = side.other();
@@ -244,7 +244,7 @@ mod tests {
         let mut_deps = deps.as_mut();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = Some(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
         let config = Config {
@@ -298,7 +298,7 @@ mod tests {
 
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = Some(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(10000, "usdc");
         funds += coin(10000, "ruji");
@@ -404,7 +404,7 @@ mod tests {
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
 
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = Some(Decimal::from_str("1.0").unwrap());
         let funds = NativeBalance::default();
         let config = Config {
             denoms: Denoms::new("ruji", "usdc"),
@@ -445,7 +445,7 @@ mod tests {
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
 
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = Some(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(10000, "usdc");
         funds += coin(10000, "ruji");
@@ -641,7 +641,7 @@ mod tests {
         let mut_deps = deps.as_mut();
         let env = mock_env();
         let info = message_info(&Addr::unchecked("addr0000"), &[]);
-        let oracle = Decimal::from_str("1.0").unwrap();
+        let oracle = Some(Decimal::from_str("1.0").unwrap());
         let mut funds = NativeBalance::default();
         funds += coin(1000, "usdc");
         let config = Config {

@@ -22,11 +22,10 @@ impl Display for Price {
 }
 
 impl Price {
-    pub fn to_rate(&self, oracle: &impl Premiumable) -> StdResult<Decimal> {
-        self.validate()?;
+    pub fn to_rate(&self, oracle: &Option<impl Premiumable>) -> Option<Decimal> {
         match self {
-            Price::Fixed(fixed) => Ok(*fixed),
-            Price::Oracle(bps) => Ok(oracle.adjust(bps)),
+            Price::Fixed(fixed) => Some(*fixed),
+            Price::Oracle(bps) => oracle.as_ref().map(|oracle| oracle.adjust(bps)),
         }
     }
 

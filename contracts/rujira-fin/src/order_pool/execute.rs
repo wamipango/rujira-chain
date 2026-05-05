@@ -15,7 +15,7 @@ pub fn execute_order(
     orders: Vec<OrderTarget>,
     callback: Option<CallbackData>,
     config: &Config,
-    oracle: &impl Premiumable,
+    oracle: &Option<impl Premiumable>,
 ) -> Result<Response, ContractError> {
     let swap_iter = SwapIter::new(deps.querier, config);
 

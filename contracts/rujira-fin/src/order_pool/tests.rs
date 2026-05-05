@@ -10,7 +10,10 @@ use rujira_rs::{
     fin::{Price, Side},
 };
 
-use crate::order_pool::{PoolKey, PoolType};
+use crate::{
+    order_pool::{PoolKey, PoolType},
+    ContractError,
+};
 
 #[test]
 // Verify that when a Pool is removed from storage, the BidPool is retained and the correct values used for syncing bids
@@ -20,7 +23,7 @@ fn pool_bid_pool_replacement() {
     let owner = Addr::unchecked("owner");
     let offer = Uint128::from(100u128);
     let price = Price::Fixed(Decimal::one());
-    let oracle = Decimal::one();
+    let oracle = Some(Decimal::one());
     let mut pool = Pool::load(&store, &price, &Side::Quote, &oracle).unwrap();
     let k = PoolKey::new(Side::Quote, price.clone());
     pool.create_order(&mut store, &timestamp, &owner, offer)
@@ -47,12 +50,36 @@ fn pool_bid_pool_replacement() {
 }
 
 #[test]
+fn oracle_pool_load_requires_oracle_price() {
+    let store = MockStorage::new();
+    let missing_oracle: Option<Decimal> = None;
+
+    let err = Pool::load(&store, &Price::Oracle(0), &Side::Quote, &missing_oracle).unwrap_err();
+    assert!(matches!(
+        err,
+        ContractError::OraclePriceUnavailable {
+            side: Side::Quote,
+            price: Price::Oracle(0),
+        }
+    ));
+
+    let pool = Pool::load(
+        &store,
+        &Price::Fixed(Decimal::one()),
+        &Side::Quote,
+        &missing_oracle,
+    )
+    .unwrap();
+    assert_eq!(pool.rate(), Decimal::one());
+}
+
+#[test]
 fn pools_map() {
     let mut store = MockStorage::new();
     let timestamp = Timestamp::default();
     let owner = Addr::unchecked("owner");
     let offer = Uint128::from(100u128);
-    let oracle = Decimal::one();
+    let oracle = Some(Decimal::one());
     Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle)
         .unwrap()
         .create_order(&mut store, &timestamp, &owner, offer)
@@ -197,12 +224,47 @@ fn pools_map() {
 }
 
 #[test]
+fn side_iter_omits_oracle_pools_without_price() {
+    let mut store = MockStorage::new();
+    let timestamp = Timestamp::default();
+    let owner = Addr::unchecked("owner");
+    let offer = Uint128::from(100u128);
+    let oracle = Some(Decimal::one());
+
+    Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle)
+        .unwrap()
+        .create_order(&mut store, &timestamp, &owner, offer)
+        .unwrap();
+
+    Pool::load(
+        &store,
+        &Price::Fixed(Decimal::from_ratio(11u128, 10u128)),
+        &Side::Quote,
+        &oracle,
+    )
+    .unwrap()
+    .create_order(&mut store, &timestamp, &owner, offer)
+    .unwrap();
+
+    let missing_oracle: Option<Decimal> = None;
+    let ordered: Vec<EitherOrBoth<Pool>> =
+        Pool::iter(&store, &Side::Quote, &missing_oracle).collect();
+
+    assert_eq!(ordered.len(), 1);
+    assert_eq!(ordered[0].clone().right(), None);
+    assert_eq!(
+        ordered[0].clone().left().unwrap().rate(),
+        Decimal::from_ratio(11u128, 10u128)
+    );
+}
+
+#[test]
 fn side_iter() {
     let mut store = MockStorage::new();
     let timestamp = Timestamp::default();
     let owner = Addr::unchecked("owner");
     let offer = Uint128::from(100u128);
-    let oracle = Decimal::one();
+    let oracle = Some(Decimal::one());
     Pool::load(&store, &Price::Oracle(0), &Side::Quote, &oracle)
         .unwrap()
         .create_order(&mut store, &timestamp, &owner, offer)

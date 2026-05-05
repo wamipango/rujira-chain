@@ -1,4 +1,4 @@
-use cosmwasm_std::{Deps, StdResult};
+use cosmwasm_std::Deps;
 use rujira_rs::fin::{OrderResponse, OrdersResponse, Price, Side};
 use rujira_rs::Premiumable;
 
@@ -11,12 +11,12 @@ pub fn query_order(
     owner: &str,
     side: Side,
     price: Price,
-    oracle: &impl Premiumable,
+    oracle: &Option<impl Premiumable>,
 ) -> Result<OrderResponse, ContractError> {
     let addr = deps.api.addr_validate(owner)?;
     let pool = Pool::load(deps.storage, &price, &side, oracle)?;
     let order = pool.load_order(deps.storage, &addr)?;
-    Ok(order_response(&order, &pool.side, &pool.price, oracle)?)
+    order_response(&order, &pool.side, &pool.price, oracle)
 }
 
 pub fn query_orders(
@@ -25,7 +25,7 @@ pub fn query_orders(
     side: Option<Side>,
     start_after: Option<(String, Side, Price)>,
     limit: Option<u8>,
-    oracle: &impl Premiumable,
+    oracle: &Option<impl Premiumable>,
 ) -> Result<OrdersResponse, ContractError> {
     let orders: Result<Vec<OrderResponse>, ContractError> = match owner {
         Some(owner) => {
@@ -44,7 +44,7 @@ pub fn query_orders(
     .map(|(k, order)| {
         let pool = Pool::load(deps.storage, &k.price, &k.side, oracle)?;
         pool.sync_order(deps.storage, order)?;
-        Ok(order_response(order, &k.side, &k.price, oracle)?)
+        order_response(order, &k.side, &k.price, oracle)
     })
     .collect();
 
@@ -55,13 +55,13 @@ fn order_response(
     order: &Order,
     side: &Side,
     price: &Price,
-    oracle: &impl Premiumable,
-) -> StdResult<OrderResponse> {
+    oracle: &Option<impl Premiumable>,
+) -> Result<OrderResponse, ContractError> {
     Ok(OrderResponse {
         owner: order.owner.to_string(),
         side: side.clone(),
         price: price.clone(),
-        rate: price.to_rate(oracle)?,
+        rate: price.to_rate(oracle),
         updated_at: order.updated_at,
         offer: order.offer,
         remaining: order.bid.amount().try_into().unwrap(),

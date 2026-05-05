@@ -31,7 +31,7 @@ impl Pool {
     pub fn iter<'a>(
         storage: &'a dyn Storage,
         side: &'a Side,
-        oracle: &'a impl Premiumable,
+        oracle: &'a Option<impl Premiumable>,
     ) -> impl Iterator<Item = EitherOrBoth<Pool>> + 'a {
         let order = match side {
             Side::Base => cosmwasm_std::Order::Ascending,
@@ -43,7 +43,7 @@ impl Pool {
                 Ok((price, _)) => Some(Self {
                     price: price.clone(),
                     side: side.clone(),
-                    rate: price.to_rate(oracle).ok()?,
+                    rate: price.to_rate(oracle)?,
                     // The presence of the key indicates a BidPool should be present,
                     // so we should panic if this is incorrect
                     pool: BID_POOLS
@@ -75,12 +75,17 @@ impl Pool {
         storage: &dyn Storage,
         price: &Price,
         side: &Side,
-        oracle: &impl Premiumable,
-    ) -> StdResult<Self> {
+        oracle: &Option<impl Premiumable>,
+    ) -> Result<Self, ContractError> {
         let key = PoolKey::new(side.clone(), price.clone());
         Ok(Self {
             price: price.clone(),
-            rate: price.to_rate(oracle)?,
+            rate: price
+                .to_rate(oracle)
+                .ok_or_else(|| ContractError::OraclePriceUnavailable {
+                    side: side.clone(),
+                    price: price.clone(),
+                })?,
             side: side.clone(),
             pool: BID_POOLS.load(storage, key).unwrap_or_default(),
             pending_sum_snapshots: vec![],

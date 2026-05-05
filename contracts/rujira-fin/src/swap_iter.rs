@@ -29,7 +29,7 @@ impl<'a> SwapIter<'a> {
         &self,
         storage: &'a dyn Storage,
         side: &'a Side,
-        oracle: &'a impl Premiumable,
+        oracle: &'a Option<impl Premiumable>,
     ) -> impl Iterator<Item = RootItem> + 'a {
         Pool::iter(storage, side, oracle)
             .merge_join_by(
@@ -62,7 +62,7 @@ impl<'a> SwapIter<'a> {
     pub fn mid_price(
         &self,
         storage: &'a dyn Storage,
-        oracle: &'a impl Premiumable,
+        oracle: &'a Option<impl Premiumable>,
     ) -> Option<Decimal> {
         Some(
             self.iter(storage, &Side::Base, oracle)

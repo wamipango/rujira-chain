@@ -95,7 +95,8 @@ pub struct OrderResponse {
     pub price: Price,
 
     /// The rate at which this order would execute at the current moment in time
-    pub rate: Decimal,
+    /// None if oracle price is unavailable
+    pub rate: Option<Decimal>,
 
     /// The last time this order was touched (created, incremented or reduced) in an Order execution
     pub updated_at: Timestamp,

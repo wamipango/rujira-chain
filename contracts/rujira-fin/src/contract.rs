@@ -221,8 +221,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     let oracle = config
         .oracles
         .clone()
-        .map(|x| x.price(deps.querier))
-        .transpose()?;
+        .and_then(|x| x.price(deps.querier).ok());
     let swap_iter = SwapIter::new(deps.querier, &config);
 
     match msg {
@@ -315,7 +314,7 @@ fn execute_swap(
     sender: Addr,
     req: SwapRequest,
     config: &Config,
-    oracle: &impl Premiumable,
+    oracle: &Option<impl Premiumable>,
 ) -> Result<Response, ContractError> {
     let swap_iter = SwapIter::new(deps.querier, config);
 
