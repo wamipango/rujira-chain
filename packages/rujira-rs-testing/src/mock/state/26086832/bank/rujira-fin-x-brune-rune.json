@@ -1,0 +1,12 @@
+{
+  "balances": [
+    {
+      "denom": "rune",
+      "amount": "1272938993871"
+    },
+    {
+      "denom": "x/brune",
+      "amount": "143422712634"
+    }
+  ]
+}

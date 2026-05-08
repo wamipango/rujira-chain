@@ -2,7 +2,7 @@
 authors = []
 edition = { workspace = true }
 name    = "rujira-fin"
-version = "2.1.5"
+version = "2.1.6"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

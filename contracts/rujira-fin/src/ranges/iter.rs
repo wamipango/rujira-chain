@@ -91,6 +91,13 @@ impl<'a> RangeOfferIter<'a> {
         self.ranges.insert(key, value);
     }
 
+    fn open_price(&self, range: &Range) -> Decimal {
+        match self.side {
+            Side::Base => range.ask,
+            Side::Quote => range.bid,
+        }
+    }
+
     fn start(&mut self) -> Option<Decimal> {
         let first = self.iter.next();
         self.next = self.iter.next();
@@ -160,21 +167,28 @@ impl<'a> Iterator for RangeOfferIter<'a> {
     type Item = RangeOffer;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // if no previous end price, we're starting
-        let start = self.previous.or_else(|| self.start())?;
+        loop {
+            // if no previous end price, we're starting
+            let mut start = self.previous.or_else(|| self.start())?;
 
-        // Next price is best(price + step, min(ranges.close), next.open) to ensure we have the smallest tick
-        let opts = self.candidates(&start);
-        // Get smallest step
-        self.previous = match self.side {
-            Side::Base => opts.into_iter().flatten().min(),
-            Side::Quote => opts.into_iter().flatten().max(),
-        };
-        let offer = self.build_offer(&start)?;
-        self.prune(&opts[0], &opts[1])?;
-        if offer.total.is_zero() {
-            return self.next();
+            if self.ranges.is_empty() {
+                start = self.open_price(&self.next.clone()?);
+                self.previous = Some(start);
+                self.fill_ranges(start);
+            }
+
+            // Next price is best(price + step, min(ranges.close), next.open) to ensure we have the smallest tick
+            let opts = self.candidates(&start);
+            // Get smallest step
+            self.previous = match self.side {
+                Side::Base => opts.into_iter().flatten().min(),
+                Side::Quote => opts.into_iter().flatten().max(),
+            };
+            let offer = self.build_offer(&start)?;
+            self.prune(&opts[0], &opts[1])?;
+            if !offer.total.is_zero() {
+                return Some(offer);
+            }
         }
-        Some(offer)
     }
 }
