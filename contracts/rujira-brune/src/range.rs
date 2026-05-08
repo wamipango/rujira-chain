@@ -88,7 +88,7 @@ impl State {
             .map(|data| data.next)
             .unwrap_or(config.range.high);
 
-        let quote = self.quote_liquidity(bonded, balance)?;
+        let quote = self.quote_liquidity(balance, bonded)?;
 
         let Some((price, size, next)) = quote_slice(&config.range, quote, start) else {
             return Err(ContractError::InsufficientFunds {});
@@ -182,7 +182,7 @@ impl State {
     ) -> Result<Response, ContractError> {
         let amount = must_pay(info, &token.denom())?;
         let balance = Self::effective_balance(rune_balance(&deps, env)?, Some(*received));
-        let quote = self.quote_liquidity(bonded, &balance)?;
+        let quote = self.quote_liquidity(&balance, bonded)?;
         let returned = quote_return(&config.range, quote, amount);
 
         if returned.cmp(&min_return.amount) == Ordering::Less {
