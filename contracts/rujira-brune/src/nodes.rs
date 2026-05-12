@@ -43,6 +43,57 @@ impl Nodes {
         self.capacity
     }
 
+    fn queue_unbond(
+        storage: &mut dyn Storage,
+        env: &Env,
+        signer: &CanonicalAddr,
+        response: &mut Response,
+        addr: &Addr,
+        amount: Decimal,
+    ) -> StdResult<()> {
+        let amount = amount.to_uint_floor();
+        response.messages.push(SubMsg::reply_on_error(
+            MsgUnbond::new(addr.clone(), amount, None, signer),
+            1,
+        ));
+        response
+            .events
+            .push(event_unbond(storage, env, addr, amount)?);
+        Ok(())
+    }
+
+    /// Unbond from standby nodes that are no longer bondable because their preflight failed.
+    ///
+    /// This covers nodes that initially looked bondable only because bond size was the first
+    /// preflight failure, but reveal a later failure after BRUNE meets the minimum bond.
+    pub fn unbond_failed_preflight(
+        &mut self,
+        storage: &mut dyn Storage,
+        env: &Env,
+        signer: &CanonicalAddr,
+        response: &mut Response,
+    ) -> StdResult<(Decimal, Vec<Addr>)> {
+        let mut total = Decimal::zero();
+        let mut quarantined = vec![];
+        for n in &mut self.nodes {
+            if !n.failed_preflight() {
+                continue;
+            }
+            quarantined.push(n.addr.clone());
+
+            let alloc = n.bond;
+            if alloc.lt(&Decimal::one()) {
+                continue;
+            }
+
+            Self::queue_unbond(storage, env, signer, response, &n.addr, alloc)?;
+            total += alloc;
+            n.bond = Decimal::zero();
+        }
+        self.bond = self.bond.saturating_sub(total);
+        Ok((total, quarantined))
+    }
+
     /// Unbonds `target` from `self.nodes`, returning the total amount successfully unbonded
     fn unbond(
         &self,
@@ -76,16 +127,7 @@ impl Nodes {
                     // and vaults list
                     // The impact of this will be that the total returned as successfully unbonded will be higher than actual,
                     // potentially skipping a churn out request
-                    response.messages.push(SubMsg::reply_on_error(
-                        MsgUnbond::new(n.addr.clone(), alloc.to_uint_floor(), None, signer),
-                        1,
-                    ));
-                    response.events.push(event_unbond(
-                        storage,
-                        env,
-                        &n.addr,
-                        alloc.to_uint_floor(),
-                    )?);
+                    Self::queue_unbond(storage, env, signer, response, &n.addr, alloc)?;
                 }
             }
         }
@@ -172,7 +214,7 @@ impl Nodes {
         self.sort_nodes_under();
         let mut remaining = min(amount, self.capacity);
         for n in &self.nodes {
-            if n.status != NodeStatus::Active || n.is_leaving {
+            if !matches!(n.status, NodeStatus::Active | NodeStatus::Standby) || n.is_leaving {
                 continue;
             }
 
@@ -197,23 +239,11 @@ impl Nodes {
         &mut self,
         deps: DepsMut,
         env: &Env,
+        min_bond: &Decimal,
         signer: &CanonicalAddr,
         amount: &Decimal,
         response: Response,
     ) -> Result<Response, ContractError> {
-        let min = QueryMimirWithKeyResponse::get(
-            deps.querier,
-            QueryMimirWithKeyRequest {
-                key: "MinimumBondInRune".to_string(),
-                height: "".to_string(),
-            },
-        )?
-        .value;
-        // We shouldn't hit this, but check for safety
-        if min < 0i64 {
-            return Ok(response);
-        }
-        let min = Decimal::from_atomics(min.abs_diff(0), 0)?;
         self.sort_nodes_over();
         let mut remaining = *amount;
         let mut response = response;
@@ -224,7 +254,7 @@ impl Nodes {
         if remaining.lt(&Decimal::one()) {
             return Ok(response);
         }
-        match self.churn_out_candidate(&min, &remaining) {
+        match self.churn_out_candidate(min_bond, &remaining) {
             Some(node) => Ok(response
                 .add_message(MsgLeave::new(node.addr.clone(), signer, Uint128::one()))
                 .add_event(event_leave(deps.storage, env, &node.addr)?)),
@@ -274,16 +304,33 @@ pub struct Node {
     /// The remaining bond capacity
     pub capacity: Decimal,
     pub is_leaving: bool,
+    pub preflight_status: Option<NodeStatus>,
+    pub preflight_reason: Option<String>,
     pub status: NodeStatus,
 
     pub res: QueryNodeResponse,
 }
 
 impl Node {
+    pub fn minimum_bond(q: QuerierWrapper) -> Result<Decimal, ContractError> {
+        let min = QueryMimirWithKeyResponse::get(
+            q,
+            QueryMimirWithKeyRequest {
+                key: "MinimumBondInRune".to_string(),
+                height: "".to_string(),
+            },
+        )?
+        .value;
+        if min < 0 {
+            return Err(ContractError::InvalidMinimumBond);
+        }
+        Ok(Decimal::from_atomics(min.abs_diff(0), 0)?)
+    }
     pub fn load(
         q: QuerierWrapper,
         env: &Env,
         config: &Config,
+        min_bond: &Decimal,
         addr: &Addr,
     ) -> Result<Option<Self>, ContractError> {
         let response = QueryNodeResponse::get(
@@ -294,7 +341,7 @@ impl Node {
             },
         )?;
 
-        Ok(Self::from_response(env, config, addr, response))
+        Ok(Self::from_response(env, config, min_bond, addr, response))
     }
 
     /// Calculates the weight allocated to this Node to determine
@@ -306,6 +353,7 @@ impl Node {
     fn from_response(
         env: &Env,
         config: &Config,
+        min_bond: &Decimal,
         addr: &Addr,
         res: QueryNodeResponse,
     ) -> Option<Self> {
@@ -319,9 +367,23 @@ impl Node {
         let total_bond = Decimal::from_str(&res.total_bond).unwrap_or_default();
         let max_bond = Decimal::from_ratio(config.max_bond.u128(), 1u128);
         let max_effective_bond = Decimal::from_ratio(config.max_effective_bond.u128(), 1u128);
-        let capacity = min(
+        let status = NodeStatus::from_str(&res.status).unwrap_or(NodeStatus::Unknown);
+        let preflight_status = res
+            .preflight_status
+            .as_ref()
+            .and_then(|x| NodeStatus::from_str(&x.status).ok());
+        let preflight_reason = res.preflight_status.as_ref().map(|x| x.reason.clone());
+        let maximum = min(
             max_bond.saturating_sub(bond),
             max_effective_bond.saturating_sub(total_bond),
+        );
+        let capacity = Self::capacity(
+            status.clone(),
+            preflight_status.clone(),
+            preflight_reason.as_deref(),
+            &total_bond,
+            &maximum,
+            min_bond,
         );
         Some(Self {
             addr: addr.clone(),
@@ -330,9 +392,51 @@ impl Node {
             capacity,
             bond,
             is_leaving: res.forced_to_leave || res.requested_to_leave,
-            status: NodeStatus::from_str(&res.status).unwrap_or(NodeStatus::Unknown),
+            preflight_status,
+            preflight_reason,
+            status,
             res,
         })
+    }
+
+    fn capacity(
+        status: NodeStatus,
+        preflight_status: Option<NodeStatus>,
+        preflight_reason: Option<&str>,
+        total_bond: &Decimal,
+        maximum: &Decimal,
+        min_bond: &Decimal,
+    ) -> Decimal {
+        match status {
+            NodeStatus::Active => *maximum,
+            NodeStatus::Standby => match preflight_status {
+                Some(NodeStatus::Ready) => *maximum,
+                Some(NodeStatus::Standby) => {
+                    // Add capacity iff bond size is the limiting factor, and we'd also push it over threshold
+                    if preflight_reason
+                        .map(|reason| reason.to_ascii_lowercase().contains("minimum bond"))
+                        .unwrap_or(false)
+                        && total_bond.add(*maximum).ge(min_bond)
+                    {
+                        *maximum
+                    } else {
+                        Decimal::zero()
+                    }
+                }
+                _ => Decimal::zero(),
+            },
+            _ => Decimal::zero(),
+        }
+    }
+
+    fn failed_preflight(&self) -> bool {
+        self.status == NodeStatus::Standby
+            && self.preflight_status == Some(NodeStatus::Standby)
+            && !self
+                .preflight_reason
+                .as_ref()
+                .map(|reason| reason.to_ascii_lowercase().contains("minimum bond"))
+                .unwrap_or(false)
     }
 }
 
@@ -355,18 +459,11 @@ impl From<&Node> for NodeResponse {
 mod tests {
     use anybuf::Bufany;
     use cosmwasm_std::testing::mock_dependencies;
-    use cosmwasm_std::{
-        from_json, testing::mock_env, Addr, CanonicalAddr, ContractResult, Decimal, Empty,
-        QueryRequest, Response, SystemError, SystemResult, Uint128,
-    };
-    use cosmwasm_std::{
-        testing::{MockApi, MockStorage},
-        AnyMsg, Binary, CosmosMsg, OwnedDeps, Querier,
-    };
+    use cosmwasm_std::{testing::mock_env, Addr, CanonicalAddr, Decimal, Env, Response, Uint128};
+    use cosmwasm_std::{testing::MockStorage, AnyMsg, CosmosMsg};
+    use cw_utils::Duration;
     use proptest::prelude::*;
-    use prost::Message;
-    use rujira_rs::proto::types::{NodeBondProvider, NodeBondProviders, QueryMimirWithKeyResponse};
-    use std::marker::PhantomData;
+    use rujira_rs::proto::types::{NodeBondProvider, NodeBondProviders, NodePreflightStatus};
     use std::str::FromStr;
 
     use super::*;
@@ -379,54 +476,59 @@ mod tests {
             weight,
             capacity: Decimal::from_ratio(1000u128, 1u128),
             is_leaving,
+            preflight_status: None,
+            preflight_reason: None,
             status: NodeStatus::Active,
             res: Default::default(),
         }
     }
 
-    fn deps_with_mimir(value: i64) -> OwnedDeps<MockStorage, MockApi, GrpcMockQuerier, Empty> {
-        OwnedDeps {
-            storage: MockStorage::new(),
-            api: MockApi::default(),
-            querier: GrpcMockQuerier { mimir_value: value },
-            custom_query_type: PhantomData,
+    fn config(max_bond: u128, max_effective_bond: u128) -> Config {
+        Config {
+            target_utilization: Decimal::one(),
+            min_node_fee: Decimal::percent(5),
+            range: rujira_rs::brune::RangeConfig {
+                high: Decimal::percent(99),
+                low: Decimal::percent(80),
+                skew: cosmwasm_std::SignedDecimal::zero(),
+                step: Decimal::percent(1),
+            },
+            permissionless: false,
+            fin_contract: Addr::unchecked("fin"),
+            stake_contract: Addr::unchecked("stake"),
+            revenue_smear: 1,
+            quarantine: Duration::Height(10),
+            token_id: "brune".to_string(),
+            max_bond: Uint128::new(max_bond),
+            max_effective_bond: Uint128::new(max_effective_bond),
+            mint_cap: Uint128::new(1_000),
         }
     }
 
-    #[derive(Default)]
-    struct GrpcMockQuerier {
-        mimir_value: i64,
-    }
-
-    impl Querier for GrpcMockQuerier {
-        fn raw_query(&self, bin_request: &[u8]) -> SystemResult<ContractResult<Binary>> {
-            let request: QueryRequest<Empty> = match from_json(bin_request) {
-                Ok(v) => v,
-                Err(e) => {
-                    return SystemResult::Err(SystemError::InvalidRequest {
-                        error: format!("Parsing query request: {e}"),
-                        request: bin_request.into(),
-                    })
-                }
-            };
-            match request {
-                QueryRequest::Grpc(grpc) => match grpc.path.as_str() {
-                    "/types.Query/MimirWithKey" => {
-                        let response = QueryMimirWithKeyResponse {
-                            value: self.mimir_value,
-                        };
-                        let mut buf = Vec::new();
-                        response.encode(&mut buf).unwrap();
-                        SystemResult::Ok(ContractResult::Ok(buf.into()))
-                    }
-                    _ => SystemResult::Err(SystemError::UnsupportedRequest {
-                        kind: "GRPC".to_string(),
-                    }),
-                },
-                _ => SystemResult::Err(SystemError::UnsupportedRequest {
-                    kind: "query".to_string(),
-                }),
-            }
+    fn response(
+        env: &Env,
+        status: &str,
+        total_bond: &str,
+        provider_bond: &str,
+        preflight: Option<(&str, &str)>,
+    ) -> QueryNodeResponse {
+        QueryNodeResponse {
+            node_address: "node".to_string(),
+            status: status.to_string(),
+            total_bond: total_bond.to_string(),
+            bond_providers: Some(NodeBondProviders {
+                node_operator_fee: "500".to_string(),
+                providers: vec![NodeBondProvider {
+                    bond_address: env.contract.address.to_string(),
+                    bond: provider_bond.to_string(),
+                }],
+            }),
+            preflight_status: preflight.map(|(status, reason)| NodePreflightStatus {
+                status: status.to_string(),
+                reason: reason.to_string(),
+                code: if status == "Ready" { 0 } else { 1 },
+            }),
+            ..QueryNodeResponse::default()
         }
     }
 
@@ -535,6 +637,7 @@ mod tests {
             fin_contract: Addr::unchecked("fin"),
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 1,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             max_bond: Uint128::new(100),
             max_effective_bond: Uint128::new(1_000_000),
@@ -568,6 +671,7 @@ mod tests {
             fin_contract: Addr::unchecked("fin"),
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 1,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             max_bond: Uint128::new(100),
             max_effective_bond: Uint128::new(1_000_000),
@@ -578,7 +682,7 @@ mod tests {
             node_address: addr.to_string(),
             ..QueryNodeResponse::default()
         };
-        assert!(Node::from_response(&env, &config, &addr, res).is_none());
+        assert!(Node::from_response(&env, &config, &Decimal::zero(), &addr, res).is_none());
     }
 
     #[test]
@@ -598,6 +702,7 @@ mod tests {
             fin_contract: Addr::unchecked("fin"),
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 1,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             max_bond: Uint128::new(100),
             max_effective_bond: Uint128::new(1_000_000),
@@ -619,11 +724,109 @@ mod tests {
             ..QueryNodeResponse::default()
         };
 
-        let node = Node::from_response(&env, &config, &addr, res).unwrap();
+        let node = Node::from_response(&env, &config, &Decimal::zero(), &addr, res).unwrap();
         assert_eq!(node.addr, addr);
         assert_eq!(node.bond, Decimal::from_ratio(25u128, 1u128));
         assert!(node.is_leaving);
         assert_eq!(node.status, NodeStatus::Active);
+    }
+
+    #[test]
+    fn from_response_keeps_current_status_separate_from_preflight() {
+        let mut env = mock_env();
+        env.contract.address = Addr::unchecked("contract");
+        let config = config(100, 1_000_000);
+        let addr = Addr::unchecked("node");
+
+        let node = Node::from_response(
+            &env,
+            &config,
+            &Decimal::from_ratio(50u128, 1u128),
+            &addr,
+            response(
+                &env,
+                "Active",
+                "10",
+                "10",
+                Some(("Standby", "node account has invalid registered IP address")),
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(node.status, NodeStatus::Active);
+        assert_eq!(node.preflight_status, Some(NodeStatus::Standby));
+        assert_eq!(node.capacity, Decimal::from_ratio(90u128, 1u128));
+    }
+
+    #[test]
+    fn from_response_standby_capacity_requires_ready_or_min_bond_only_preflight() {
+        let mut env = mock_env();
+        env.contract.address = Addr::unchecked("contract");
+        let config = config(100, 1_000_000);
+        let min_bond = Decimal::from_ratio(50u128, 1u128);
+        let addr = Addr::unchecked("node");
+
+        let ready = Node::from_response(
+            &env,
+            &config,
+            &min_bond,
+            &addr,
+            response(&env, "Standby", "10", "10", Some(("Ready", "OK"))),
+        )
+        .unwrap();
+        assert_eq!(ready.capacity, Decimal::from_ratio(90u128, 1u128));
+
+        let min_only = Node::from_response(
+            &env,
+            &config,
+            &min_bond,
+            &addr,
+            response(
+                &env,
+                "Standby",
+                "10",
+                "10",
+                Some((
+                    "Standby",
+                    "node account does not have minimum bond requirement: 10/50",
+                )),
+            ),
+        )
+        .unwrap();
+        assert_eq!(min_only.capacity, Decimal::from_ratio(90u128, 1u128));
+
+        let invalid_ip = Node::from_response(
+            &env,
+            &config,
+            &min_bond,
+            &addr,
+            response(
+                &env,
+                "Standby",
+                "10",
+                "10",
+                Some(("Standby", "node account has invalid registered IP address")),
+            ),
+        )
+        .unwrap();
+        assert_eq!(invalid_ip.capacity, Decimal::zero());
+    }
+
+    #[test]
+    fn from_response_ready_status_is_not_counted_as_bondable_capacity() {
+        let mut env = mock_env();
+        env.contract.address = Addr::unchecked("contract");
+        let config = config(100, 1_000_000);
+        let addr = Addr::unchecked("node");
+        let node = Node::from_response(
+            &env,
+            &config,
+            &Decimal::from_ratio(50u128, 1u128),
+            &addr,
+            response(&env, "Ready", "10", "10", Some(("Ready", "OK"))),
+        )
+        .unwrap();
+        assert_eq!(node.capacity, Decimal::zero());
     }
 
     #[test]
@@ -643,6 +846,7 @@ mod tests {
             fin_contract: Addr::unchecked("fin"),
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 1,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             // High per-node cap so max_effective_bond is the binding constraint.
             max_bond: Uint128::new(10_000),
@@ -664,7 +868,7 @@ mod tests {
             ..QueryNodeResponse::default()
         };
 
-        let node = Node::from_response(&env, &config, &addr, res).unwrap();
+        let node = Node::from_response(&env, &config, &Decimal::zero(), &addr, res).unwrap();
         // headroom = max_effective_bond - total_bond = 1000 - 800 = 200
         // (would be 9_900 from max_bond - bond, so max_effective is the binding cap)
         assert_eq!(node.capacity, Decimal::from_ratio(200u128, 1u128));
@@ -687,6 +891,7 @@ mod tests {
             fin_contract: Addr::unchecked("fin"),
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 1,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             max_bond: Uint128::new(10_000),
             max_effective_bond: Uint128::new(1_000),
@@ -708,7 +913,7 @@ mod tests {
             ..QueryNodeResponse::default()
         };
 
-        let node = Node::from_response(&env, &config, &addr, res).unwrap();
+        let node = Node::from_response(&env, &config, &Decimal::zero(), &addr, res).unwrap();
         assert_eq!(node.capacity, Decimal::zero());
     }
 
@@ -892,36 +1097,85 @@ mod tests {
     }
 
     #[test]
-    fn request_bond_returns_empty_when_min_negative() {
-        let mut deps = deps_with_mimir(-1);
-        let n1 = node(
-            "node-1",
-            Decimal::from_ratio(10u128, 1u128),
-            Decimal::one(),
-            false,
-        );
+    fn unbond_failed_preflight_releases_stranded_standby_bond() {
+        let failed = Node {
+            status: NodeStatus::Standby,
+            preflight_status: Some(NodeStatus::Standby),
+            preflight_reason: Some(
+                "node account does not meet min version requirement: 1.0.0 vs 1.1.0".to_string(),
+            ),
+            capacity: Decimal::zero(),
+            ..node(
+                "node-1",
+                Decimal::from_ratio(10u128, 1u128),
+                Decimal::one(),
+                false,
+            )
+        };
+        let min_bond = Node {
+            status: NodeStatus::Standby,
+            preflight_status: Some(NodeStatus::Standby),
+            preflight_reason: Some(
+                "node account does not have minimum bond requirement: 10/50".to_string(),
+            ),
+            capacity: Decimal::zero(),
+            ..node(
+                "node-2",
+                Decimal::from_ratio(5u128, 1u128),
+                Decimal::one(),
+                false,
+            )
+        };
+        let ready_without_headroom = Node {
+            status: NodeStatus::Standby,
+            preflight_status: Some(NodeStatus::Ready),
+            capacity: Decimal::zero(),
+            ..node(
+                "node-3",
+                Decimal::from_ratio(15u128, 1u128),
+                Decimal::one(),
+                false,
+            )
+        };
+        let zero_bond_failed = Node {
+            status: NodeStatus::Standby,
+            preflight_status: Some(NodeStatus::Standby),
+            preflight_reason: Some("node account is jailed until block 1234: reason".to_string()),
+            capacity: Decimal::zero(),
+            ..node("node-4", Decimal::zero(), Decimal::one(), false)
+        };
         let mut nodes = Nodes {
-            bond: n1.bond,
-            weight: n1.weight,
-            capacity: Decimal::MAX,
-            nodes: vec![n1],
+            bond: Decimal::from_ratio(30u128, 1u128),
+            weight: Decimal::from_ratio(4u128, 1u128),
+            capacity: Decimal::zero(),
+            nodes: vec![failed, min_bond, ready_without_headroom, zero_bond_failed],
         };
         let signer = CanonicalAddr::from(vec![1u8; 32]);
-        let response = nodes
-            .request_bond(
-                deps.as_mut(),
+        let mut response = Response::default();
+        let (total, quarantined) = nodes
+            .unbond_failed_preflight(
+                mock_dependencies().as_mut().storage,
                 &mock_env(),
                 &signer,
-                &Decimal::one(),
-                Response::default(),
+                &mut response,
             )
             .unwrap();
-        assert!(response.messages.is_empty());
+
+        assert_eq!(total, Decimal::from_ratio(10u128, 1u128));
+        assert_eq!(nodes.bonded(), Decimal::from_ratio(20u128, 1u128));
+        assert_eq!(nodes.nodes[0].bond, Decimal::zero());
+        assert_eq!(nodes.nodes[1].bond, Decimal::from_ratio(5u128, 1u128));
+        assert_eq!(nodes.nodes[2].bond, Decimal::from_ratio(15u128, 1u128));
+        assert_eq!(
+            quarantined,
+            vec![Addr::unchecked("node-1"), Addr::unchecked("node-4")]
+        );
+        assert_eq!(response.messages.len(), 1);
     }
 
     #[test]
     fn request_bond_returns_empty_when_no_candidate() {
-        let mut deps = deps_with_mimir(100);
+        let mut deps = mock_dependencies();
         let n1 = node(
             "node-1",
             Decimal::from_ratio(10u128, 1u128),
@@ -939,6 +1193,7 @@ mod tests {
             .request_bond(
                 deps.as_mut(),
                 &mock_env(),
+                &Decimal::percent(10000),
                 &signer,
                 &Decimal::from_ratio(5u128, 1u128),
                 Response::default(),
@@ -949,7 +1204,7 @@ mod tests {
 
     #[test]
     fn request_bond_selects_churn_out_candidate() {
-        let mut deps = deps_with_mimir(1);
+        let mut deps = mock_dependencies();
         let n1 = node(
             "node-1",
             Decimal::from_ratio(10u128, 1u128),
@@ -973,6 +1228,7 @@ mod tests {
             .request_bond(
                 deps.as_mut(),
                 &mock_env(),
+                &Decimal::one(),
                 &signer,
                 &Decimal::from_ratio(20u128, 1u128),
                 Response::default(),
@@ -1027,6 +1283,8 @@ mod tests {
                     weight,
                     capacity,
                     is_leaving: false,
+                    preflight_status: None,
+                    preflight_reason: None,
                     status: NodeStatus::Active,
                     res: Default::default(),
                 });

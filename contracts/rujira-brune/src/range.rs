@@ -2,13 +2,13 @@ use crate::{
     config::{Config, RUNE},
     contract::rune_balance,
     events::{event_burn, event_mint},
-    state::State,
+    state::{State, StateCtx},
     ContractError,
 };
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    coins, from_json, to_json_binary, BankMsg, Binary, Coin, Decimal, Deps, Env, MessageInfo,
-    Response, Uint128,
+    coins, from_json, to_json_binary, BankMsg, Binary, Coin, Decimal, MessageInfo, Response,
+    Uint128,
 };
 use cw_utils::must_pay;
 use rujira_rs::{
@@ -24,22 +24,19 @@ pub struct QuoteData {
 }
 
 impl State {
-    #[allow(clippy::too_many_arguments)]
     pub fn quote(
         &self,
-        deps: Deps,
-        env: &Env,
-        config: &Config,
+        ctx: StateCtx<'_>,
         balance: &Decimal,
         bonded: &Decimal,
         data: &Option<Binary>,
         (ask_denom, offer_denom): (String, String),
     ) -> Result<QuoteResponse, ContractError> {
-        let token = TokenFactory::new(env, &config.token_id);
-        if ask_denom == RUNE && offer_denom == token.denom() {
-            self.quote_bid(config, balance, bonded, data)
-        } else if ask_denom == token.denom() && offer_denom == RUNE {
-            self.quote_ask(deps, env, config, data)
+        let token_denom = TokenFactory::new(ctx.env, &ctx.config.token_id).denom();
+        if ask_denom == RUNE && offer_denom == token_denom {
+            self.quote_bid(ctx.config, balance, bonded, data)
+        } else if ask_denom == token_denom && offer_denom == RUNE {
+            self.quote_ask(ctx, data)
         } else {
             Err(ContractError::InsufficientFunds {})
         }
@@ -47,20 +44,22 @@ impl State {
 
     fn quote_ask(
         &self,
-        deps: Deps,
-        env: &Env,
-        config: &Config,
+        ctx: StateCtx<'_>,
         data: &Option<Binary>,
     ) -> Result<QuoteResponse, ContractError> {
         match data {
             Some(_) => Err(ContractError::InsufficientFunds {}),
             None => {
                 let size = self
-                    .nodes(deps, env, config)?
+                    .nodes(ctx.deps, ctx.env, ctx.config, ctx.min_bond)?
                     .capacity()
-                    .checked_div(config.target_utilization)?
+                    .checked_div(ctx.config.target_utilization)?
                     .to_uint_floor()
-                    .min(config.mint_cap.saturating_sub(self.minted.to_uint_floor()));
+                    .min(
+                        ctx.config
+                            .mint_cap
+                            .saturating_sub(self.minted.to_uint_floor()),
+                    );
 
                 if size.is_zero() {
                     return Err(ContractError::InsufficientFunds {});
@@ -105,47 +104,39 @@ impl State {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn swap(
         &mut self,
-        deps: Deps,
-        env: &Env,
+        ctx: StateCtx<'_>,
         info: &MessageInfo,
-        config: &Config,
         min_return: &Coin,
         response: Response,
         bonded: &Decimal,
         rune: &Decimal,
     ) -> Result<Response, ContractError> {
-        let token = TokenFactory::new(env, &config.token_id);
+        let token_denom = TokenFactory::new(ctx.env, &ctx.config.token_id).denom();
 
-        if min_return.denom == token.denom() {
-            self.swap_join(deps, env, info, config, &token, min_return, response)
+        if min_return.denom == token_denom {
+            self.swap_join(ctx, info, min_return, response)
         } else if min_return.denom == RUNE {
-            self.swap_leave(
-                deps, env, info, config, &token, min_return, response, bonded, rune,
-            )
+            self.swap_leave(ctx, info, min_return, response, bonded, rune)
         } else {
             Err(ContractError::InsufficientFunds {})
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn swap_join(
         &mut self,
-        deps: Deps,
-        env: &Env,
+        ctx: StateCtx<'_>,
         info: &MessageInfo,
-        config: &Config,
-        token: &TokenFactory,
         min_return: &Coin,
         response: Response,
     ) -> Result<Response, ContractError> {
+        let token = TokenFactory::new(ctx.env, &ctx.config.token_id);
         let rune = must_pay(info, RUNE)?;
         let capacity = self
-            .nodes(deps, env, config)?
+            .nodes(ctx.deps, ctx.env, ctx.config, ctx.min_bond)?
             .capacity()
-            .checked_div(config.target_utilization)?
+            .checked_div(ctx.config.target_utilization)?
             .to_uint_floor();
 
         if min_return.amount > rune {
@@ -159,31 +150,29 @@ impl State {
             return Err(ContractError::InsufficientCapacity(capacity));
         }
         let minted = self.deposit(rune)?;
-        if self.minted.to_uint_ceil().gt(&config.mint_cap) {
-            return Err(ContractError::MintCapExceeded(config.mint_cap));
+        if self.minted.to_uint_ceil().gt(&ctx.config.mint_cap) {
+            return Err(ContractError::MintCapExceeded(ctx.config.mint_cap));
         }
         Ok(response
             .add_event(event_mint(&info.sender, minted, &token.denom()))
             .add_message(token.mint_msg(minted, info.sender.clone())))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn swap_leave(
         &mut self,
-        deps: Deps,
-        env: &Env,
+        ctx: StateCtx<'_>,
         info: &MessageInfo,
-        config: &Config,
-        token: &TokenFactory,
         min_return: &Coin,
         response: Response,
         bonded: &Decimal,
         received: &Decimal,
     ) -> Result<Response, ContractError> {
-        let amount = must_pay(info, &token.denom())?;
-        let balance = Self::effective_balance(rune_balance(&deps, env)?, Some(*received));
+        let token = TokenFactory::new(ctx.env, &ctx.config.token_id);
+        let token_denom = token.denom();
+        let amount = must_pay(info, &token_denom)?;
+        let balance = Self::effective_balance(rune_balance(&ctx.deps, ctx.env)?, Some(*received));
         let quote = self.quote_liquidity(&balance, bonded)?;
-        let returned = quote_return(&config.range, quote, amount);
+        let returned = quote_return(&ctx.config.range, quote, amount);
 
         if returned.cmp(&min_return.amount) == Ordering::Less {
             return Err(ContractError::InsufficientFunds {});
@@ -192,7 +181,7 @@ impl State {
         self.withdraw(amount)?;
 
         Ok(response
-            .add_event(event_burn(&info.sender, amount, &token.denom()))
+            .add_event(event_burn(&info.sender, amount, &token_denom))
             .add_message(BankMsg::Send {
                 to_address: info.sender.to_string(),
                 amount: coins(min_return.amount.u128(), RUNE),
@@ -262,6 +251,7 @@ mod tests {
     use super::*;
 
     use cosmwasm_std::{Addr, SignedDecimal};
+    use cw_utils::Duration;
 
     fn config() -> Config {
         Config {
@@ -277,6 +267,7 @@ mod tests {
             fin_contract: Addr::unchecked("fin"),
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 1_000,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             max_bond: Uint128::new(10_000),
             max_effective_bond: Uint128::new(1_000_000),

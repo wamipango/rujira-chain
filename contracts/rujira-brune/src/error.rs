@@ -43,6 +43,9 @@ pub enum ContractError {
 
     #[error("Invalid: {0}")]
     Invalid(String),
+
+    #[error("InvalidMinimumBond")]
+    InvalidMinimumBond,
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

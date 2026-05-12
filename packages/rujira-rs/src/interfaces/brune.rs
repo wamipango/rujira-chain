@@ -1,6 +1,7 @@
 use crate::{fin, proto::types::QueryNodeResponse, CallbackData, TokenMetadata};
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Event, SignedDecimal, Timestamp, Uint128};
+use cw_utils::Duration;
 use std::str::FromStr;
 
 #[cw_serde]
@@ -32,6 +33,8 @@ pub struct InstantiateMsg {
     pub stake_contract: String,
     /// The duration over which revenue is distributed, to prevent spikes following churn
     pub revenue_smear: u32,
+    /// How long to skip a node after it reveals a non-minimum-bond preflight failure
+    pub quarantine: Duration,
     /// Max bond per whitelisted node. Should eventually be replaced with a query of the hard bond cap
     pub max_bond: Uint128,
     /// Cap on the total bond on a node across all bond providers. Tracks the network's
@@ -47,7 +50,7 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub struct MigrateMsg {
-    pub max_effective_bond: Uint128,
+    pub quarantine: Duration,
 }
 
 #[cw_serde]
@@ -82,6 +85,7 @@ pub struct ConfigUpdate {
     pub permissionless: Option<bool>,
     pub stake_contract: Option<String>,
     pub revenue_smear: Option<u32>,
+    pub quarantine: Option<Duration>,
     pub max_bond: Option<Uint128>,
     pub max_effective_bond: Option<Uint128>,
     pub mint_cap: Option<Uint128>,
@@ -112,6 +116,7 @@ pub struct ConfigResponse {
     pub fin_contract: String,
     pub stake_contract: String,
     pub revenue_smear: u32,
+    pub quarantine: Duration,
     pub token_id: String,
     pub max_bond: Uint128,
     pub max_effective_bond: Uint128,

@@ -1,6 +1,7 @@
 use cosmwasm_std::{coins, testing::MockApi, to_json_binary, Decimal, Event, Uint128};
 use cw_multi_test::{BasicAppBuilder, ContractWrapper, Executor};
 
+use cw_utils::Duration;
 use rujira_fin::mock::Fin;
 use rujira_rs::{
     brune::{InstantiateMsg, RangeConfig, SudoMsg},
@@ -67,6 +68,7 @@ fn brune_fin_staking_e2e() {
                 min_node_fee: Decimal::percent(5),
                 stake_contract: staking.addr().to_string(),
                 revenue_smear: 1000,
+                quarantine: Duration::Height(10),
                 token_id: "brune".to_string(),
                 token_metadata: TokenMetadata {
                     description: "BRUNE".to_string(),
@@ -236,6 +238,7 @@ fn oob_memory_26086832() {
                 min_node_fee: Decimal::percent(5),
                 stake_contract: owner.to_string(),
                 revenue_smear: 1000,
+                quarantine: Duration::Height(10),
                 token_id: "brune".to_string(),
                 token_metadata: TokenMetadata {
                     description: "BRUNE".to_string(),

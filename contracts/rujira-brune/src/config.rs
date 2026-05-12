@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, Deps, SignedDecimal, StdResult, Storage, Uint128};
 use cw_storage_plus::Item;
+use cw_utils::Duration;
 use rujira_rs::brune::{ConfigResponse, ConfigUpdate, InstantiateMsg, MigrateMsg, RangeConfig};
 
 use crate::ContractError;
@@ -18,6 +19,7 @@ pub struct Config {
     pub fin_contract: Addr,
     pub stake_contract: Addr,
     pub revenue_smear: u32,
+    pub quarantine: Duration,
     pub token_id: String,
     pub max_bond: Uint128,
     pub max_effective_bond: Uint128,
@@ -34,6 +36,7 @@ impl Config {
             fin_contract: deps.api.addr_validate(&msg.fin_contract)?,
             stake_contract: deps.api.addr_validate(&msg.stake_contract)?,
             revenue_smear: msg.revenue_smear,
+            quarantine: msg.quarantine,
             token_id: msg.token_id.clone(),
             max_bond: msg.max_bond,
             max_effective_bond: msg.max_effective_bond,
@@ -55,9 +58,10 @@ impl Config {
             fin_contract: legacy.fin_contract,
             stake_contract: legacy.stake_contract,
             revenue_smear: legacy.revenue_smear,
+            quarantine: msg.quarantine,
             token_id: legacy.token_id,
             max_bond: legacy.max_bond,
-            max_effective_bond: msg.max_effective_bond,
+            max_effective_bond: legacy.max_effective_bond,
             mint_cap: legacy.mint_cap,
         };
         CONFIG.save(storage, &config)?;
@@ -101,6 +105,11 @@ impl Config {
                 "revenue_smear must be greater than 100".to_string(),
             ));
         }
+        if matches!(self.quarantine, Duration::Height(0) | Duration::Time(0)) {
+            return Err(ContractError::Invalid(
+                "quarantine must be greater than 0".to_string(),
+            ));
+        }
         if self.mint_cap.is_zero() {
             return Err(ContractError::Invalid(
                 "mint_cap must be greater than 0".to_string(),
@@ -140,6 +149,9 @@ impl Config {
         if let Some(revenue_smear) = update.revenue_smear {
             self.revenue_smear = revenue_smear;
         };
+        if let Some(quarantine) = update.quarantine {
+            self.quarantine = quarantine;
+        };
         if let Some(max_bond) = update.max_bond {
             self.max_bond = max_bond;
         };
@@ -166,6 +178,7 @@ struct OldConfig {
     token_id: String,
     max_bond: Uint128,
     mint_cap: Uint128,
+    max_effective_bond: Uint128,
 }
 
 impl From<Config> for ConfigResponse {
@@ -178,6 +191,7 @@ impl From<Config> for ConfigResponse {
             fin_contract: value.fin_contract.to_string(),
             stake_contract: value.stake_contract.to_string(),
             revenue_smear: value.revenue_smear,
+            quarantine: value.quarantine,
             token_id: value.token_id,
             max_bond: value.max_bond,
             max_effective_bond: value.max_effective_bond,
@@ -208,6 +222,7 @@ mod tests {
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
@@ -227,6 +242,7 @@ mod tests {
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
@@ -256,6 +272,7 @@ mod tests {
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
@@ -285,6 +302,7 @@ mod tests {
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
@@ -306,6 +324,36 @@ mod tests {
     }
 
     #[test]
+    fn validation_quarantine_bounds() {
+        let base = Config {
+            target_utilization: Decimal::percent(90),
+            min_node_fee: Decimal::percent(5),
+            range: range(),
+            permissionless: false,
+            stake_contract: Addr::unchecked("stake"),
+            revenue_smear: 101,
+            quarantine: Duration::Height(10),
+            token_id: "brune".to_string(),
+            fin_contract: Addr::unchecked("fin"),
+            max_bond: Uint128::new(100),
+            max_effective_bond: Uint128::new(1_000_000),
+            mint_cap: Uint128::new(1_000),
+        };
+        assert!(Config {
+            quarantine: Duration::Height(0),
+            ..base.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(Config {
+            quarantine: Duration::Time(0),
+            ..base
+        }
+        .validate()
+        .is_err());
+    }
+
+    #[test]
     fn validation_range_bounds() {
         let base = Config {
             target_utilization: Decimal::percent(90),
@@ -314,6 +362,7 @@ mod tests {
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
@@ -359,6 +408,7 @@ mod tests {
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),
@@ -382,6 +432,7 @@ mod tests {
             permissionless: false,
             stake_contract: Addr::unchecked("stake"),
             revenue_smear: 101,
+            quarantine: Duration::Height(10),
             token_id: "brune".to_string(),
             fin_contract: Addr::unchecked("fin"),
             max_bond: Uint128::new(100),

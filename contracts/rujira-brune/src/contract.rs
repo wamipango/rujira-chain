@@ -17,7 +17,8 @@ use rujira_rs::TokenFactory;
 use crate::config::{Config, RUNE};
 use crate::error::ContractError;
 use crate::events::{event_node_deregister, event_node_register, query_events};
-use crate::state::State;
+use crate::nodes::Node;
+use crate::state::{State, StateCtx};
 
 const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -47,6 +48,7 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let config = Config::load(deps.storage)?;
     let mut state = State::load(deps.storage)?;
+    let min_bond = Node::minimum_bond(deps.querier)?;
     match msg {
         ExecuteMsg::Swap { min_return, .. } => {
             ensure_eq!(
@@ -56,18 +58,31 @@ pub fn execute(
             );
             let rune = Decimal::from_ratio(must_pay(&info, RUNE).unwrap_or_default(), 1u128);
             let mut response = Response::default();
+            let bonded = state
+                .nodes(deps.as_ref(), &env, &config, &min_bond)?
+                .bonded();
             response = state.swap(
-                deps.as_ref(),
-                &env,
+                StateCtx {
+                    deps: deps.as_ref(),
+                    env: &env,
+                    config: &config,
+                    min_bond: &min_bond,
+                },
                 &info,
-                &config,
                 &min_return,
                 response,
-                &state.nodes(deps.as_ref(), &env, &config)?.bonded(),
+                &bonded,
                 &rune,
             )?;
             // Only required to store to the Event Log. Safe to `branch`
-            response = state.allocate(deps.branch(), &env, &config, response, Some(rune))?;
+            response = state.allocate(
+                deps.branch(),
+                &env,
+                &config,
+                &min_bond,
+                response,
+                Some(rune),
+            )?;
             state.save(deps.storage)?;
             Ok(response)
         }
@@ -75,7 +90,7 @@ pub fn execute(
             if !config.permissionless {
                 return Err(ContractError::Unauthorized {});
             }
-            process_node(deps, env, &config, &addr)
+            process_node(deps, env, &config, &min_bond, &addr)
         }
     }
 }
@@ -83,8 +98,10 @@ pub fn execute(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
     let mut config = Config::load(deps.storage)?;
+    let min_bond = Node::minimum_bond(deps.querier)?;
+
     match msg {
-        SudoMsg::ProcessNode { addr } => process_node(deps, env, &config, &addr),
+        SudoMsg::ProcessNode { addr } => process_node(deps, env, &config, &min_bond, &addr),
         SudoMsg::UpdateConfig(update) => {
             config.update(deps.as_ref(), update)?;
             config.validate()?;
@@ -98,11 +115,12 @@ fn process_node(
     deps: DepsMut,
     env: Env,
     config: &Config,
+    min_bond: &Decimal,
     addr: &str,
 ) -> Result<Response, ContractError> {
     let mut state = State::load(deps.storage)?;
     let addr = deps.api.addr_validate(addr)?;
-    let res = state.register(deps.as_ref(), &env, config, &addr)?;
+    let res = state.register(deps.as_ref(), &env, config, min_bond, &addr)?;
     state.save(deps.storage)?;
     match res {
         Some(node) => {
@@ -135,6 +153,7 @@ pub fn rune_balance(deps: &Deps, env: &Env) -> Result<Decimal, ContractError> {
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
+    let min_bond = Node::minimum_bond(deps.querier)?;
     match msg {
         QueryMsg::Quote(req) => {
             let cache = match req.data.clone().map(from_json).transpose()? {
@@ -143,7 +162,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                     let state = State::load(deps.storage)?;
                     let config = Config::load(deps.storage)?;
                     StoreCache {
-                        bonded: state.nodes(deps, &env, &config)?.bonded(),
+                        bonded: state.nodes(deps, &env, &config, &min_bond)?.bonded(),
                         quote: None,
                         balance: rune_balance(&deps, &env)?,
                         config,
@@ -152,9 +171,12 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                 }
             };
             let res = cache.state.quote(
-                deps,
-                &env,
-                &cache.config,
+                StateCtx {
+                    deps,
+                    env: &env,
+                    config: &cache.config,
+                    min_bond: &min_bond,
+                },
                 &cache.balance,
                 &cache.bonded,
                 &cache.quote,
@@ -182,7 +204,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 
             Ok(to_json_binary(&StateResponse {
                 minted: state.minted,
-                nodes: NodesResponse::from(state.nodes(deps, &env, &config)?),
+                nodes: NodesResponse::from(state.nodes(deps, &env, &config, &min_bond)?),
                 revenue: RevenueResponse::from(state.revenue),
             })?)
         }
@@ -209,6 +231,7 @@ mod tests {
     use super::*;
     use cosmwasm_std::{coin, coins, Decimal, Event, Timestamp, Uint128};
     use cw_multi_test::{ContractWrapper, Executor};
+    use cw_utils::Duration;
     use rujira_rs::{
         brune::RangeConfig,
         fin::market_maker::QuoteRequest,
@@ -252,6 +275,7 @@ mod tests {
                     permissionless: false,
                     stake_contract: stake.to_string(),
                     revenue_smear: 100000,
+                    quarantine: Duration::Height(10),
                     token_id: "brune".to_string(),
                     token_metadata: TokenMetadata {
                         description: "Some Description".to_string(),
@@ -292,6 +316,7 @@ mod tests {
                 fin_contract: fin.to_string(),
                 stake_contract: stake.to_string(),
                 revenue_smear: 100000,
+                quarantine: Duration::Height(10),
                 token_id: "brune".to_string(),
                 max_bond: Uint128::new(10000),
                 max_effective_bond: Uint128::new(1_000_000),
@@ -355,6 +380,7 @@ mod tests {
                     permissionless: false,
                     stake_contract: stake.to_string(),
                     revenue_smear: 100000,
+                    quarantine: Duration::Height(10),
                     token_id: "brune".to_string(),
                     token_metadata: TokenMetadata {
                         description: "Some Description".to_string(),

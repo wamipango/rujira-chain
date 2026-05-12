@@ -134,17 +134,15 @@ pub fn execute(
                     amount: coins(amm_fee.u128(), min_return.denom.clone()),
                 }]
             };
-            let mut response = Response::default()
-                .add_event(event_swap(
-                    &funds,
-                    &coin(clp_return.u128(), min_return.denom.clone()),
-                    &min_return,
-                    &coin(reserve_fee.u128(), min_return.denom.clone()),
-                    &coin(amm_fee.u128(), min_return.denom.clone()),
-                    &min_return,
-                    &memo,
-                ))
-                .add_messages(execute_repayments(deps.as_ref(), &env, Some(funds))?);
+            let mut response = Response::default().add_event(event_swap(
+                &funds,
+                &coin(clp_return.u128(), min_return.denom.clone()),
+                &min_return,
+                &coin(reserve_fee.u128(), min_return.denom.clone()),
+                &coin(amm_fee.u128(), min_return.denom.clone()),
+                &min_return,
+                &memo,
+            ));
 
             let required_amount = min_return.amount.add(amm_fee).saturating_sub(
                 deps.querier
@@ -160,7 +158,12 @@ pub fn execute(
             Ok(response
                 .add_message(swap_msg)
                 .add_message(send_msg)
-                .add_messages(fee_msg))
+                .add_messages(fee_msg)
+                .add_message(WasmMsg::Execute {
+                    contract_addr: env.contract.address.to_string(),
+                    msg: to_json_binary(&ExecuteMsg::Repay {})?,
+                    funds: vec![],
+                }))
         }
     }
 }
