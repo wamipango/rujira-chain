@@ -2,7 +2,7 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, Deps, SignedDecimal, StdResult, Storage, Uint128};
 use cw_storage_plus::Item;
 use cw_utils::Duration;
-use rujira_rs::brune::{ConfigResponse, ConfigUpdate, InstantiateMsg, MigrateMsg, RangeConfig};
+use rujira_rs::brune::{ConfigResponse, ConfigUpdate, InstantiateMsg, RangeConfig};
 
 use crate::ContractError;
 
@@ -46,26 +46,6 @@ impl Config {
 
     pub fn load(storage: &dyn Storage) -> StdResult<Self> {
         CONFIG.load(storage)
-    }
-
-    pub fn migrate(storage: &mut dyn Storage, msg: &MigrateMsg) -> StdResult<Self> {
-        let legacy: OldConfig = Item::new("config").load(storage)?;
-        let config = Self {
-            target_utilization: legacy.target_utilization,
-            min_node_fee: legacy.min_node_fee,
-            range: legacy.range,
-            permissionless: legacy.permissionless,
-            fin_contract: legacy.fin_contract,
-            stake_contract: legacy.stake_contract,
-            revenue_smear: legacy.revenue_smear,
-            quarantine: msg.quarantine,
-            token_id: legacy.token_id,
-            max_bond: legacy.max_bond,
-            max_effective_bond: legacy.max_effective_bond,
-            mint_cap: legacy.mint_cap,
-        };
-        CONFIG.save(storage, &config)?;
-        Ok(config)
     }
 
     pub fn validate(&self) -> Result<(), ContractError> {
@@ -163,22 +143,6 @@ impl Config {
         };
         Ok(())
     }
-}
-
-#[cw_serde]
-// Pre-v3 stored layout retained only so migrate can backfill max_effective_bond.
-struct OldConfig {
-    target_utilization: Decimal,
-    min_node_fee: Decimal,
-    range: RangeConfig,
-    permissionless: bool,
-    fin_contract: Addr,
-    stake_contract: Addr,
-    revenue_smear: u32,
-    token_id: String,
-    max_bond: Uint128,
-    mint_cap: Uint128,
-    max_effective_bond: Uint128,
 }
 
 impl From<Config> for ConfigResponse {

@@ -28,8 +28,8 @@ pub struct State {
     pub minted: Decimal,
     /// Whitelisted nodes
     nodes: BTreeSet<Addr>,
-    #[serde(default)]
-    quarantined: BTreeMap<Addr, Expiration>,
+
+    pub quarantined: BTreeMap<String, Expiration>,
 
     pub revenue: Revenue,
 }
@@ -61,7 +61,7 @@ impl State {
 
     fn is_quarantined(&self, env: &Env, addr: &Addr) -> bool {
         self.quarantined
-            .get(addr)
+            .get(addr.as_str())
             .map(|expires| !expires.is_expired(&env.block))
             .unwrap_or(false)
     }
@@ -182,7 +182,7 @@ impl State {
             nodes.unbond_failed_preflight(deps.storage, env, &signer, &mut response)?;
         for addr in quarantined {
             self.quarantined
-                .insert(addr, config.quarantine.after(&env.block));
+                .insert(addr.to_string(), config.quarantine.after(&env.block));
         }
         let target = self.minted.mul(config.target_utilization);
         match target.cmp(&bonded) {
@@ -435,7 +435,7 @@ mod tests {
 
         assert_eq!(response.messages.len(), 1);
         assert_eq!(
-            state.quarantined.get(&node_addr),
+            state.quarantined.get(node_addr.as_str()),
             Some(&Expiration::AtHeight(30))
         );
     }
@@ -464,7 +464,7 @@ mod tests {
         let state = State {
             minted: Decimal::zero(),
             nodes: BTreeSet::from([node_addr.clone()]),
-            quarantined: BTreeMap::from([(node_addr, Expiration::AtHeight(20))]),
+            quarantined: BTreeMap::from([(node_addr.to_string(), Expiration::AtHeight(20))]),
             revenue: Revenue::default(),
         };
         let config = test_config();

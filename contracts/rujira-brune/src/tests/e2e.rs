@@ -1,11 +1,15 @@
-use cosmwasm_std::{coins, testing::MockApi, to_json_binary, Decimal, Event, Uint128};
-use cw_multi_test::{BasicAppBuilder, ContractWrapper, Executor};
+use cosmwasm_std::{coins, testing::MockApi, to_json_binary, Addr, Decimal, Event, Uint128};
+use cw_multi_test::{AddressGenerator, BasicAppBuilder, ContractWrapper, Executor, WasmKeeper};
 
 use cw_utils::Duration;
 use rujira_fin::mock::Fin;
 use rujira_rs::{
-    brune::{InstantiateMsg, RangeConfig, SudoMsg},
-    fin::{self, Denoms, SwapRequest},
+    brune::{InstantiateMsg, QueryMsg, RangeConfig, StateResponse, SudoMsg},
+    fin::{
+        self,
+        market_maker::{QuoteRequest, QuoteResponse},
+        Denoms, SwapRequest,
+    },
     proto::types::{NodeBondProvider, NodeBondProviders, QueryNodeResponse},
     TokenMetadata,
 };
@@ -340,4 +344,96 @@ fn oob_memory_26086832() {
     assert_quote(0, "2.082707930349170458", 58_132);
     assert_quote(49, "2.077611414287328833", 58_060);
     assert_quote(99, "2.072423743349444925", 57_988);
+}
+
+#[test]
+#[ignore = "requires live gRPC network access"]
+fn unreachable_26143775() {
+    struct Gen {}
+    impl AddressGenerator for Gen {
+        fn contract_address(
+            &self,
+            _api: &dyn cosmwasm_std::Api,
+            _storage: &mut dyn cosmwasm_std::Storage,
+            _code_id: u64,
+            _instance_id: u64,
+        ) -> cw_multi_test::error::AnyResult<cosmwasm_std::Addr> {
+            Ok(Addr::unchecked(
+                "thor1enhmz57mpn4umspa8hqgqwwqpe02q4hpqmqr0k2zftxr8fu3nxmqjy3tqx",
+            ))
+        }
+    }
+    let api = MockApi::default().with_prefix("thor");
+    let owner = api.addr_make("owner");
+    let mut app = BasicAppBuilder::new()
+        .with_api(MockApi::default().with_prefix("thor"))
+        .with_stargate(ThorchainStargate::new(
+            "https://grpc.rujira.network:443".to_owned(),
+        ))
+        .with_wasm(WasmKeeper::default().with_address_generator(Gen {}))
+        .build(|_, _, _| {});
+
+    let code = Box::new(
+        ContractWrapper::new(execute, instantiate, query)
+            .with_reply(reply)
+            .with_sudo(sudo),
+    );
+
+    let code_id = app.store_code(code);
+    let contract = app
+        .instantiate_contract(
+            code_id,
+            owner.clone(),
+            &InstantiateMsg {
+                target_utilization: Decimal::percent(75),
+                min_node_fee: Decimal::percent(5),
+                stake_contract: owner.to_string(),
+                revenue_smear: 1000,
+                quarantine: Duration::Height(10),
+                token_id: "brune".to_string(),
+                token_metadata: TokenMetadata {
+                    description: "BRUNE".to_string(),
+                    display: "BRUNE".to_string(),
+                    name: "BRUNE".to_string(),
+                    symbol: "BRUNE".to_string(),
+                    uri: None,
+                    uri_hash: None,
+                },
+                fin_contract: api.addr_make("fin").to_string(),
+                max_bond: Uint128::new(10_000),
+                max_effective_bond: Uint128::new(1_000_000),
+                mint_cap: Uint128::new(1_000_000),
+                range: RangeConfig {
+                    high: Decimal::percent(99),
+                    low: Decimal::percent(80),
+                    skew: cosmwasm_std::SignedDecimal::zero(),
+                    step: Decimal::permille(5),
+                },
+                permissionless: false,
+            },
+            &[],
+            "brune",
+            None,
+        )
+        .unwrap();
+
+    load_contract_state(&mut app, &contract, "rujira-brune", 26143775).unwrap();
+
+    let _: QuoteResponse = app
+        .wrap()
+        .query_wasm_smart(
+            &contract,
+            &QueryMsg::Quote(QuoteRequest {
+                min_price: None,
+                offer_denom: "rune".to_string(),
+                ask_denom: "x/brune".to_string(),
+                data: None,
+            }),
+        )
+        .unwrap();
+
+    let _: StateResponse = app
+        .wrap()
+        .query_wasm_smart(&contract, &QueryMsg::State {})
+        .unwrap();
 }
