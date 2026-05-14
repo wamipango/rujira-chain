@@ -114,9 +114,10 @@ impl SwapItem for RangeOffer {
         let rate_inv256 = Decimal256::one() / rate256;
         let offer256 = Decimal256::from(offer_dec);
 
-        // Both bids_used and offer_used are floored to match the integer
-        // amounts actually transferred. Fractional dust stays in the range's
-        // balance (for bids) or unowned in the contract (for offer).
+        // The return leg is floored so the range never pays fractional tokens.
+        // Once that integer return is chosen, round the input leg up so the
+        // range is paid for the whole amount it returns. Rounding both legs
+        // down lets same-range arb loops create value from truncation.
         let bids_used = Decimal::try_from(match self.side {
             Side::Base => offer256 * rate_inv256,
             Side::Quote => offer256 * rate256,
@@ -127,14 +128,14 @@ impl SwapItem for RangeOffer {
         let offer_used = Decimal::try_from(match self.side {
             Side::Base => Decimal256::from(bids_used) * rate256,
             Side::Quote => Decimal256::from(bids_used) * rate_inv256,
-        })?
-        .floor();
+        })?;
 
         // Integer settlement cannot execute a trade once either leg rounds to zero.
         // Returning a partial zero-leg fill here creates phantom profit in arb loops.
         if offer_used.to_uint_ceil().is_zero() || bids_used.to_uint_floor().is_zero() {
             return Ok((Uint128::zero(), Uint128::zero(), vec![]));
         }
+        let offer_used = Decimal::from_atomics(offer_used.to_uint_ceil(), 0)?;
 
         let mut remaining_bids_used = bids_used;
         let mut remaining_offer_used = offer_used;

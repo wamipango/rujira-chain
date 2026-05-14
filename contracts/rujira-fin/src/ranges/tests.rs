@@ -10,7 +10,7 @@ use cosmwasm_std::{
 use cw_utils::NativeBalance;
 use proptest::prelude::*;
 use rujira_rs::{
-    exchange::{SwapContext, SwapItem, Swapper},
+    exchange::{Arber, SwapContext, SwapItem, Swapper},
     fin::{Denoms, RangeConfig, Scl, Side, SwapRequest, Tick},
 };
 
@@ -426,7 +426,7 @@ fn range_offer_swap_partial_fill() {
 }
 
 #[test]
-fn range_offer_swap_dust_rounds_down_to_no_fill() {
+fn range_offer_swap_rounds_input_up_for_small_fill() {
     let mut offer = RangeOffer {
         side: Side::Quote,
         start: Decimal::from_str("2281.6").unwrap(),
@@ -460,16 +460,89 @@ fn range_offer_swap_dust_rounds_down_to_no_fill() {
         Tick::new(8),
     );
 
-    let before_total = offer.total;
-    let before_range = offer.ranges[0].clone();
     let (offer_consumed, bids_returned, attrs) = offer.swap(&mut ctx, Uint128::one()).unwrap();
 
-    assert_eq!(offer_consumed, Uint128::zero());
-    assert_eq!(bids_returned, Uint128::zero());
-    assert!(attrs.is_empty());
-    assert_eq!(offer.total, before_total);
-    assert_eq!(offer.ranges[0], before_range);
-    assert!(ctx.ranges.is_empty());
+    assert_eq!(offer_consumed, Uint128::one());
+    assert_eq!(bids_returned, Uint128::new(2281));
+    assert!(!attrs.is_empty());
+    let r = ctx.ranges.get(&Uint128::one()).unwrap();
+    assert_eq!(r.base, Decimal::from_str("2").unwrap());
+    assert_eq!(r.quote, Decimal::from_str("2719").unwrap());
+}
+
+#[test]
+fn range_offer_swap_rounds_input_up_to_prevent_self_arb() {
+    let range = Range {
+        idx: Uint128::new(33),
+        owner: Addr::unchecked("owner"),
+        high: Decimal::from_str("150000").unwrap(),
+        low: Decimal::from_str("50000").unwrap(),
+        skew: SignedDecimal::zero(),
+        spread: Decimal::from_str("0.0002").unwrap(),
+        fee: Decimal::zero(),
+        base: Decimal::from_str("1402414.4836493394313063").unwrap(),
+        quote: Decimal::from_str("87313050961.282760127224579746").unwrap(),
+        price: Decimal::from_str("80041.661274186676520142").unwrap(),
+        ask: Decimal::from_str("80069.7").unwrap(),
+        bid: Decimal::from_str("80013.6").unwrap(),
+        fees: [Decimal::zero(), Decimal::zero()],
+    };
+
+    let mut quote_offer = RangeOffer {
+        side: Side::Quote,
+        start: Decimal::from_str("79993.594099619232279608").unwrap(),
+        end: Decimal::from_str("80013.6").unwrap(),
+        total: Decimal::from_str("104119177").unwrap(),
+        effective_rate: Decimal256::from_str("79993.594099619232279608").unwrap(),
+        ranges: vec![(range.clone(), Decimal::from_str("104119177").unwrap())],
+        updates: Default::default(),
+    };
+    let mut ctx = RangeContext::new(
+        Addr::unchecked("fee"),
+        Decimal::from_str("0.00025").unwrap(),
+        Denoms::new("btc-btc", "eth-usdc"),
+        Tick::new(6),
+    );
+
+    let (offer_consumed, bids_returned, _) = quote_offer.swap(&mut ctx, Uint128::new(230)).unwrap();
+
+    assert_eq!(offer_consumed, Uint128::new(230));
+    assert_eq!(bids_returned, Uint128::new(18398526));
+
+    let base_offer = RangeOffer {
+        side: Side::Base,
+        start: Decimal::from_str("80073.249892463149593116").unwrap(),
+        end: Decimal::from_str("80069.7").unwrap(),
+        total: Decimal::from_str("230").unwrap(),
+        effective_rate: Decimal256::from_str("80073.249892463149593116").unwrap(),
+        ranges: vec![(range.clone(), Decimal::from_str("230").unwrap())],
+        updates: Default::default(),
+    };
+    let quote_offer = RangeOffer {
+        side: Side::Quote,
+        start: Decimal::from_str("79993.594099619232279608").unwrap(),
+        end: Decimal::from_str("80013.6").unwrap(),
+        total: Decimal::from_str("104119177").unwrap(),
+        effective_rate: Decimal256::from_str("79993.594099619232279608").unwrap(),
+        ranges: vec![(range, Decimal::from_str("104119177").unwrap())],
+        updates: Default::default(),
+    };
+    let mut arb = Arber::new(
+        RangeContext::new(
+            Addr::unchecked("fee"),
+            Decimal::from_str("0.00025").unwrap(),
+            Denoms::new("btc-btc", "eth-usdc"),
+            Tick::new(6),
+        ),
+        CONTRACT_NAME.to_string(),
+    );
+    let res = arb
+        .run(vec![base_offer].into_iter(), vec![quote_offer].into_iter())
+        .unwrap();
+
+    assert_eq!(res.profit_base, Uint128::zero());
+    assert_eq!(res.profit_quote, Uint128::zero());
+    assert!(res.events.is_empty());
 }
 
 #[test]
@@ -805,7 +878,7 @@ fn range_offer_iter_commit_changes() {
         );
         swapper.swap(&mut iter).unwrap()
     };
-    assert_eq!(res.consumed_offer, Uint128::new(999_999));
+    assert_eq!(res.consumed_offer, Uint128::new(1_000_000));
     // return_amount reflects curve-effective pricing (ΔY/ΔX) instead of slice boundary
     assert_eq!(res.return_amount, Uint128::new(3_394_321));
 

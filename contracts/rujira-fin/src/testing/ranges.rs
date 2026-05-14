@@ -184,11 +184,11 @@ fn test_composite_range_lifecycle() {
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "0.000006739665923786"),
         ("price", "ccl:0.000006739665923786"),
-        ("offer", "1677"),
+        ("offer", "1678"),
         ("bid", "248938994"),
         (
             "ranges",
-            "2:0.0000025-0.000012:415751061006:4366789.729710096:248938994:1676.91615::0.08385",
+            "2:0.0000025-0.000012:415751061006:4366790.729660096:248938994:1677.9161::0.0839",
         ),
         ("side", "base"),
     ]));
@@ -196,31 +196,31 @@ fn test_composite_range_lifecycle() {
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "0.000006907139457045"),
         ("price", "ccl:0.000006907139457045"),
-        ("offer", "718272"),
-        ("bid", "103989924475"),
-        ("ranges", "2:0.0000025-0.000012:375795537022.596402519915072396:4642753.957213696544429351:39955523983.403597480084927604:275964.227503600544429351::13.798901320246039523,1:0.0000035-0.000012:602265599508.403597480084927604:5442271.85889639945557065:64034400491.596402519915072396:442271.85889639945557065::22.114698679753960476"),
+        ("offer", "718273"),
+        ("bid", "103989930049"),
+        ("ranges", "2:0.0000025-0.000012:375795531448.590681320139518603:4642755.365075878152825647:39955529557.409318679860481397:275964.635415782152825647::13.798921716874951388,1:0.0000035-0.000012:602265599508.409318679860481397:5442272.450934217847174354:64034400491.590681320139518603:442272.450934217847174354::22.114728283125048611"),
         ("side", "base"),
     ]));
 
     res.assert_event(&Event::new("wasm-rujira-fin/trade").add_attributes(vec![
         ("rate", "0.000007252496429904"),
         ("price", "ccl:0.000007252496429904"),
-        ("offer", "280050"),
-        ("bid", "38614427832"),
-        ("ranges", "2:0.0000025-0.000012:360958942561.757972523931343796:4750350.541252701098603039:14836594460.8384299959837286:107596.584039004554173688::5.380098206860570737,1:0.0000035-0.000012:578487766137.242027476068656204:5614711.272357394901396963:23777833371.1615700040162714:172439.413460995445826313::8.622401793139429262"),
+        ("offer", "280049"),
+        ("bid", "38614152065"),
+        ("ranges", "2:0.0000025-0.000012:360959041789.221416253751098009:4750351.573285197858818558:14836489659.369265066388420594:107596.208209319705992911::5.380079414436707135,1:0.0000035-0.000012:578487937102.778583746248901991:5614711.240274898141181444:23777662405.630734933611579406:172438.78934068029400709::8.622370585563292864"),
         ("side", "base"),
     ]));
 
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", user_b.as_str()),
         ("sender", fin.addr().as_str()),
-        ("amount", "1btc-btc,140710491931rune"),
+        ("amount", "140710225791rune"),
     ]));
 
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", fees.as_str()),
         ("sender", fin.addr().as_str()),
-        ("amount", "2142799370rune"),
+        ("amount", "2142795317rune"),
     ]));
 
     let range_1 = fin.query_range(&app, &Uint128::one()).unwrap();
@@ -231,33 +231,33 @@ fn test_composite_range_lifecycle() {
 
     assert_eq!(
         range_1.base,
-        Decimal::from_str("578487766137.242027476068656204").unwrap()
+        Decimal::from_str("578487937102.778583746248901991").unwrap()
     );
     // quote updated due to halved range_fee — more goes to reserves
     assert_eq!(
         range_1.quote,
-        Decimal::from_str("5614711.272357394901396963").unwrap()
+        Decimal::from_str("5614711.240274898141181444").unwrap()
     );
 
     assert_eq!(range_1.fees[0], Decimal::zero());
     assert_eq!(
         range_1.fees[1],
-        Decimal::from_str("30.737100472893389738").unwrap()
+        Decimal::from_str("30.737098868688341475").unwrap()
     );
 
     assert_eq!(
         range_2.base,
-        Decimal::from_str("360958942561.757972523931343796").unwrap()
+        Decimal::from_str("360959041789.221416253751098009").unwrap()
     );
     assert_eq!(
         range_2.quote,
-        Decimal::from_str("4750350.541252701098603039").unwrap()
+        Decimal::from_str("4750351.573285197858818558").unwrap()
     );
 
     assert_eq!(range_2.fees[0], Decimal::zero());
     assert_eq!(
         range_2.fees[1],
-        Decimal::from_str("19.26284952710661026").unwrap()
+        Decimal::from_str("19.262901131311658523").unwrap()
     );
 
     fin.claim_range(&mut app, &user_b, &range_1.idx)
@@ -284,7 +284,7 @@ fn test_composite_range_lifecycle() {
         &Event::new("wasm-rujira-fin/range.close").add_attributes(vec![
             ("owner", user_a.as_str()),
             ("idx", "1"),
-            ("base", "578487766137"),
+            ("base", "578487937102"),
             ("quote", "5614711"),
             ("fee_base", "0"),
             ("fee_quote", "0"),
@@ -294,7 +294,7 @@ fn test_composite_range_lifecycle() {
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", user_a.as_str()),
         ("sender", fin.addr().as_str()),
-        ("amount", "5614711btc-btc,578487766137rune"),
+        ("amount", "5614711btc-btc,578487937102rune"),
     ]));
 
     let res = fin.close_range(&mut app, &user_a, &range_2.idx).unwrap();
@@ -302,8 +302,8 @@ fn test_composite_range_lifecycle() {
         &Event::new("wasm-rujira-fin/range.close").add_attributes(vec![
             ("owner", user_a.as_str()),
             ("idx", "2"),
-            ("base", "360958942561"),
-            ("quote", "4750350"),
+            ("base", "360959041789"),
+            ("quote", "4750351"),
             ("fee_base", "0"),
             ("fee_quote", "19"),
         ]),
@@ -312,7 +312,7 @@ fn test_composite_range_lifecycle() {
     res.assert_event(&Event::new("transfer").add_attributes(vec![
         ("recipient", user_a.as_str()),
         ("sender", fin.addr().as_str()),
-        ("amount", "4750369btc-btc,360958942561rune"),
+        ("amount", "4750370btc-btc,360959041789rune"),
     ]));
 }
 
