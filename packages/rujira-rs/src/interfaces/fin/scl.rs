@@ -24,9 +24,10 @@ use cosmwasm_std::{Decimal, Decimal256, SignedDecimal};
 
 use crate::{
     fin::{Side, Tick},
-    SignedDecimal256,
+    DecimalDyn, SignedDecimal256,
 };
 /// Linear skew concentrated liquidity calculator
+#[derive(Clone, Debug, PartialEq)]
 pub struct Scl {
     /// sqrt(low)
     s_a: Decimal256,
@@ -183,6 +184,62 @@ impl Scl {
         }
 
         (dy / dx).to_decimal256()
+    }
+
+    /// Compute the position liquidity from its current reserves and price.
+    ///
+    /// This can be cached until the reserves change. Keeping it separate from
+    /// [`amount_in_slice`](Self::amount_in_slice) avoids recalculating the same
+    /// curve position for every price slice emitted by an order-book iterator.
+    pub fn liquidity(&self, base: Decimal, quote: Decimal, price: Decimal) -> DecimalDyn {
+        let s_price = Decimal256::from(price).sqrt();
+        let y_s = self.y_at(s_price);
+        let x_s = self.x_at(s_price);
+
+        let liquidity = if !quote.is_zero() && !y_s.is_zero() {
+            (SignedDecimal256::from(quote) / y_s).to_decimal256_or_zero()
+        } else if !base.is_zero() && !x_s.is_zero() {
+            (SignedDecimal256::from(base) / x_s).to_decimal256_or_zero()
+        } else {
+            Decimal256::zero()
+        };
+        DecimalDyn::from(liquidity)
+    }
+
+    /// Compute the amount per unit of liquidity and effective price for one
+    /// slice. Both values share the same square roots and curve evaluations.
+    pub fn slice(
+        &self,
+        side: &Side,
+        p_start: Decimal,
+        p_end: Decimal,
+    ) -> Option<(DecimalDyn, Decimal256)> {
+        let s_start = Decimal256::from(p_start).sqrt().max(self.s_a).min(self.s_b);
+        let s_end = Decimal256::from(p_end).sqrt().max(self.s_a).min(self.s_b);
+
+        if s_start == s_end {
+            return None;
+        }
+
+        let y_start = self.y_at(s_start);
+        let y_end = self.y_at(s_end);
+        let x_start = self.x_at(s_start);
+        let x_end = self.x_at(s_end);
+        let dy = y_end - y_start;
+        let dx = x_start - x_end;
+
+        if dx.is_zero() {
+            return None;
+        }
+
+        let amount_per_liquidity = match side {
+            Side::Base => dx,
+            Side::Quote => -dy,
+        }
+        .to_decimal256()?;
+        let effective_price = (dy / dx).to_decimal256()?;
+
+        Some((DecimalDyn::from(amount_per_liquidity), effective_price))
     }
 
     /// Compute amount of tokens available in a price slice [p_start, p_end]

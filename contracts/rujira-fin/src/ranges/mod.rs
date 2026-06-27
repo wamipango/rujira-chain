@@ -13,4 +13,4 @@ mod tests;
 pub use context::RangeContext;
 pub use iter::RangeOfferIter;
 pub use range::Range;
-pub use range_offer::RangeOffer;
+pub use range_offer::{RangeHandle, RangeOffer};

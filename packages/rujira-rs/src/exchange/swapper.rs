@@ -1,7 +1,7 @@
 use cosmwasm_std::{Attribute, Decimal, Event, Uint128};
 use std::{cmp::min, ops::Mul};
 
-use crate::fin::SwapRequest;
+use crate::{exchange::SwapContext, fin::SwapRequest};
 
 use super::{error::SwapError, SwapItem};
 
@@ -42,6 +42,7 @@ impl<T: SwapItem> Swapper<T> {
         T: std::fmt::Debug,
     {
         for mut v in iter {
+            self.context.checkpoint();
             let mut next_context = self.context.clone();
             let (offer, bids, atts) = v.swap(&mut next_context, self.remaining_offer)?;
             // A zero-leg result is not executable under integer settlement.
@@ -53,6 +54,7 @@ impl<T: SwapItem> Swapper<T> {
             if let SwapRequest::Limit { price: limit, .. } = self.req {
                 let achieved = Decimal::from_ratio(offer, bids);
                 if achieved > limit {
+                    self.context.rollback();
                     break;
                 }
             }

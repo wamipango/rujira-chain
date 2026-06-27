@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, ops::Add};
 use cosmwasm_std::{Decimal, Fraction, Order, StdResult, Storage, Uint128};
 use rujira_rs::fin::Side;
 
-use super::{range_offer::RangeUpdates, Range, RangeOffer};
+use super::{range_offer::RangeHandle, Range, RangeOffer};
 
 pub struct RangeOfferIter<'a> {
     /// The default step between prices
@@ -11,23 +11,25 @@ pub struct RangeOfferIter<'a> {
     /// The previous end price
     previous: Option<Decimal>,
     /// The most recent Item popped from the iterator, that wasn't part of the current group
-    next: Option<Range>,
+    next: Option<RangeHandle>,
     side: Side,
     /// a Map of active ranges, grouped and keyed by the price at which they go out of range for easy rejection
-    ranges: BTreeMap<u128, Vec<Range>>,
-    updates: RangeUpdates,
+    ranges: BTreeMap<u128, Vec<RangeHandle>>,
     /// Base Range iter
-    iter: Box<dyn Iterator<Item = Range> + 'a>,
+    iter: Box<dyn Iterator<Item = RangeHandle> + 'a>,
 }
 
 impl<'a> RangeOfferIter<'a> {
-    fn filter(side: Side, min: Decimal) -> impl Fn(StdResult<(u128, Range)>) -> Option<Range> {
+    fn filter(
+        side: Side,
+        min: Decimal,
+    ) -> impl Fn(StdResult<(u128, Range)>) -> Option<RangeHandle> {
         move |res| match res {
             Ok((_, range)) => match side {
                 Side::Base => range.base >= min && range.ask < range.high,
                 Side::Quote => range.quote >= min && range.bid > range.low,
             }
-            .then_some(range),
+            .then_some(RangeHandle::new(range)),
             Err(_) => None,
         }
     }
@@ -54,7 +56,6 @@ impl<'a> RangeOfferIter<'a> {
         Self {
             side: side.clone(),
             ranges: BTreeMap::new(),
-            updates: Default::default(),
             delta: *delta,
             iter: Box::new(base_iter),
             next: None,
@@ -65,8 +66,8 @@ impl<'a> RangeOfferIter<'a> {
     fn fill_ranges(&mut self, curr: Decimal) {
         while let Some(next) = self.next.clone() {
             if match self.side {
-                Side::Base => next.ask,
-                Side::Quote => next.bid,
+                Side::Base => next.borrow().ask,
+                Side::Quote => next.borrow().bid,
             } == curr
             {
                 self.insert_range(&next);
@@ -79,45 +80,36 @@ impl<'a> RangeOfferIter<'a> {
     }
 
     /// Inserts a Range into `ranges`, keyed by the boundary at which it goes out of range
-    fn insert_range(&mut self, range: &Range) {
+    fn insert_range(&mut self, range: &RangeHandle) {
         let key = match self.side {
-            Side::Base => range.high,
-            Side::Quote => range.low,
+            Side::Base => range.borrow().high,
+            Side::Quote => range.borrow().low,
         }
         .numerator()
         .u128();
-        let mut value = self.ranges.get(&key).unwrap_or(&vec![]).clone();
-        value.push(range.clone());
-        self.ranges.insert(key, value);
+        self.ranges.entry(key).or_default().push(range.clone());
     }
 
-    fn open_price(&self, range: &Range) -> Decimal {
+    fn open_price(&self, range: &RangeHandle) -> Decimal {
         match self.side {
-            Side::Base => range.ask,
-            Side::Quote => range.bid,
+            Side::Base => range.borrow().ask,
+            Side::Quote => range.borrow().bid,
         }
     }
 
     fn start(&mut self) -> Option<Decimal> {
-        let first = self.iter.next();
+        let first = self.iter.next()?;
         self.next = self.iter.next();
-        self.insert_range(&first.clone()?);
-        match self.side {
-            Side::Base => Some(first?.ask),
-            Side::Quote => Some(first?.bid),
-        }
+        self.insert_range(&first);
+        Some(self.open_price(&first))
     }
 
     fn build_offer(&mut self, start: &Decimal) -> Option<RangeOffer> {
-        self.updates.apply(self.ranges.values_mut().flatten());
         let mut offer = RangeOffer::new(&self.side, start, &self.previous?);
         if self.ranges.is_empty() && self.next.is_none() {
             return None;
         }
-        for r in self.ranges.values().flatten() {
-            offer.insert_range(r);
-        }
-        offer.updates = self.updates.clone();
+        offer.insert_ranges(self.ranges.values().flatten());
         Some(offer)
     }
 
@@ -130,7 +122,7 @@ impl<'a> RangeOfferIter<'a> {
                     .keys()
                     .next()
                     .map(|v| Decimal::new(Uint128::new(*v))),
-                self.next.clone().map(|x| x.ask),
+                self.next.clone().map(|x| x.borrow().ask),
                 Some(start.add(step)),
             ],
             Side::Quote => [
@@ -138,7 +130,7 @@ impl<'a> RangeOfferIter<'a> {
                     .keys()
                     .last()
                     .map(|v| Decimal::new(Uint128::new(*v))),
-                self.next.clone().map(|x| x.bid),
+                self.next.clone().map(|x| x.borrow().bid),
                 start.checked_sub(step).ok(),
             ],
         }

@@ -101,11 +101,15 @@ where
     ) -> Result<Step, SwapError> {
         let float = self.total();
         let other_total = other.total();
+        self.checkpoint();
+        other.checkpoint();
         let mut next_context = context.clone();
         let a = other.swap(&mut next_context, float)?;
         if a.0.is_zero() || a.1.is_zero() {
             // A zero-leg fill can mean either the quote item was exhausted by rounding,
             // or the current base item is too small to execute against this still-usable quote.
+            self.rollback();
+            other.rollback();
             return Ok(if other.total().is_zero() {
                 Step::SkipOther
             } else {
@@ -116,6 +120,8 @@ where
         if b.0.is_zero() || b.1.is_zero() {
             // Symmetrically, if the base item still has quantity after a zero-leg second
             // hop, keep it and try the next quote item instead.
+            self.rollback();
+            other.rollback();
             return Ok(if self.total().is_zero() {
                 Step::SkipSelf
             } else {
@@ -131,6 +137,8 @@ where
                 // Captured steps must consume liquidity. If neither side advanced, terminate
                 // defensively rather than risking an infinite arb loop.
                 if self.total() == float && other.total() == other_total {
+                    self.rollback();
+                    other.rollback();
                     return Ok(Step::Done);
                 }
 
@@ -138,7 +146,11 @@ where
                 events.push(event(prefix, a, b));
                 Ok(Step::Captured(a, b, events))
             }
-            _ => Ok(Step::Done),
+            _ => {
+                self.rollback();
+                other.rollback();
+                Ok(Step::Done)
+            }
         }
     }
 }

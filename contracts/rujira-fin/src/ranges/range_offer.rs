@@ -1,49 +1,161 @@
 use std::{
-    cell::RefCell,
-    collections::BTreeMap,
+    cell::{Ref, RefCell},
+    collections::{btree_map::Entry, BTreeMap},
     ops::{Div, Mul},
     rc::Rc,
 };
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Attribute, Decimal, Decimal256, Uint128};
+use cosmwasm_std::{Attribute, Decimal, Decimal256, SignedDecimal, Uint128};
 use rujira_rs::{
     exchange::{SwapError, SwapItem},
     fin::{Scl, Side},
+    DecimalDyn,
 };
 
 use super::{Range, RangeContext};
 
-/// Carries post-swap range state back to `RangeOfferIter`.
-///
-/// `RangeOfferIter` builds each tier from cloned in-memory `Range`s. Those clones
-/// cannot be mutated eagerly during offer construction, because a caller may only
-/// partially consume the offer, and the real state transition must remain tied to
-/// `RangeOffer::swap()`.
-///
-/// At the same time, the iterator must see repriced reserves before it constructs
-/// the next tier in the same multi-tier swap. Without that feedback path, later
-/// tiers would be quoted from stale reserves and diverge from the result of
-/// executing the same swap tier-by-tier with commits in between.
-///
-/// `RangeUpdates` is the minimal bridge for that: `RangeOffer::swap()` records the
-/// executed `Range` state here, and `RangeOfferIter` applies those updates just
-/// before building the next offer.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct RangeUpdates(Rc<RefCell<BTreeMap<Uint128, Range>>>);
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct CurveKey {
+    high: Decimal,
+    low: Decimal,
+    skew: SignedDecimal,
+}
 
-impl RangeUpdates {
-    pub(crate) fn record(&self, range: Range) {
-        self.0.borrow_mut().insert(range.idx, range);
+impl From<&Range> for CurveKey {
+    fn from(range: &Range) -> Self {
+        Self {
+            high: range.high,
+            low: range.low,
+            skew: range.skew,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct OfferData {
+    curve: CurveKey,
+    liquidity: DecimalDyn,
+    available: Decimal,
+}
+
+#[derive(Clone, Copy)]
+struct CachedSlice {
+    amount_per_liquidity: DecimalDyn,
+    effective_rate: Decimal256,
+}
+
+type SliceCache = BTreeMap<CurveKey, CachedSlice>;
+
+#[derive(Debug, PartialEq)]
+struct RangeHandleState {
+    range: Range,
+    scl: Scl,
+    /// Authoritative cached curve liquidity (L₀), refreshed whenever a swap changes reserves.
+    liquidity: DecimalDyn,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct RangeHandleCheckpoint {
+    range: Range,
+    liquidity: DecimalDyn,
+}
+
+#[cw_serde]
+pub struct RangeHandle {
+    pub idx: Uint128,
+    #[serde(skip)]
+    #[schemars(skip)]
+    state: Option<Rc<RefCell<RangeHandleState>>>,
+    #[serde(skip)]
+    #[schemars(skip)]
+    checkpoint: Option<RangeHandleCheckpoint>,
+}
+
+impl RangeHandle {
+    fn state(&self) -> &Rc<RefCell<RangeHandleState>> {
+        self.state.as_ref().expect("range handle missing")
     }
 
-    pub(crate) fn apply<'a>(&self, ranges: impl Iterator<Item = &'a mut Range>) {
-        let updates = self.0.take();
-        for range in ranges {
-            if let Some(fresh) = updates.get(&range.idx) {
-                *range = fresh.clone();
-            }
+    pub fn new(range: Range) -> Self {
+        let idx = range.idx;
+        let scl = Scl::new(range.high, range.low, range.skew);
+        let liquidity = scl.liquidity(range.base, range.quote, range.price);
+        Self {
+            idx,
+            state: Some(Rc::new(RefCell::new(RangeHandleState {
+                range,
+                scl,
+                liquidity,
+            }))),
+            checkpoint: None,
         }
+    }
+
+    pub(crate) fn borrow(&self) -> Ref<'_, Range> {
+        Ref::map(self.state().borrow(), |state| &state.range)
+    }
+
+    fn offer_data(&self, side: &Side) -> OfferData {
+        let state = self.state().borrow();
+        let range = &state.range;
+        let available = match side {
+            Side::Base => range.base,
+            Side::Quote => range.quote,
+        };
+        OfferData {
+            curve: CurveKey::from(range),
+            liquidity: state.liquidity,
+            available,
+        }
+    }
+
+    fn curve(&self) -> CurveKey {
+        let range = self.borrow();
+        CurveKey::from(&*range)
+    }
+
+    fn slice(&self, side: &Side, start: Decimal, end: Decimal) -> Option<(DecimalDyn, Decimal256)> {
+        self.state().borrow().scl.slice(side, start, end)
+    }
+
+    fn swap(
+        &self,
+        context: &mut RangeContext,
+        side: &Side,
+        add: Decimal,
+        deduct: Decimal,
+    ) -> String {
+        let mut state = self.state().borrow_mut();
+        let used = state.range.swap(context, side, add, deduct);
+        let liquidity = state
+            .scl
+            .liquidity(state.range.base, state.range.quote, state.range.price);
+        state.liquidity = liquidity;
+        used
+    }
+
+    pub fn checkpoint(&mut self) {
+        let checkpoint = {
+            let state = self.state().borrow();
+            RangeHandleCheckpoint {
+                range: state.range.clone(),
+                liquidity: state.liquidity,
+            }
+        };
+        self.checkpoint = Some(checkpoint);
+    }
+
+    pub fn rollback(&mut self) {
+        if let Some(checkpoint) = self.checkpoint.take() {
+            let mut state = self.state().borrow_mut();
+            state.range = checkpoint.range;
+            state.liquidity = checkpoint.liquidity;
+        }
+    }
+
+    pub fn commit(&mut self) {
+        self.checkpoint = None;
     }
 }
 
@@ -55,10 +167,8 @@ pub struct RangeOffer {
     pub total: Decimal,
     /// Volume-weighted effective price from the SCL curve (ΔY/ΔX)
     pub effective_rate: Decimal256,
-    /// A vec of the (range, amount)'s contributing to this offer
-    pub ranges: Vec<(Range, Decimal)>,
-    #[serde(skip)]
-    pub(crate) updates: RangeUpdates,
+    /// A vec of the (range handle, amount)'s contributing to this offer
+    pub ranges: Vec<(RangeHandle, Decimal)>,
 }
 
 impl RangeOffer {
@@ -70,24 +180,138 @@ impl RangeOffer {
             total: Default::default(),
             effective_rate: Decimal256::from(*start),
             ranges: Default::default(),
-            updates: Default::default(),
         }
     }
 
-    pub fn insert_range(&mut self, range: &Range) {
-        let amount = range.amount_in_slice(&self.side, self.start, self.end);
+    pub fn insert_range(&mut self, range: &RangeHandle) {
+        if let Some((amount_per_liquidity, effective_price)) =
+            range.slice(&self.side, self.start, self.end)
+        {
+            let data = range.offer_data(&self.side);
+            let amount = Self::amount(data.liquidity, amount_per_liquidity, data.available);
+            self.insert_contribution(range, amount, effective_price);
+        }
+    }
 
-        let scl = Scl::new(range.high, range.low, range.skew);
-        if let Some(eff_price) = scl.effective_price(self.start, self.end) {
-            // Volume-weighted effective price: (old_total * old_rate + amount * eff_price) / new_total
-            let old_total = Decimal256::from(self.total);
-            self.total += amount;
-            if !self.total.is_zero() {
-                self.effective_rate = (old_total * self.effective_rate
-                    + Decimal256::from(amount) * eff_price)
-                    / Decimal256::from(self.total);
-                self.ranges.push((range.clone(), amount));
+    /// Insert a group of ranges while sharing slice calculations between
+    /// ranges with identical bounds and skew.
+    pub fn insert_ranges<'a>(&mut self, ranges: impl IntoIterator<Item = &'a RangeHandle>) {
+        let mut ranges = ranges.into_iter();
+        if !self.ranges.is_empty() {
+            for range in ranges {
+                self.insert_range(range);
             }
+            return;
+        }
+
+        self.ranges
+            .reserve(ranges.size_hint().1.unwrap_or_default());
+        let mut slices = SliceCache::new();
+
+        for range in &mut ranges {
+            let data = range.offer_data(&self.side);
+            let slice = match slices.entry(data.curve) {
+                Entry::Occupied(entry) => *entry.get(),
+                Entry::Vacant(entry) => {
+                    let Some((amount_per_liquidity, effective_rate)) =
+                        range.slice(&self.side, self.start, self.end)
+                    else {
+                        continue;
+                    };
+                    *entry.insert(CachedSlice {
+                        amount_per_liquidity,
+                        effective_rate,
+                    })
+                }
+            };
+
+            let amount = Self::amount(data.liquidity, slice.amount_per_liquidity, data.available);
+            self.append_range(range, amount);
+        }
+
+        self.finalize_effective_rate(&slices);
+    }
+
+    fn finalize_effective_rate(&mut self, slices: &SliceCache) {
+        if self.total.is_zero() {
+            return;
+        }
+
+        // Whole-token contributions preserve a common rate exactly under the
+        // legacy sequential average, so they can skip all weighted divisions.
+        if let Some(rate) = self.exact_common_rate(slices) {
+            self.effective_rate = rate;
+            return;
+        }
+
+        self.effective_rate = self.sequential_effective_rate(slices);
+    }
+
+    fn exact_common_rate(&self, slices: &SliceCache) -> Option<Decimal256> {
+        if self
+            .ranges
+            .iter()
+            .any(|(_, amount)| *amount != amount.floor())
+        {
+            return None;
+        }
+
+        let mut rates = slices.values().map(|slice| slice.effective_rate);
+        let first = rates.next()?;
+        rates.all(|rate| rate == first).then_some(first)
+    }
+
+    /// Reproduce the historical atom-level rounding for fractional or
+    /// mixed-rate contributions.
+    fn sequential_effective_rate(&self, slices: &SliceCache) -> Decimal256 {
+        let mut total = Decimal::zero();
+        let mut effective_rate = Decimal256::from(self.start);
+
+        for (range, amount) in &self.ranges {
+            let rate = slices
+                .get(&range.curve())
+                .expect("range offer curve slice missing")
+                .effective_rate;
+            let old_total = Decimal256::from(total);
+            total += *amount;
+            effective_rate = (old_total * effective_rate + Decimal256::from(*amount) * rate)
+                / Decimal256::from(total);
+        }
+
+        effective_rate
+    }
+
+    fn amount(
+        liquidity: DecimalDyn,
+        amount_per_liquidity: DecimalDyn,
+        available: Decimal,
+    ) -> Decimal {
+        Decimal::try_from(liquidity * amount_per_liquidity)
+            .unwrap_or_default()
+            .min(available)
+    }
+
+    fn insert_contribution(
+        &mut self,
+        range: &RangeHandle,
+        amount: Decimal,
+        effective_price: Decimal256,
+    ) {
+        // Volume-weighted effective price: (old_total * old_rate + amount * rate) / new_total
+        let old_total = Decimal256::from(self.total);
+        self.append_range(range, amount);
+        if !self.total.is_zero() {
+            self.effective_rate = (old_total * self.effective_rate
+                + Decimal256::from(amount) * effective_price)
+                / Decimal256::from(self.total);
+        }
+    }
+
+    #[inline]
+    fn append_range(&mut self, range: &RangeHandle, amount: Decimal) {
+        self.total += amount;
+        if !self.total.is_zero() {
+            self.ranges.push((range.clone(), amount));
         }
     }
 }
@@ -141,7 +365,7 @@ impl SwapItem for RangeOffer {
         let mut remaining_offer_used = offer_used;
         let len = self.ranges.len();
         for i in 0..len {
-            let (r, v) = &self.ranges[i].clone();
+            let (range_handle, v) = &mut self.ranges[i];
 
             // Pro-rate the provision of return amount to the Range's share of total
             let (deduct, add) = if i + 1 == len {
@@ -156,11 +380,11 @@ impl SwapItem for RangeOffer {
             };
             remaining_bids_used -= deduct;
             remaining_offer_used -= add;
-            self.ranges[i].1 -= deduct.min(*v);
-            let mut ctx_r = context.ranges.remove(&r.idx).unwrap_or_else(|| r.clone());
-            used.push(ctx_r.swap(context, &self.side, add, deduct));
-            context.ranges.insert(ctx_r.idx, ctx_r.clone());
-            self.updates.record(ctx_r);
+            *v -= deduct.min(*v);
+            let idx = range_handle.idx;
+            let used_id = range_handle.swap(context, &self.side, add, deduct);
+            context.ranges.insert(idx, range_handle.clone());
+            used.push(used_id);
         }
         self.total -= bids_used;
         Ok((
@@ -172,5 +396,17 @@ impl SwapItem for RangeOffer {
                 Attribute::new("ranges", used.join(",")),
             ],
         ))
+    }
+
+    fn checkpoint(&mut self) {
+        for (range, _) in &mut self.ranges {
+            range.checkpoint();
+        }
+    }
+
+    fn rollback(&mut self) {
+        for (range, _) in &mut self.ranges {
+            range.rollback();
+        }
     }
 }

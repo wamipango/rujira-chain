@@ -22,9 +22,15 @@ pub trait SwapItem {
         context: &mut Self::Context,
         offer: Uint128,
     ) -> Result<(Uint128, Uint128, Vec<Attribute>), SwapError>;
+
+    fn checkpoint(&mut self) {}
+    fn rollback(&mut self) {}
 }
 
 pub trait SwapContext: Clone {
+    /// Checkpoint & rollback provide explcit rollback semantics
+    fn checkpoint(&mut self) {}
+    fn rollback(&mut self) {}
     /// Commits the result of the Swap.
     /// Storage is provided to commit local state
     /// Response can be updated for inter-contract commitment
@@ -85,6 +91,28 @@ where
             EitherOrBoth::Right(x) => x.swap(v, amount),
         }
     }
+
+    fn checkpoint(&mut self) {
+        match self {
+            EitherOrBoth::Both(a, b) => {
+                a.checkpoint();
+                b.checkpoint();
+            }
+            EitherOrBoth::Left(x) => x.checkpoint(),
+            EitherOrBoth::Right(x) => x.checkpoint(),
+        }
+    }
+
+    fn rollback(&mut self) {
+        match self {
+            EitherOrBoth::Both(a, b) => {
+                a.rollback();
+                b.rollback();
+            }
+            EitherOrBoth::Left(x) => x.rollback(),
+            EitherOrBoth::Right(x) => x.rollback(),
+        }
+    }
 }
 
 impl<T: SwapContext, V: SwapContext> SwapContext for (T, V) {
@@ -133,6 +161,18 @@ where
             atts.append(&mut c_atts);
         }
         Ok((consumed_offer, consumed_bids, atts))
+    }
+
+    fn checkpoint(&mut self) {
+        for x in self.iter_mut() {
+            x.checkpoint();
+        }
+    }
+
+    fn rollback(&mut self) {
+        for x in self.iter_mut() {
+            x.rollback();
+        }
     }
 }
 

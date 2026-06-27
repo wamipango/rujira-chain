@@ -1,17 +1,26 @@
-use std::{collections::BTreeMap, str::FromStr};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    str::FromStr,
+};
 
+use crate::config::Config;
 use crate::contract::CONTRACT_NAME;
+use crate::market_makers::MarketMakers;
+use crate::order_pool::Pool;
+use crate::swap_iter::{create_context, SwapIter};
 
 use super::*;
 use cosmwasm_std::{
-    coin, coins, testing::mock_dependencies, Addr, BankMsg, CosmosMsg, Decimal, Decimal256, Event,
-    Order, Response, SignedDecimal, SubMsg, Uint128,
+    coin, coins,
+    testing::{mock_dependencies, MockQuerier},
+    Addr, BankMsg, CosmosMsg, Decimal, Decimal256, Event, Order, QuerierWrapper, Response,
+    SignedDecimal, SubMsg, Timestamp, Uint128,
 };
 use cw_utils::NativeBalance;
 use proptest::prelude::*;
 use rujira_rs::{
-    exchange::{Arber, SwapContext, SwapItem, Swapper},
-    fin::{Denoms, RangeConfig, Scl, Side, SwapRequest, Tick},
+    exchange::{Arber, Arbitrage, SwapContext, SwapItem, Swapper},
+    fin::{Denoms, Price, RangeConfig, Scl, Side, SwapRequest, Tick},
 };
 
 #[test]
@@ -362,7 +371,7 @@ fn range_offer_swap_partial_fill() {
         effective_rate: Decimal256::from_str("2").unwrap(),
         ranges: vec![
             (
-                Range {
+                RangeHandle::new(Range {
                     idx: Uint128::one(),
                     fees: [Decimal::zero(), Decimal::zero()],
                     owner: Addr::unchecked(""),
@@ -376,11 +385,11 @@ fn range_offer_swap_partial_fill() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
-                },
+                }),
                 Decimal::from_str("400").unwrap(),
             ),
             (
-                Range {
+                RangeHandle::new(Range {
                     idx: Uint128::new(2),
                     fees: [Decimal::zero(), Decimal::zero()],
                     owner: Addr::unchecked(""),
@@ -394,11 +403,10 @@ fn range_offer_swap_partial_fill() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
-                },
+                }),
                 Decimal::from_str("200").unwrap(),
             ),
         ],
-        updates: Default::default(),
     };
     let mut ctx = RangeContext::new(
         Addr::unchecked(""),
@@ -410,14 +418,14 @@ fn range_offer_swap_partial_fill() {
 
     assert_eq!(offer_consumed, Uint128::from(50u128));
     assert_eq!(bids_returned, Uint128::from(100u128));
-    let r = ctx.ranges.get(&Uint128::one()).unwrap();
+    let r = ctx.ranges.get(&Uint128::one()).unwrap().borrow();
     assert_eq!(r.base, Decimal::from_str("233.333333333333333333").unwrap());
     assert_eq!(
         r.quote,
         Decimal::from_str("333.333333333333333334").unwrap()
     );
 
-    let r = ctx.ranges.get(&Uint128::new(2)).unwrap();
+    let r = ctx.ranges.get(&Uint128::new(2)).unwrap().borrow();
     assert_eq!(r.base, Decimal::from_str("116.666666666666666667").unwrap());
     assert_eq!(
         r.quote,
@@ -434,7 +442,7 @@ fn range_offer_swap_rounds_input_up_for_small_fill() {
         total: Decimal::from_str("3040823.826021148969545223").unwrap(),
         effective_rate: Decimal256::from_str("2281.595000076186318857").unwrap(),
         ranges: vec![(
-            Range {
+            RangeHandle::new(Range {
                 idx: Uint128::one(),
                 fees: [Decimal::zero(), Decimal::zero()],
                 owner: Addr::unchecked(""),
@@ -448,10 +456,9 @@ fn range_offer_swap_rounds_input_up_for_small_fill() {
                 price: Decimal::from_str("2281.595000076186318857").unwrap(),
                 ask: Decimal::from_str("2281.6").unwrap(),
                 bid: Decimal::from_str("2281.59").unwrap(),
-            },
+            }),
             Decimal::from_str("3040823.826021148969545223").unwrap(),
         )],
-        updates: Default::default(),
     };
     let mut ctx = RangeContext::new(
         Addr::unchecked(""),
@@ -465,7 +472,7 @@ fn range_offer_swap_rounds_input_up_for_small_fill() {
     assert_eq!(offer_consumed, Uint128::one());
     assert_eq!(bids_returned, Uint128::new(2281));
     assert!(!attrs.is_empty());
-    let r = ctx.ranges.get(&Uint128::one()).unwrap();
+    let r = ctx.ranges.get(&Uint128::one()).unwrap().borrow();
     assert_eq!(r.base, Decimal::from_str("2").unwrap());
     assert_eq!(r.quote, Decimal::from_str("2719").unwrap());
 }
@@ -494,8 +501,10 @@ fn range_offer_swap_rounds_input_up_to_prevent_self_arb() {
         end: Decimal::from_str("80013.6").unwrap(),
         total: Decimal::from_str("104119177").unwrap(),
         effective_rate: Decimal256::from_str("79993.594099619232279608").unwrap(),
-        ranges: vec![(range.clone(), Decimal::from_str("104119177").unwrap())],
-        updates: Default::default(),
+        ranges: vec![(
+            RangeHandle::new(range.clone()),
+            Decimal::from_str("104119177").unwrap(),
+        )],
     };
     let mut ctx = RangeContext::new(
         Addr::unchecked("fee"),
@@ -515,8 +524,10 @@ fn range_offer_swap_rounds_input_up_to_prevent_self_arb() {
         end: Decimal::from_str("80069.7").unwrap(),
         total: Decimal::from_str("230").unwrap(),
         effective_rate: Decimal256::from_str("80073.249892463149593116").unwrap(),
-        ranges: vec![(range.clone(), Decimal::from_str("230").unwrap())],
-        updates: Default::default(),
+        ranges: vec![(
+            RangeHandle::new(range.clone()),
+            Decimal::from_str("230").unwrap(),
+        )],
     };
     let quote_offer = RangeOffer {
         side: Side::Quote,
@@ -524,8 +535,10 @@ fn range_offer_swap_rounds_input_up_to_prevent_self_arb() {
         end: Decimal::from_str("80013.6").unwrap(),
         total: Decimal::from_str("104119177").unwrap(),
         effective_rate: Decimal256::from_str("79993.594099619232279608").unwrap(),
-        ranges: vec![(range, Decimal::from_str("104119177").unwrap())],
-        updates: Default::default(),
+        ranges: vec![(
+            RangeHandle::new(range),
+            Decimal::from_str("104119177").unwrap(),
+        )],
     };
     let mut arb = Arber::new(
         RangeContext::new(
@@ -555,7 +568,7 @@ fn range_offer_swap_overfill() {
         effective_rate: Decimal256::from_str("2").unwrap(),
         ranges: vec![
             (
-                Range {
+                RangeHandle::new(Range {
                     idx: Uint128::one(),
                     fees: [Decimal::zero(), Decimal::zero()],
                     owner: Addr::unchecked(""),
@@ -569,11 +582,11 @@ fn range_offer_swap_overfill() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
-                },
+                }),
                 Decimal::from_str("400").unwrap(),
             ),
             (
-                Range {
+                RangeHandle::new(Range {
                     idx: Uint128::new(2),
                     fees: [Decimal::zero(), Decimal::zero()],
                     owner: Addr::unchecked(""),
@@ -587,11 +600,10 @@ fn range_offer_swap_overfill() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
-                },
+                }),
                 Decimal::from_str("200").unwrap(),
             ),
         ],
-        updates: Default::default(),
     };
     let mut ctx = RangeContext::new(
         Addr::unchecked(""),
@@ -604,11 +616,11 @@ fn range_offer_swap_overfill() {
     assert_eq!(offer_consumed, Uint128::from(300u128));
     assert_eq!(bids_returned, Uint128::from(600u128));
 
-    let r = ctx.ranges.get(&Uint128::one()).unwrap();
+    let r = ctx.ranges.get(&Uint128::one()).unwrap().borrow();
     assert_eq!(r.base, Decimal::from_str("400").unwrap());
     assert_eq!(r.quote, Decimal::zero());
 
-    let r = ctx.ranges.get(&Uint128::new(2)).unwrap();
+    let r = ctx.ranges.get(&Uint128::new(2)).unwrap().borrow();
     assert_eq!(r.base, Decimal::from_str("200").unwrap());
     assert_eq!(r.quote, Decimal::zero());
 }
@@ -623,7 +635,7 @@ fn range_offer_swap_partial_fill_base() {
         effective_rate: Decimal256::from_str("2").unwrap(),
         ranges: vec![
             (
-                Range {
+                RangeHandle::new(Range {
                     idx: Uint128::one(),
                     fees: [Decimal::zero(), Decimal::zero()],
                     owner: Addr::unchecked(""),
@@ -637,11 +649,11 @@ fn range_offer_swap_partial_fill_base() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
-                },
+                }),
                 Decimal::from_str("200").unwrap(),
             ),
             (
-                Range {
+                RangeHandle::new(Range {
                     idx: Uint128::new(2),
                     fees: [Decimal::zero(), Decimal::zero()],
                     owner: Addr::unchecked(""),
@@ -655,11 +667,10 @@ fn range_offer_swap_partial_fill_base() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
-                },
+                }),
                 Decimal::from_str("100").unwrap(),
             ),
         ],
-        updates: Default::default(),
     };
 
     let mut ctx = RangeContext::new(
@@ -673,14 +684,14 @@ fn range_offer_swap_partial_fill_base() {
     assert_eq!(offer_consumed, Uint128::from(100u128));
     assert_eq!(bids_returned, Uint128::from(50u128));
 
-    let r = ctx.ranges.get(&Uint128::one()).unwrap();
+    let r = ctx.ranges.get(&Uint128::one()).unwrap().borrow();
     assert_eq!(r.base, Decimal::from_str("166.666666666666666667").unwrap());
     assert_eq!(
         r.quote,
         Decimal::from_str("466.666666666666666666").unwrap()
     );
 
-    let r = ctx.ranges.get(&Uint128::new(2)).unwrap();
+    let r = ctx.ranges.get(&Uint128::new(2)).unwrap().borrow();
     assert_eq!(r.base, Decimal::from_str("83.333333333333333333").unwrap());
     assert_eq!(
         r.quote,
@@ -698,7 +709,7 @@ fn range_offer_swap_overfill_base() {
         effective_rate: Decimal256::from_str("2").unwrap(),
         ranges: vec![
             (
-                Range {
+                RangeHandle::new(Range {
                     idx: Uint128::one(),
                     fees: [Decimal::zero(), Decimal::zero()],
                     owner: Addr::unchecked(""),
@@ -712,11 +723,11 @@ fn range_offer_swap_overfill_base() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
-                },
+                }),
                 Decimal::from_str("200").unwrap(),
             ),
             (
-                Range {
+                RangeHandle::new(Range {
                     idx: Uint128::new(2),
                     fees: [Decimal::zero(), Decimal::zero()],
                     owner: Addr::unchecked(""),
@@ -730,11 +741,10 @@ fn range_offer_swap_overfill_base() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
-                },
+                }),
                 Decimal::from_str("100").unwrap(),
             ),
         ],
-        updates: Default::default(),
     };
 
     let mut ctx = RangeContext::new(
@@ -748,11 +758,11 @@ fn range_offer_swap_overfill_base() {
     assert_eq!(offer_consumed, Uint128::from(600u128));
     assert_eq!(bids_returned, Uint128::from(300u128));
 
-    let r = ctx.ranges.get(&Uint128::one()).unwrap();
+    let r = ctx.ranges.get(&Uint128::one()).unwrap().borrow();
     assert_eq!(r.base, Decimal::zero());
     assert_eq!(r.quote, Decimal::from_str("800").unwrap());
 
-    let r = ctx.ranges.get(&Uint128::new(2)).unwrap();
+    let r = ctx.ranges.get(&Uint128::new(2)).unwrap().borrow();
     assert_eq!(r.base, Decimal::zero());
     assert_eq!(r.quote, Decimal::from_str("400").unwrap());
 }
@@ -888,6 +898,73 @@ fn range_offer_iter_commit_changes() {
         .unwrap();
 
     let _range = Range::load(deps.as_ref().storage, Uint128::one()).unwrap();
+}
+
+#[test]
+fn rejected_limit_tier_does_not_mutate_accepted_range_state() {
+    let mut deps = mock_dependencies();
+    let range = Range::new(
+        deps.as_mut().storage,
+        &Tick::new(8),
+        &Decimal::zero(),
+        Addr::unchecked("owner"),
+        RangeConfig {
+            high: Decimal::from_str("4").unwrap(),
+            low: Decimal::from_str("3").unwrap(),
+            skew: SignedDecimal::zero(),
+            spread: Decimal::permille(10),
+            fee: Decimal::zero(),
+        },
+        (
+            Decimal::from_str("100000000").unwrap(),
+            Decimal::from_str("401992761").unwrap(),
+        ),
+    )
+    .unwrap();
+    range.save(deps.as_mut().storage).unwrap();
+
+    let delta = Decimal::permille(5);
+    let mut preview =
+        RangeOfferIter::new(deps.as_ref().storage, &Side::Base, &delta, &Decimal::one());
+    let first_rate = preview.next().unwrap().rate();
+    let second_rate = preview.next().unwrap().rate();
+    let limit = (first_rate + second_rate) / Decimal::from_ratio(2u128, 1u128);
+
+    let mut swapper = Swapper::new(
+        CONTRACT_NAME,
+        RangeContext::new(
+            Addr::unchecked("fee"),
+            Decimal::zero(),
+            Denoms::new("base", "quote"),
+            Tick::new(8),
+        ),
+        Uint128::new(1_000_000_000),
+        SwapRequest::Limit {
+            price: limit,
+            to: None,
+            callback: None,
+        },
+        Decimal::zero(),
+    );
+    let result = {
+        let mut iter =
+            RangeOfferIter::new(deps.as_ref().storage, &Side::Base, &delta, &Decimal::one());
+        swapper.swap(&mut iter).unwrap()
+    };
+
+    assert_eq!(result.events.len(), 1, "test must accept exactly one tier");
+
+    // Only the accepted tier may affect reserves. The rejected second tier is
+    // evaluated against a cloned context and must be rolled back.
+    let expected_base = range.base - Decimal::from_atomics(result.return_amount, 0).unwrap();
+    let actual_base = swapper
+        .context
+        .ranges
+        .get(&range.idx)
+        .unwrap()
+        .borrow()
+        .base;
+    assert_eq!(actual_base, expected_base);
 }
 
 /// One big swap consuming the whole range must produce the same result
@@ -1119,7 +1196,7 @@ fn test_range_commit_fee() {
         effective_rate: Decimal256::from_str("2").unwrap(),
         ranges: vec![
             (
-                Range {
+                RangeHandle::new(Range {
                     idx: Uint128::one(),
                     fees: [Decimal::zero(), Decimal::zero()],
                     owner: Addr::unchecked(""),
@@ -1133,11 +1210,11 @@ fn test_range_commit_fee() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
-                },
+                }),
                 Decimal::from_str("400").unwrap(),
             ),
             (
-                Range {
+                RangeHandle::new(Range {
                     idx: Uint128::new(2),
                     fees: [Decimal::zero(), Decimal::zero()],
                     owner: Addr::unchecked(""),
@@ -1151,12 +1228,11 @@ fn test_range_commit_fee() {
                     price: Decimal::from_str("2").unwrap(),
                     ask: Decimal::from_str("2").unwrap(),
                     bid: Decimal::from_str("2").unwrap(),
-                },
+                }),
                 Decimal::from_str("200").unwrap(),
             ),
         ],
         end: Decimal::from_str("3").unwrap(),
-        updates: Default::default(),
     }
     .swap(&mut ctx, Uint128::new(1000))
     .unwrap();
@@ -1287,6 +1363,7 @@ fn assert_range_offer_invariants(
 
     for offer in RangeOfferIter::new(storage, &side, &delta, &Decimal::one()) {
         for (range, amount) in &offer.ranges {
+            let range = range.borrow();
             let entry = totals.entry(range.idx).or_insert(Decimal::zero());
             *entry += *amount;
 
@@ -2634,4 +2711,188 @@ fn skew_distribution_stays_valid() {
 
         eprintln!("skew={skew_str:>5}: hi_base={hi_base}");
     }
+}
+
+#[test]
+fn arb_range_consumed_at_most_one_side() {
+    // R is bracketed by two crossing limit orders. Since R.ask > R.bid and the arb is a
+    // monotone inward merge, R can be consumed on at most one side in a single Arber::run.
+    let mut deps = mock_dependencies();
+    let owner = Addr::unchecked("owner");
+    let config = Config {
+        denoms: Denoms::new("base", "quote"),
+        oracles: None,
+        market_makers: MarketMakers::new(&deps.api, vec![]).unwrap(),
+        range_delta: Decimal::permille(5),
+        range_min: Decimal::one(),
+        tick: Tick::new(8),
+        fee_maker: Decimal::zero(),
+        fee_taker: Decimal::zero(),
+        fee_range: Decimal::zero(),
+        fee_address: Addr::unchecked("fee"),
+    };
+
+    let range = Range::new(
+        deps.as_mut().storage,
+        &config.tick,
+        &Decimal::zero(),
+        owner.clone(),
+        RangeConfig {
+            high: Decimal::from_str("4").unwrap(),
+            low: Decimal::from_str("3").unwrap(),
+            skew: SignedDecimal::zero(),
+            spread: Decimal::permille(10),
+            fee: Decimal::zero(),
+        },
+        (
+            Decimal::from_str("100000000").unwrap(),
+            Decimal::from_str("401992761").unwrap(),
+        ),
+    )
+    .unwrap();
+    range.save(deps.as_mut().storage).unwrap();
+
+    // A bid above R.ask and an ask below R.bid, unequal sizes so leftover reaches R.
+    let store = deps.as_mut().storage;
+    Pool::load(
+        store,
+        &Price::Fixed(Decimal::from_str("3.6").unwrap()),
+        &Side::Quote,
+        &None::<Decimal>,
+    )
+    .unwrap()
+    .create_order(
+        store,
+        &Timestamp::default(),
+        &owner,
+        Uint128::new(20_000_000),
+    )
+    .unwrap();
+    Pool::load(
+        store,
+        &Price::Fixed(Decimal::from_str("3.4").unwrap()),
+        &Side::Base,
+        &None::<Decimal>,
+    )
+    .unwrap()
+    .create_order(
+        store,
+        &Timestamp::default(),
+        &owner,
+        Uint128::new(3_000_000),
+    )
+    .unwrap();
+
+    // Reachability: R must be available on BOTH sides, else the assertion is vacuous.
+    let base_has = RangeOfferIter::new(
+        deps.as_ref().storage,
+        &Side::Base,
+        &config.range_delta,
+        &config.range_min,
+    )
+    .any(|o| o.ranges.iter().any(|(h, _)| h.idx == range.idx));
+    let quote_has = RangeOfferIter::new(
+        deps.as_ref().storage,
+        &Side::Quote,
+        &config.range_delta,
+        &config.range_min,
+    )
+    .any(|o| o.ranges.iter().any(|(h, _)| h.idx == range.idx));
+    assert!(base_has, "R must be available on the Base side");
+    assert!(quote_has, "R must be available on the Quote side");
+
+    let mq = MockQuerier::default();
+    let swap_iter = SwapIter::new(QuerierWrapper::new(&mq), &config);
+    let mut arb = Arber::new(create_context(&config), CONTRACT_NAME.to_string());
+    let base_iter = swap_iter.iter(deps.as_ref().storage, &Side::Base, &None::<Decimal>);
+    let quote_iter = swap_iter.iter(deps.as_ref().storage, &Side::Quote, &None::<Decimal>);
+    let res = arb.run(base_iter, quote_iter).unwrap();
+    arb.context
+        .commit(deps.as_mut().storage, Response::default())
+        .unwrap();
+    assert!(!res.events.is_empty(), "arb did not execute");
+
+    // Distinct sides on which R was traded must be at most one.
+    let marker = format!("{}:", range.id());
+    let mut sides = BTreeSet::new();
+    for e in &res.events {
+        let touches_r = e
+            .attributes
+            .iter()
+            .any(|a| a.key == "ranges" && a.value.split(',').any(|s| s.starts_with(&marker)));
+        if touches_r {
+            if let Some(side) = e.attributes.iter().find(|a| a.key == "side") {
+                sides.insert(side.value.clone());
+            }
+        }
+    }
+    assert!(sides.len() <= 1, "R consumed on multiple sides: {sides:?}");
+}
+
+#[test]
+fn arb_probe_rollback_gap() {
+    // A rejected arb probe (non-zero first leg, zero second leg -> SkipOther, no commit)
+    // shares the Rc cell of a range already committed in context.ranges. It must not leak
+    // into that committed state; the arb path's checkpoint/rollback guarantees this.
+    let range = Range {
+        idx: Uint128::new(7),
+        owner: Addr::unchecked("owner"),
+        high: Decimal::from_str("4").unwrap(),
+        low: Decimal::from_str("3").unwrap(),
+        skew: SignedDecimal::zero(),
+        spread: Decimal::zero(),
+        fee: Decimal::zero(),
+        base: Decimal::from_str("1000").unwrap(),
+        quote: Decimal::from_str("1000").unwrap(),
+        price: Decimal::from_str("3.5").unwrap(),
+        ask: Decimal::from_str("3.5").unwrap(),
+        bid: Decimal::from_str("3.5").unwrap(),
+        fees: [Decimal::zero(), Decimal::zero()],
+    };
+    let mut counterparty = range.clone();
+    counterparty.idx = Uint128::new(8);
+
+    let handle = RangeHandle::new(range.clone());
+    let mut context = RangeContext::new(
+        Addr::unchecked("fee"),
+        Decimal::zero(),
+        Denoms::new("base", "quote"),
+        Tick::new(8),
+    );
+    // R is committed by a prior step; q shares its cell, b is a tiny counterparty.
+    context.ranges.insert(range.idx, handle.clone());
+    let before = handle.borrow().clone();
+
+    let mut q = RangeOffer {
+        side: Side::Quote,
+        start: Decimal::from_str("1.5").unwrap(),
+        end: Decimal::from_str("1.5").unwrap(),
+        total: Decimal::from_str("1000").unwrap(),
+        effective_rate: Decimal256::from_str("1.5").unwrap(),
+        ranges: vec![(handle.clone(), Decimal::from_str("1000").unwrap())],
+    };
+    let mut b = RangeOffer {
+        side: Side::Base,
+        start: Decimal::from_str("3.5").unwrap(),
+        end: Decimal::from_str("3.5").unwrap(),
+        total: Decimal::from_str("2").unwrap(),
+        effective_rate: Decimal256::from_str("3.5").unwrap(),
+        ranges: vec![(
+            RangeHandle::new(counterparty),
+            Decimal::from_str("2").unwrap(),
+        )],
+    };
+
+    let step = b.arbitrage(&mut context, CONTRACT_NAME, &mut q).unwrap();
+    assert_eq!(
+        format!("{step:?}"),
+        "SkipOther",
+        "expected a rejected probe"
+    );
+
+    assert_eq!(
+        *context.ranges.get(&range.idx).unwrap().borrow(),
+        before,
+        "rejected probe corrupted committed range state"
+    );
 }

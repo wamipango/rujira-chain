@@ -7,13 +7,14 @@ use rujira_rs::{
     fin::{Denoms, Side, Tick},
 };
 
-use super::{events::event_range_fee, Range};
+use super::events::event_range_fee;
+use super::range_offer::RangeHandle;
 
 #[derive(Clone, Debug)]
 pub struct RangeContext {
     /// A cache of ranges that have been used to service swaps, so that they can be passed
     /// between iter executions
-    pub(crate) ranges: BTreeMap<Uint128, Range>,
+    pub(crate) ranges: BTreeMap<Uint128, RangeHandle>,
     fee_config: (Addr, Decimal),
     pub(crate) denoms: Denoms,
     pub(crate) tick: Tick,
@@ -71,7 +72,7 @@ impl SwapContext for RangeContext {
         self.comitted = true;
 
         for r in self.ranges.values() {
-            r.save(storage)?;
+            r.borrow().save(storage)?;
         }
         let mut response = response.add_messages(self.to_msgs());
         if !self.fees.is_empty() {
@@ -79,5 +80,17 @@ impl SwapContext for RangeContext {
             response = response.add_event(event_range_fee(&self.denoms, &self.fees));
         }
         Ok(response)
+    }
+
+    fn checkpoint(&mut self) {
+        for r in self.ranges.values_mut() {
+            r.checkpoint();
+        }
+    }
+
+    fn rollback(&mut self) {
+        for r in self.ranges.values_mut() {
+            r.rollback();
+        }
     }
 }
