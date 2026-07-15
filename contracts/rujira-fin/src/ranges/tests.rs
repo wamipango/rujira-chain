@@ -2896,3 +2896,77 @@ fn arb_probe_rollback_gap() {
         "rejected probe corrupted committed range state"
     );
 }
+
+#[test]
+fn arb_two_sided_range_conserves_denom_split() {
+    // Zero spread (ask == bid) lets one arb consume the range on both sides. With
+    // independent per-side handles the buggy insert dropped a leg, committing (0, 2000)
+    // instead of the correct zero-profit wash (1000, 1000): base surplus, quote deficit.
+    let range = Range {
+        idx: Uint128::new(7),
+        owner: Addr::unchecked("owner"),
+        high: Decimal::from_str("2").unwrap(),
+        low: Decimal::from_str("0.5").unwrap(),
+        skew: SignedDecimal::zero(),
+        spread: Decimal::zero(),
+        fee: Decimal::zero(),
+        base: Decimal::from_str("1000").unwrap(),
+        quote: Decimal::from_str("1000").unwrap(),
+        price: Decimal::one(),
+        ask: Decimal::one(),
+        bid: Decimal::one(),
+        fees: [Decimal::zero(), Decimal::zero()],
+    };
+
+    // Independent cells for the same idx, as the two RangeOfferIters produce.
+    let base_handle = RangeHandle::new(range.clone());
+    let quote_handle = RangeHandle::new(range.clone());
+
+    let mut context = RangeContext::new(
+        Addr::unchecked("fee"),
+        Decimal::zero(),
+        Denoms::new("base", "quote"),
+        Tick::new(8),
+    );
+
+    let mut base_offer = RangeOffer {
+        side: Side::Base,
+        start: Decimal::one(),
+        end: Decimal::one(),
+        total: Decimal::from_str("1000").unwrap(),
+        effective_rate: Decimal256::one(),
+        ranges: vec![(base_handle, Decimal::from_str("1000").unwrap())],
+    };
+    let mut quote_offer = RangeOffer {
+        side: Side::Quote,
+        start: Decimal::one(),
+        end: Decimal::one(),
+        total: Decimal::from_str("1000").unwrap(),
+        effective_rate: Decimal256::one(),
+        ranges: vec![(quote_handle, Decimal::from_str("1000").unwrap())],
+    };
+
+    let step = base_offer
+        .arbitrage(&mut context, CONTRACT_NAME, &mut quote_offer)
+        .unwrap();
+    assert!(
+        format!("{step:?}").starts_with("Captured"),
+        "expected the crossing wash to be captured, got {step:?}"
+    );
+
+    let committed = context.ranges.get(&range.idx).unwrap().borrow().clone();
+    assert_eq!(
+        committed.base,
+        Decimal::from_str("1000").unwrap(),
+        "base liability desynced (surplus vs bank): committed base={}, quote={}",
+        committed.base,
+        committed.quote
+    );
+    assert_eq!(
+        committed.quote,
+        Decimal::from_str("1000").unwrap(),
+        "quote liability desynced (deficit vs bank): committed base={}, quote={}",
+        committed.base,
+        committed.quote
+    );
+}

@@ -382,8 +382,14 @@ impl SwapItem for RangeOffer {
             remaining_offer_used -= add;
             *v -= deduct.min(*v);
             let idx = range_handle.idx;
-            let used_id = range_handle.swap(context, &self.side, add, deduct);
-            context.ranges.insert(idx, range_handle.clone());
+            // Fold onto the existing cell so a range swapped on both arb sides keeps both legs.
+            let handle = context
+                .ranges
+                .get(&idx)
+                .cloned()
+                .unwrap_or_else(|| range_handle.clone());
+            let used_id = handle.swap(context, &self.side, add, deduct);
+            context.ranges.insert(idx, handle);
             used.push(used_id);
         }
         self.total -= bids_used;
