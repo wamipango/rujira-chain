@@ -116,6 +116,16 @@ where
 }
 
 impl<T: SwapContext, V: SwapContext> SwapContext for (T, V) {
+    fn checkpoint(&mut self) {
+        self.0.checkpoint();
+        self.1.checkpoint();
+    }
+
+    fn rollback(&mut self) {
+        self.0.rollback();
+        self.1.rollback();
+    }
+
     fn commit(
         &mut self,
         storage: &mut dyn Storage,
