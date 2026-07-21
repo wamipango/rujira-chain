@@ -1,7 +1,7 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Binary, Decimal, Uint128};
 
-use crate::TokenMetadata;
+use crate::{CallbackMsg, TokenMetadata};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -21,8 +21,8 @@ pub enum ExecuteMsg {
     Account(AccountMsg),
     /// Actions relating to liquid staking
     Liquid(LiquidMsg),
-    /// Internal: settle returned swap funds
-    Settle { balance: Uint128 },
+    /// Callback from the [InstantiateMsg::revenue_converter] returning unswapped offer
+    Callback(CallbackMsg),
 }
 
 #[cw_serde]

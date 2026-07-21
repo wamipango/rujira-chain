@@ -1,14 +1,18 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult,
+    to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo,
+    Response, StdError, StdResult,
 };
 use cw_multi_test::ContractWrapper;
+use rujira_rs::CallbackData;
 
 #[cw_serde]
 pub struct MsgSwap {
     pub min_return: Coin,
     pub return_funds: bool,
+    /// Bare bank send to the caller, dispatched before the callback and carrying no callback
+    /// funds. Models revenue landing in the same tx as the conversion.
+    pub send_direct: Option<Coin>,
 }
 
 fn instantiate(_deps: DepsMut, _env: Env, _info: MessageInfo, _msg: ()) -> StdResult<Response> {
@@ -16,16 +20,21 @@ fn instantiate(_deps: DepsMut, _env: Env, _info: MessageInfo, _msg: ()) -> StdRe
 }
 
 fn execute(_deps: DepsMut, _env: Env, info: MessageInfo, msg: MsgSwap) -> StdResult<Response> {
-    let mut funds_to_send = vec![msg.min_return];
+    let mut payout = vec![msg.min_return];
     if msg.return_funds {
-        funds_to_send.extend(info.funds);
+        payout.extend(info.funds);
     }
-    Ok(
-        Response::default().add_message(CosmosMsg::Bank(BankMsg::Send {
+    let mut res = Response::default();
+    if let Some(coin) = msg.send_direct {
+        res = res.add_message(BankMsg::Send {
             to_address: info.sender.to_string(),
-            amount: funds_to_send,
-        })),
-    )
+            amount: vec![coin],
+        });
+    }
+    let cb: CosmosMsg = CallbackData(to_json_binary(&Empty {})?)
+        .to_message::<Empty>(&info.sender, Empty {}, payout)?
+        .into();
+    Ok(res.add_message(cb))
 }
 
 fn query(_deps: Deps, _env: Env, _msg: ()) -> StdResult<Binary> {

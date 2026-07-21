@@ -72,7 +72,7 @@ interface-fin            = ["asset", "callback", "decimal-dyn", "premium", "sign
 interface-ghost          = ["callback", "decimal-scaled", "oracle", "token-factory"]
 interface-merge          = []
 interface-revenue        = []
-interface-staking        = ["token-factory"]
+interface-staking        = ["token-factory", "callback"]
 interface-template       = []
 interface-thorchain-swap = ["asset", "callback", "interface-fin", "interface-ghost", "query"]
 

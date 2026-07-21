@@ -2,7 +2,7 @@
 authors = ["codehans <94654388+codehans@users.noreply.github.com>"]
 edition = { workspace = true }
 name    = "rujira-staking"
-version = "1.2.1"
+version = "2.0.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

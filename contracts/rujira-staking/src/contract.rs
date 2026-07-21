@@ -9,6 +9,7 @@ use cw_utils::{may_pay, must_pay, nonpayable, NativeBalance};
 use rujira_rs::staking::{
     AccountMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidMsg, QueryMsg, SudoMsg,
 };
+use rujira_rs::utils::can_pay;
 use rujira_rs::TokenFactory;
 
 use crate::config::Config;
@@ -58,17 +59,13 @@ pub fn execute(
     let bond_amount_sent = may_pay(&info, config.bond_denom.as_str()).unwrap_or_default();
     let mut swap_amount = Uint128::zero();
     let mut fee_amount = Uint128::zero();
-    let mut expected_balance = deps
-        .querier
-        .query_balance(&env.contract.address, &config.revenue_denom)?
-        .amount;
 
     let mut res = match msg {
-        ExecuteMsg::Settle { balance } => {
-            if info.sender != env.contract.address {
+        ExecuteMsg::Callback(_) => {
+            if info.sender != config.revenue_converter.0 {
                 return Err(ContractError::Unauthorized {});
             }
-            let returned = expected_balance.saturating_sub(balance);
+            let returned = can_pay(&info, &config.revenue_denom);
             if !returned.is_zero() {
                 increase_pending_swap(deps.storage, returned)?;
             }
@@ -77,13 +74,7 @@ pub fn execute(
         ExecuteMsg::Account(account_msg) => {
             (swap_amount, fee_amount) =
                 distribute(&env, deps.querier, deps.storage, &config, &bond_amount_sent)?;
-            execute_account(
-                deps.storage,
-                info,
-                &config,
-                account_msg,
-                &mut expected_balance,
-            )?
+            execute_account(deps.storage, info, &config, account_msg)?
         }
         ExecuteMsg::Liquid(liquid_msg) => {
             (swap_amount, fee_amount) =
@@ -102,25 +93,14 @@ pub fn execute(
                 .to_string(),
             amount: coins(fee_amount.u128(), config.revenue_denom.clone()),
         });
-        expected_balance = expected_balance.saturating_sub(fee_amount);
     }
 
     if !swap_amount.is_zero() {
-        expected_balance = expected_balance.saturating_sub(swap_amount);
-
-        res = res
-            .add_message(WasmMsg::Execute {
-                contract_addr: config.revenue_converter.0.to_string(),
-                msg: config.revenue_converter.1.clone(),
-                funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
-            })
-            .add_message(WasmMsg::Execute {
-                contract_addr: env.contract.address.to_string(),
-                msg: to_json_binary(&ExecuteMsg::Settle {
-                    balance: expected_balance,
-                })?,
-                funds: vec![],
-            });
+        res = res.add_message(WasmMsg::Execute {
+            contract_addr: config.revenue_converter.0.to_string(),
+            msg: config.revenue_converter.1.clone(),
+            funds: coins(swap_amount.u128(), config.revenue_denom.clone()),
+        });
     }
 
     Ok(res)
@@ -148,7 +128,6 @@ fn execute_account(
     info: MessageInfo,
     config: &Config,
     msg: AccountMsg,
-    remaining: &mut Uint128,
 ) -> Result<Response, ContractError> {
     match msg {
         AccountMsg::Bond {} => {
@@ -162,7 +141,6 @@ fn execute_account(
                     amount: coins(reward_amount.u128(), config.revenue_denom.clone()),
                 });
             }
-            *remaining = remaining.saturating_sub(reward_amount);
             Ok(response)
         }
         AccountMsg::Claim {} => {
@@ -176,7 +154,6 @@ fn execute_account(
                     amount: coins(reward_amount.u128(), config.revenue_denom.clone()),
                 });
             }
-            *remaining = remaining.saturating_sub(reward_amount);
             Ok(response)
         }
         AccountMsg::Withdraw { amount } => {
@@ -199,7 +176,6 @@ fn execute_account(
                     amount: send.into_vec(),
                 });
             }
-            *remaining = remaining.saturating_sub(rewards);
             Ok(response)
         }
     }
@@ -487,6 +463,7 @@ mod tests {
         let converter_message = to_json_binary(&MsgSwap {
             min_return: coin(10, "uruji"),
             return_funds: false,
+            send_direct: None,
         })
         .unwrap();
         let contract = create_staking_contract(
@@ -851,6 +828,7 @@ mod tests {
         let converter_message = to_json_binary(&MsgSwap {
             min_return: coin(10, "uruji"),
             return_funds: true,
+            send_direct: None,
         })
         .unwrap();
         let contract = create_staking_contract(
@@ -994,5 +972,41 @@ mod tests {
                 pending_revenue: Uint128::zero(),
             },
         );
+    }
+
+    #[test]
+    fn callback_ignores_same_tx_revenue_send() {
+        let (mut app, apps, owner, stakers, fees) = init_app(None);
+        let swap_contract = create_swap_contract(&mut app, &owner);
+        // The converter fills the whole offer (`return_funds: false`) but `revenue_denom` still
+        // lands in the same tx as a bare send. Only funds carried by the callback are unswapped
+        // offer; balance-diff accounting cannot tell the two apart.
+        let converter_message = to_json_binary(&MsgSwap {
+            min_return: coin(10, "uruji"),
+            return_funds: false,
+            send_direct: Some(coin(5, "uusdc")),
+        })
+        .unwrap();
+        let contract = create_staking_contract(
+            &mut app,
+            &owner,
+            fees.value,
+            swap_contract,
+            converter_message,
+        );
+
+        bond_liquid(&mut app, &contract, &stakers.liquid, 1_000, "uruji");
+
+        app.send_tokens(apps.clone(), contract.clone(), &coins(100, "uusdc"))
+            .unwrap();
+
+        assert_pending_swap(&app, &contract, Uint128::zero());
+
+        // Triggers distribute -> converter fills the offer -> 5 uusdc arrives as a bare send
+        bond_liquid(&mut app, &contract, &stakers.liquid, 2_000, "uruji");
+
+        // 100 revenue - 20 offered = 80 still awaiting conversion. The 5 uusdc bare send is not
+        // unswapped offer and must not be re-queued; balance-diff accounting reports 85 here.
+        assert_pending_swap(&app, &contract, Uint128::from(80u128));
     }
 }
