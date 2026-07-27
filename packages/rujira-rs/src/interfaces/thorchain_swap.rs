@@ -4,6 +4,12 @@ use cosmwasm_std::{
     to_json_binary, Addr, Coin, CosmosMsg, Decimal, QuerierWrapper, StdResult, Uint128, WasmMsg,
 };
 
+pub const DEFAULT_SPREAD_BPS: u32 = 10;
+
+pub fn default_spread_bps() -> u32 {
+    DEFAULT_SPREAD_BPS
+}
+
 #[cw_serde]
 pub struct InstantiateMsg {
     /// The maximum number of blocks that a settlement can be chunked into over a streaming swap
@@ -11,6 +17,9 @@ pub struct InstantiateMsg {
     /// The amount by which the `size` of the quote changes for each N of max_stream_length
     /// Allows the time-based price risk to be managed for quotes that settle over streaming swaps
     pub stream_step_ratio: Decimal,
+    /// The spread of each quote, in basis points of pool depth
+    #[serde(default = "default_spread_bps")]
+    pub spread_bps: u32,
     /// The premium charged on quotes to generate a local surplus
     pub reserve_fee: Decimal,
     /// The maximum percentage of a pool's depth that can be borrowed
@@ -46,6 +55,7 @@ pub enum SudoMsg {
 pub struct ConfigUpdate {
     pub max_stream_length: Option<u32>,
     pub stream_step_ratio: Option<Decimal>,
+    pub spread_bps: Option<u32>,
     pub max_borrow_ratio: Option<Decimal>,
     pub reserve_fee: Option<Decimal>,
     pub min_borrow_amount: Option<Uint128>,
@@ -72,6 +82,7 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub max_stream_length: u32,
     pub stream_step_ratio: Decimal,
+    pub spread_bps: u32,
     pub max_borrow_ratio: Decimal,
     pub min_borrow_amount: Uint128,
     pub reserve_fee: Decimal,

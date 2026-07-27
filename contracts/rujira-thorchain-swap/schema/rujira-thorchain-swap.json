@@ -1,6 +1,6 @@
 {
   "contract_name": "rujira-thorchain-swap",
-  "contract_version": "1.1.2",
+  "contract_version": "1.2.0",
   "idl_version": "1.0.0",
   "instantiate": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -58,6 +58,13 @@
             "$ref": "#/definitions/Decimal"
           }
         ]
+      },
+      "spread_bps": {
+        "description": "The spread of each quote, in basis points of pool depth",
+        "default": 10,
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0.0
       },
       "stream_step_ratio": {
         "description": "The amount by which the `size` of the quote changes for each N of max_stream_length Allows the time-based price risk to be managed for quotes that settle over streaming swaps",
@@ -518,6 +525,14 @@
               }
             ]
           },
+          "spread_bps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0.0
+          },
           "stream_step_ratio": {
             "anyOf": [
               {
@@ -848,6 +863,7 @@
         "max_stream_length",
         "min_borrow_amount",
         "reserve_fee",
+        "spread_bps",
         "stream_step_ratio"
       ],
       "properties": {
@@ -877,6 +893,11 @@
         },
         "reserve_fee": {
           "$ref": "#/definitions/Decimal"
+        },
+        "spread_bps": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
         "stream_step_ratio": {
           "$ref": "#/definitions/Decimal"

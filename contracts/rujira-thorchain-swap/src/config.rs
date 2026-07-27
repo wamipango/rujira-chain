@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, Decimal, StdResult, Storage, Uint128};
 use cw_storage_plus::Item;
-use rujira_rs::thorchain_swap::{ConfigResponse, ConfigUpdate, InstantiateMsg};
+use rujira_rs::thorchain_swap::{default_spread_bps, ConfigResponse, ConfigUpdate, InstantiateMsg};
 
 use crate::ContractError;
 
@@ -11,6 +11,8 @@ static CONFIG: Item<Config> = Item::new("config");
 pub struct Config {
     pub max_stream_length: u32,
     pub stream_step_ratio: Decimal,
+    #[serde(default = "default_spread_bps")]
+    pub spread_bps: u32,
     pub max_borrow_ratio: Decimal,
     #[serde(default)]
     pub min_borrow_amount: Uint128,
@@ -24,6 +26,7 @@ impl Config {
         Ok(Self {
             max_stream_length: msg.max_stream_length,
             stream_step_ratio: msg.stream_step_ratio,
+            spread_bps: msg.spread_bps,
             max_borrow_ratio: msg.max_borrow_ratio,
             min_borrow_amount: msg.min_borrow_amount,
             reserve_fee: msg.reserve_fee,
@@ -36,6 +39,9 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<(), ContractError> {
+        if self.spread_bps > 10_000 {
+            return Err(ContractError::Invalid("spread_bps > 10_000".into()));
+        }
         Ok(())
     }
 
@@ -45,6 +51,9 @@ impl Config {
         }
         if let Some(stream_step_ratio) = update.stream_step_ratio {
             self.stream_step_ratio = stream_step_ratio;
+        }
+        if let Some(spread_bps) = update.spread_bps {
+            self.spread_bps = spread_bps;
         }
         if let Some(max_borrow_ratio) = update.max_borrow_ratio {
             self.max_borrow_ratio = max_borrow_ratio;
@@ -75,6 +84,7 @@ impl From<Config> for ConfigResponse {
         Self {
             max_stream_length: value.max_stream_length,
             stream_step_ratio: value.stream_step_ratio,
+            spread_bps: value.spread_bps,
             max_borrow_ratio: value.max_borrow_ratio,
             min_borrow_amount: value.min_borrow_amount,
             reserve_fee: value.reserve_fee,
@@ -96,6 +106,7 @@ mod tests {
             max_borrow_ratio: Decimal::one(),
             reserve_fee: Decimal::from_ratio(10u128, 500u128),
             stream_step_ratio: Decimal::one(),
+            spread_bps: default_spread_bps(),
             min_borrow_amount: Uint128::zero(),
             fee: (Decimal::zero(), deps.api.addr_make("fee")),
         }

@@ -277,6 +277,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 pub fn migrate(deps: DepsMut, _env: Env, _msg: ()) -> Result<Response, ContractError> {
     ensure_from_older_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    let config = Config::load(deps.storage)?;
+    config.validate()?;
+    config.save(deps.storage)?;
 
     Ok(Response::default())
 }
@@ -290,10 +293,25 @@ mod tests {
     use crate::testing::setup;
 
     use super::*;
+    use cosmwasm_schema::cw_serde;
+    use cosmwasm_std::testing::{mock_dependencies, mock_env};
     use cosmwasm_std::{Decimal, Uint128};
+    use cw2::{get_contract_version, set_contract_version};
     use cw_multi_test::{BasicApp, ContractWrapper, Executor};
+    use cw_storage_plus::Item;
     use rujira_rs::fin::market_maker::{QuoteRequest, QuoteResponse};
+    use rujira_rs::thorchain_swap::{ConfigUpdate, DEFAULT_SPREAD_BPS};
     use rujira_rs_testing::mock_rujira_app;
+
+    #[cw_serde]
+    struct LegacyConfig {
+        max_stream_length: u32,
+        stream_step_ratio: Decimal,
+        max_borrow_ratio: Decimal,
+        min_borrow_amount: Uint128,
+        reserve_fee: Decimal,
+        fee: (Decimal, Addr),
+    }
 
     #[test]
     fn instantiation() {
@@ -310,6 +328,7 @@ mod tests {
                 max_borrow_ratio: Decimal::one(),
                 reserve_fee: Decimal::from_ratio(10u128, 500u128),
                 stream_step_ratio: Decimal::one(),
+                spread_bps: rujira_rs::thorchain_swap::DEFAULT_SPREAD_BPS,
                 min_borrow_amount: Uint128::zero(),
                 fee: (Decimal::permille(15), owner.to_string()),
             },
@@ -318,6 +337,36 @@ mod tests {
             None,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn migration_adds_default_spread_bps() {
+        let mut deps = mock_dependencies();
+        let legacy_config = LegacyConfig {
+            max_stream_length: 1,
+            stream_step_ratio: Decimal::one(),
+            max_borrow_ratio: Decimal::one(),
+            min_borrow_amount: Uint128::zero(),
+            reserve_fee: Decimal::zero(),
+            fee: (Decimal::zero(), deps.api.addr_make("fee")),
+        };
+        Item::new("config")
+            .save(deps.as_mut().storage, &legacy_config)
+            .unwrap();
+        set_contract_version(deps.as_mut().storage, CONTRACT_NAME, "1.1.2").unwrap();
+
+        migrate(deps.as_mut(), mock_env(), ()).unwrap();
+
+        let config = Config::load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.spread_bps, DEFAULT_SPREAD_BPS);
+        let stored = deps.as_ref().storage.get(b"config").unwrap();
+        assert!(String::from_utf8(stored)
+            .unwrap()
+            .contains("\"spread_bps\":10"));
+        assert_eq!(
+            get_contract_version(deps.as_ref().storage).unwrap().version,
+            CONTRACT_VERSION
+        );
     }
 
     #[test]
@@ -444,6 +493,45 @@ mod tests {
         assert_eq!(quote_2.size, Uint128::from(12455320u128));
 
         assert!(quote_2.price < quote_1.price);
+    }
+
+    #[test]
+    fn spread_bps_configures_quote_width() {
+        let mut app = mock_rujira_app();
+        let owner = app.api().addr_make("owner");
+        let contract = setup(&mut app, &owner);
+        let request = || {
+            QueryMsg::Quote(QuoteRequest {
+                min_price: None,
+                offer_denom: "rune".to_string(),
+                ask_denom: "btc-btc".to_string(),
+                data: None,
+            })
+        };
+
+        let default_quote: QuoteResponse = app
+            .wrap()
+            .query_wasm_smart(contract.clone(), &request())
+            .unwrap();
+
+        app.wasm_sudo(
+            contract.clone(),
+            &SudoMsg::SetConfig(ConfigUpdate {
+                max_stream_length: None,
+                stream_step_ratio: None,
+                spread_bps: Some(20),
+                max_borrow_ratio: None,
+                reserve_fee: None,
+                min_borrow_amount: None,
+                fee: None,
+            }),
+        )
+        .unwrap();
+
+        let wider_quote: QuoteResponse = app.wrap().query_wasm_smart(contract, &request()).unwrap();
+
+        assert!(wider_quote.size > default_quote.size);
+        assert!(wider_quote.price < default_quote.price);
     }
 
     /// Regression: a small offer whose CLP return lands in the range

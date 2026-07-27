@@ -1,5 +1,3 @@
-use std::num::TryFromIntError;
-
 use cosmwasm_std::{CheckedFromRatioError, OverflowError, StdError, Uint128};
 use cw_utils::PaymentError;
 use rujira_rs::{
@@ -42,9 +40,6 @@ pub enum ContractError {
 
     #[error("{0}")]
     Query(#[from] QueryError),
-
-    #[error("{0}")]
-    TryFromInt(#[from] TryFromIntError),
 
     #[error("{0}")]
     Overflow(#[from] OverflowError),

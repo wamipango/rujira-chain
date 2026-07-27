@@ -2,7 +2,7 @@ use cosmwasm_std::{coin, Addr, Decimal, Uint128};
 use cw_multi_test::{ContractWrapper, Executor, Stargate};
 
 use rujira_ghost_vault::mock::GhostVault;
-use rujira_rs::thorchain_swap::{ExecuteMsg, InstantiateMsg, SudoMsg};
+use rujira_rs::thorchain_swap::{ExecuteMsg, InstantiateMsg, SudoMsg, DEFAULT_SPREAD_BPS};
 use rujira_rs_testing::RujiraApp;
 
 /// Wrapper struct for Thorchain Swap contract with convenience methods
@@ -136,6 +136,7 @@ impl ThorchainSwap {
                     min_borrow_amount: Uint128::zero(),
                     reserve_fee: Decimal::from_ratio(1u128, 5000u128),
                     stream_step_ratio: Decimal::one(),
+                    spread_bps: DEFAULT_SPREAD_BPS,
                     fee: (Decimal::zero(), owner.to_string()),
                 },
                 &[],

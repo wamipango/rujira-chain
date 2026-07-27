@@ -2,13 +2,7 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     from_json, to_json_binary, Binary, Decimal, Fraction, QuerierWrapper, StdResult, Uint128,
 };
-use rujira_rs::{
-    fin::market_maker::QuoteResponse,
-    proto::types::{QueryMimirWithKeyRequest, QueryMimirWithKeyResponse},
-    query::grpc::Queryable,
-    query::Pool,
-    Asset,
-};
+use rujira_rs::{fin::market_maker::QuoteResponse, query::Pool, Asset};
 
 use crate::{config::Config, route::Route, ContractError};
 
@@ -126,19 +120,11 @@ impl QuoteState {
         let route = build_route(q, offer_denom, ask_denom)?;
 
         let available = route.return_balance().mul_floor(config.max_borrow_ratio);
-        let min_slip_bps = QueryMimirWithKeyResponse::get(
-            q,
-            QueryMimirWithKeyRequest {
-                key: "SECUREDASSETSLIPMINBPS".to_string(),
-                height: "".to_string(),
-            },
-        )?;
-        let bps = u32::try_from(min_slip_bps.value)?.min(10_000);
         Ok(Self {
             route: route.clone(),
             input: Uint128::zero(),
             output: Uint128::zero(),
-            size: route.size(bps),
+            size: route.size(config.spread_bps),
             borrow_limit: borrow_limit.min(available),
             fee: config.reserve_fee + config.fee.0,
             step_ratio: config.stream_step_ratio,

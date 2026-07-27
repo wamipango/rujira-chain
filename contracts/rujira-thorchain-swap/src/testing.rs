@@ -3,7 +3,7 @@ use cosmwasm_std::{coin, coins, Addr, Decimal, Event, Uint128};
 use cw_multi_test::{ContractWrapper, Executor};
 use rujira_rs::{
     ghost::{self, interest::Interest},
-    thorchain_swap::{ExecuteMsg, InstantiateMsg, SudoMsg},
+    thorchain_swap::{ExecuteMsg, InstantiateMsg, SudoMsg, DEFAULT_SPREAD_BPS},
     TokenMetadata,
 };
 use rujira_rs_testing::{mock_rujira_app, RujiraApp, RujiraStargate};
@@ -99,6 +99,7 @@ pub fn setup(app: &mut RujiraApp<RujiraStargate>, owner: &Addr) -> Addr {
                 min_borrow_amount: Uint128::zero(),
                 reserve_fee: Decimal::from_ratio(1u128, 5000u128),
                 stream_step_ratio: Decimal::one(),
+                spread_bps: DEFAULT_SPREAD_BPS,
                 fee: (Decimal::permille(15), owner.to_string()),
             },
             &[],
