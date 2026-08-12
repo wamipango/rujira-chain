@@ -306,17 +306,16 @@ fn is_lower_alpha(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(|b: u8| b.is_ascii_lowercase())
 }
 
-fn is_lower_hex(s: &str) -> bool {
+fn is_lower_alphanumeric(s: &str) -> bool {
     !s.is_empty()
         && s.bytes()
-            .all(|b: u8| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            .all(|b: u8| b.is_ascii_lowercase() || b.is_ascii_digit())
 }
 
 fn is_valid_symbol(symbol: &str) -> bool {
-    if let Some((base, hex)) = symbol.split_once("-0x") {
-        is_lower_alpha(base) && hex.len() == 40 && is_lower_hex(hex)
-    } else {
-        is_lower_alpha(symbol)
+    match symbol.split_once("-") {
+        Some((ticker, id)) => is_lower_alphanumeric(ticker) && is_lower_alphanumeric(id),
+        None => is_lower_alphanumeric(symbol),
     }
 }
 
@@ -377,6 +376,29 @@ mod tests {
             format!("{}", l1),
             "ETH.RUNE-0X3155BA85D5F96B2D030A4966AF206230E46849CB"
         );
+    }
+
+    #[test]
+    fn secured_denom() {
+        let tron =
+            SecuredAsset::from_denom(&"trx-usdt-tr7nhqjekqxgtci8q8zy4pl8otszgjlj6t".to_string())
+                .unwrap();
+        assert_eq!(tron.ticker(), "USDT");
+        assert_eq!(tron.denom(), "trx-usdt-tr7nhqjekqxgtci8q8zy4pl8otszgjlj6t");
+        assert_eq!(
+            Asset::Secured(tron).pool_id(),
+            "TRX.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"
+        );
+
+        SecuredAsset::from_denom(&"btc-btc".to_string()).unwrap();
+        SecuredAsset::from_denom(
+            &"eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
+        )
+        .unwrap();
+
+        SecuredAsset::from_denom(&"x/btc-btc".to_string()).unwrap_err();
+        SecuredAsset::from_denom(&"rune".to_string()).unwrap_err();
+        SecuredAsset::from_denom(&"eth-USDC-0xa0b86991".to_string()).unwrap_err();
     }
 
     #[test]

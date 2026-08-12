@@ -6,6 +6,7 @@ pub(crate) mod pool;
 #[cfg(feature = "coin")]
 pub(crate) mod swap_quote;
 
+pub use network::{Network, TryFromNetworkError};
 pub use outbound_fee::{OutboundFee, OutboundFeeError};
 pub use pool::{Pool, PoolError, PoolStatus};
 #[cfg(feature = "coin")]

@@ -1638,7 +1638,7 @@ dependencies = [
 
 [[package]]
 name = "rujira-rs"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anybuf",
  "cosmos-sdk-proto",
