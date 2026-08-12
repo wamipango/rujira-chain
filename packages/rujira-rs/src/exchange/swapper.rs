@@ -46,8 +46,13 @@ impl<T: SwapItem> Swapper<T> {
             let mut next_context = self.context.clone();
             let (offer, bids, atts) = v.swap(&mut next_context, self.remaining_offer)?;
             // A zero-leg result is not executable under integer settlement.
-            // Skip it without committing state; a later item may still be executable.
+            // Most tiers are skipped because a later, larger item may still be
+            // executable. Some price-ordered item types can prove that every
+            // later price is also below the atomic settlement threshold.
             if offer.is_zero() || bids.is_zero() {
+                if v.zero_fill_is_terminal() {
+                    break;
+                }
                 continue;
             }
             // If we've breached reached a SwapRequest::Limit, don't commit this step and break
@@ -132,6 +137,7 @@ pub struct SwapResult {
 #[cfg(test)]
 
 mod tests {
+    use std::{cell::Cell, rc::Rc};
 
     use cosmwasm_std::Fraction;
 
@@ -139,6 +145,34 @@ mod tests {
 
     use super::*;
     use std::str::FromStr;
+
+    #[derive(Clone, Debug)]
+    struct TerminalZeroItem(Rc<Cell<usize>>);
+
+    impl SwapItem for TerminalZeroItem {
+        type Context = ();
+
+        fn rate(&self) -> Decimal {
+            Decimal::one()
+        }
+
+        fn total(&self) -> Uint128 {
+            Uint128::one()
+        }
+
+        fn swap(
+            &mut self,
+            _context: &mut Self::Context,
+            _offer: Uint128,
+        ) -> Result<(Uint128, Uint128, Vec<Attribute>), SwapError> {
+            self.0.set(self.0.get() + 1);
+            Ok((Uint128::zero(), Uint128::zero(), vec![]))
+        }
+
+        fn zero_fill_is_terminal(&self) -> bool {
+            true
+        }
+    }
 
     #[test]
     fn test_swap_execution() {
@@ -381,5 +415,31 @@ mod tests {
         assert_eq!(res.events[0].attributes[2].value, "5");
         assert_eq!(res.events[1].attributes[1].value, "5");
         assert_eq!(res.events[1].attributes[2].value, "3");
+    }
+
+    #[test]
+    fn test_swap_stops_after_terminal_zero_fill() {
+        let calls = Rc::new(Cell::new(0));
+        let mut iter = vec![
+            TerminalZeroItem(Rc::clone(&calls)),
+            TerminalZeroItem(Rc::clone(&calls)),
+        ]
+        .into_iter();
+        let mut swapper = Swapper::new(
+            "some-prefix",
+            (),
+            Uint128::one(),
+            SwapRequest::Yolo {
+                to: None,
+                callback: None,
+            },
+            Decimal::zero(),
+        );
+
+        let result = swapper.swap(&mut iter).unwrap();
+
+        assert_eq!(calls.get(), 1);
+        assert_eq!(result.remaining_offer, Uint128::one());
+        assert!(result.events.is_empty());
     }
 }

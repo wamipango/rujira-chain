@@ -25,6 +25,17 @@ pub trait SwapItem {
 
     fn checkpoint(&mut self) {}
     fn rollback(&mut self) {}
+
+    /// Whether a zero fill proves that the remaining, price-ordered items
+    /// cannot settle another atomic unit.
+    ///
+    /// Most item types can return zero because the current tier itself is too
+    /// small, so the conservative default is to keep looking. Implementations
+    /// should only return true when their zero result is caused by the offered
+    /// amount being below the current rate's integer settlement threshold.
+    fn zero_fill_is_terminal(&self) -> bool {
+        false
+    }
 }
 
 pub trait SwapContext: Clone {
@@ -113,6 +124,14 @@ where
             EitherOrBoth::Right(x) => x.rollback(),
         }
     }
+
+    fn zero_fill_is_terminal(&self) -> bool {
+        match self {
+            EitherOrBoth::Both(a, b) => a.zero_fill_is_terminal() && b.zero_fill_is_terminal(),
+            EitherOrBoth::Left(x) => x.zero_fill_is_terminal(),
+            EitherOrBoth::Right(x) => x.zero_fill_is_terminal(),
+        }
+    }
 }
 
 impl<T: SwapContext, V: SwapContext> SwapContext for (T, V) {
@@ -183,6 +202,10 @@ where
         for x in self.iter_mut() {
             x.rollback();
         }
+    }
+
+    fn zero_fill_is_terminal(&self) -> bool {
+        !self.is_empty() && self.iter().all(SwapItem::zero_fill_is_terminal)
     }
 }
 

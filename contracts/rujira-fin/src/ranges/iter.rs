@@ -5,6 +5,39 @@ use rujira_rs::fin::Side;
 
 use super::{range_offer::RangeHandle, Range, RangeOffer};
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct RangeIterStats {
+    pub(crate) rows_visited: usize,
+    pub(crate) eligible_ranges: usize,
+    pub(crate) offers_built: usize,
+    pub(crate) range_contributions: usize,
+    pub(crate) executable_offers: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static RANGE_ITER_STATS: std::cell::Cell<RangeIterStats> = const {
+        std::cell::Cell::new(RangeIterStats {
+            rows_visited: 0,
+            eligible_ranges: 0,
+            offers_built: 0,
+            range_contributions: 0,
+            executable_offers: 0,
+        })
+    };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_range_iter_stats() {
+    RANGE_ITER_STATS.set(RangeIterStats::default());
+}
+
+#[cfg(test)]
+pub(crate) fn range_iter_stats() -> RangeIterStats {
+    RANGE_ITER_STATS.get()
+}
+
 pub struct RangeOfferIter<'a> {
     /// The default step between prices
     delta: Decimal,
@@ -25,11 +58,20 @@ impl<'a> RangeOfferIter<'a> {
         min: Decimal,
     ) -> impl Fn(StdResult<(u128, Range)>) -> Option<RangeHandle> {
         move |res| match res {
-            Ok((_, range)) => match side {
-                Side::Base => range.base >= min && range.ask < range.high,
-                Side::Quote => range.quote >= min && range.bid > range.low,
+            Ok((_, range)) => {
+                let accepted = match side {
+                    Side::Base => range.base >= min && range.ask < range.high,
+                    Side::Quote => range.quote >= min && range.bid > range.low,
+                };
+                #[cfg(test)]
+                RANGE_ITER_STATS.with(|stats| {
+                    let mut current = stats.get();
+                    current.rows_visited += 1;
+                    current.eligible_ranges += usize::from(accepted);
+                    stats.set(current);
+                });
+                accepted.then_some(RangeHandle::new(range))
             }
-            .then_some(RangeHandle::new(range)),
             Err(_) => None,
         }
     }
@@ -109,6 +151,13 @@ impl<'a> RangeOfferIter<'a> {
         if self.ranges.is_empty() && self.next.is_none() {
             return None;
         }
+        #[cfg(test)]
+        RANGE_ITER_STATS.with(|stats| {
+            let mut current = stats.get();
+            current.offers_built += 1;
+            current.range_contributions += self.ranges.values().map(Vec::len).sum::<usize>();
+            stats.set(current);
+        });
         offer.insert_ranges(self.ranges.values().flatten());
         Some(offer)
     }
@@ -179,6 +228,13 @@ impl<'a> Iterator for RangeOfferIter<'a> {
             let offer = self.build_offer(&start)?;
             self.prune(&opts[0], &opts[1])?;
             if !offer.total.is_zero() {
+                #[cfg(test)]
+                RANGE_ITER_STATS.with(|stats| {
+                    let mut current = stats.get();
+                    current.executable_offers +=
+                        usize::from(!offer.total.to_uint_floor().is_zero());
+                    stats.set(current);
+                });
                 return Some(offer);
             }
         }

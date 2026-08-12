@@ -415,4 +415,12 @@ impl SwapItem for RangeOffer {
             range.rollback();
         }
     }
+
+    fn zero_fill_is_terminal(&self) -> bool {
+        // Range offers are emitted in best-to-worst price order and `total()`
+        // excludes sub-atomic slices. A zero fill therefore means the
+        // remaining input cannot buy one output atom at this price; it cannot
+        // buy one at any later, worse range price either.
+        true
+    }
 }
